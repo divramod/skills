@@ -47,6 +47,8 @@ def day(value) -> str | None:
         from datetime import datetime, timezone
         return datetime.fromtimestamp(value, tz=timezone.utc).date().isoformat()
     s = str(value).strip()
+    if re.fullmatch(r"\d{9,10}|\d{12,13}", s):  # epoch seconds / milliseconds as text (og:updated_time)
+        return day(int(s) / (1000 if len(s) > 11 else 1))
     if re.fullmatch(r"\d{8}", s):
         return f"{s[:4]}-{s[4:6]}-{s[6:]}"
     m = re.match(r"(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?", s)

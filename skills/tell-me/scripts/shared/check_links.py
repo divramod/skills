@@ -2,7 +2,7 @@
 """Check every external link in a summary body and find how current each source is.
 
 Reads markdown (stdin, --file, or a folder's summary.md), finds the http(s) links (skipping the
-video's own timestamp links), requests each one in parallel and prints one JSON object:
+source's own anchor links: video timestamps, article [¶n] paragraphs and [#] headings), requests each one in parallel and prints one JSON object:
 {"ok": [...], "unverified": [...], "broken": [...]}. Each entry is {url, status, final_url?, error?,
 dates?}, where `dates` comes from link_dates.py (publish date, versions, last commit, ...).
 
@@ -37,13 +37,16 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, 
 BLOCKED = {401, 403, 405, 429, 503, 999}
 # Markdown link targets may hold one level of balanced parentheses: wiki/Fine-tuning_(deep_learning)
 _LINK_RE = re.compile(r"\]\((https?://(?:[^()\s]|\([^()\s]*\))+)\)|<(https?://[^>\s]+)>|(?<![(<\[])(https?://[^\s)\]>]+[^\s)\]>.,;:!?])")
-_VIDEO_LINK_RE = re.compile(r"[?&#]t=\d+s?$")
+_VIDEO_LINK_RE = re.compile(r"[?&#]t=\d+s?$|:~:text=")
+# Anchor links into the source itself (copied from its content file): [¶3](url#:~:text=...), [#](url#heading).
+_ANCHOR_LINK_RE = re.compile(r"\[(?:¶\d+|#)\]\([^)\s]*\)")
 
 
 def extract_links(text: str) -> list[str]:
-    """External links in document order, deduplicated; the video's own timestamp links are skipped."""
+    """External links in document order, deduplicated; the source's own anchor links (video timestamps,
+    article paragraphs and headings) are skipped."""
     seen: dict[str, None] = {}
-    for m in _LINK_RE.finditer(text):
+    for m in _LINK_RE.finditer(_ANCHOR_LINK_RE.sub("", text)):
         url = next(g for g in m.groups() if g)
         if not _VIDEO_LINK_RE.search(url):
             seen.setdefault(url, None)

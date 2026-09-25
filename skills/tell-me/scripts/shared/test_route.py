@@ -68,7 +68,12 @@ class TestRoute(unittest.TestCase):
     def test_web_url_is_kept_as_given(self):
         r = route("http://localhost:8000/doc#/route?utm_source=x")
         self.assertEqual(r["url"], "http://localhost:8000/doc#/route?utm_source=x")
-        self.assertEqual(r["id"], "https://localhost:8000/doc")
+        self.assertEqual(r["id"], "https://localhost:8000/doc#/route?utm_source=x")  # a route is the page
+
+    def test_fragment_dropped_unless_route(self):
+        self.assertEqual(route("https://docsify.js.org/#/quickstart")["id"], "https://docsify.js.org/#/quickstart")
+        self.assertEqual(route("https://old.app/#!/a")["id"], "https://old.app/#!/a")
+        self.assertEqual(route("https://blog.dev/post#section-2")["id"], "https://blog.dev/post")
 
     def test_canonical_urls(self):
         self.assertEqual(route("https://youtu.be/dQw4w9WgXcQ")["url"], "https://www.youtube.com/watch?v=dQw4w9WgXcQ")

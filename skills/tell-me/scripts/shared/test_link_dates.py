@@ -14,6 +14,8 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(day("20250603"), "2025-06-03")
         self.assertEqual(day("2011"), "2011")
         self.assertEqual(day("2013-4"), "2013-04")
+        self.assertEqual(day("1734591637"), "2024-12-19")  # og:updated_time in epoch seconds
+        self.assertEqual(day("1734591637000"), "2024-12-19")  # ... or milliseconds
         self.assertEqual(day("Oct 25, 2011"), "2011")
         self.assertEqual(day(0), "1970-01-01")
         self.assertIsNone(day(None))
