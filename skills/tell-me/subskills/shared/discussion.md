@@ -14,4 +14,6 @@ linear, so don't retell it in order: group it by what people argue about.
 5. **Weight.** Say roughly how much of the thread a theme takes ("most replies", "a few commenters"); the content
    file gives comment counts and depth. Never present a single comment as the consensus.
 
-Quotes must be copied exactly from the content file (whitespace aside); paraphrase outside quote marks.
+Quotes must be copied exactly from the content file (whitespace aside); paraphrase outside quote marks. Before
+saving, run `python3 $S/shared/check_quotes.py "<dir>"` with the body on stdin: it lists every quote that is not
+in the content file (`NOT FOUND:`). Fix those and run it again until it exits 0.

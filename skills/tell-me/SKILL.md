@@ -125,6 +125,7 @@ shape, and only save the answer when the user asks.
 | `route.py` | input → `{source, kind, id, url or path}`, no network |
 | `save_summary.py` | body on stdin → `summary.md` / `digest.md` with frontmatter + header + agent, link dates, HTML page |
 | `check_links.py` | checks every external link: ok / unverified / broken, plus its dates; `--annotate` writes them in |
+| `check_quotes.py` | every quote in a summary body must be verbatim in the content file; lists the ones that are not |
 | `link_dates.py` | how current a link is: publish date, release + last commit, package version, book year, wiki edit |
 | `render_html.py` | `summary.md` → `summary.html` (sidebar, header panel, content file); `--open` |
 | `library.py` | rebuild `<root>/library.js`; `--pages` re-renders every page; `--open-last` opens the latest summary |
