@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _common import (MissingTool, detect_agent, install_script, dir_for, find_by_id, source_root, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
+from _common import (MissingTool, SkillError, detect_agent, install_script, dir_for, find_by_id, source_root, unique_dir, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
                      ts_url, user_of, video_dir)
 
 
@@ -41,6 +41,20 @@ class TestNaming(unittest.TestCase):
             self.assertEqual(library_root(), Path("/tmp/x"))
         with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": "/tmp/y/videos"}, clear=True):
             self.assertEqual(library_root(), Path("/tmp/y"))  # the old variable pointed at the videos subtree
+        with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": "/tmp/yt-notes"}, clear=True):
+            with self.assertRaisesRegex(SkillError, "set TELL_ME_ROOT"):
+                library_root()  # its parent may be ~: never guess
+
+    def test_unique_dir_on_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            meta = {"source": "web", "site": "s", "title": "Home", "id": "https://s/a"}
+            first = unique_dir(meta, Path(tmp))
+            first.mkdir(parents=True)
+            (first / "metadata.json").write_text(json.dumps(meta))
+            self.assertEqual(unique_dir(meta, Path(tmp)), first)  # same item: same folder
+            other = unique_dir(meta | {"id": "https://s/b"}, Path(tmp))
+            self.assertEqual(other.parent, first.parent)
+            self.assertRegex(other.name, r"^home-[0-9a-f]{6}$")
 
     def test_dir_for_each_source(self):
         r = Path("/r")

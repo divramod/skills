@@ -80,6 +80,24 @@ class TestMigrate(unittest.TestCase):
             other.kill()
             other.wait()
 
+    def test_unreadable_metadata_and_running_downloads_are_skipped(self):
+        broken = self.root / "videos" / "youtube" / "chan" / "broken"
+        broken.mkdir(parents=True)
+        (broken / "metadata.json").write_text('{"id": "x", "tit')
+        (broken / "transcript.md").write_text("t")
+        (self.folder / ".video-download.json").write_text(json.dumps({"status": "running", "pid": 1}))
+        result = migrate(self.root, apply=True)
+        self.assertEqual(result["folders"], [])
+        self.assertEqual(sorted(Path(s["dir"]).name for s in result["skipped"]), ["broken", "talk"])
+        self.assertEqual((broken / "metadata.json").read_text(), '{"id": "x", "tit')
+        self.assertTrue((broken / "transcript.md").exists() and (self.folder / "transcript.md").exists())
+
+    def test_migrate_one_folder(self):
+        from migrate_library import migrate_folder
+        self.assertEqual(migrate_folder(self.folder)["actions"][0], "rename transcript.md -> content.md")
+        self.assertTrue((self.folder / "content.md").exists())
+        self.assertIsNone(migrate_folder(self.folder))
+
     def test_empty_library(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(migrate(Path(tmp), apply=True)["folders"], [])

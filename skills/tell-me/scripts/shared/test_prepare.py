@@ -38,6 +38,16 @@ class TestDispatch(unittest.TestCase):
         with self.assertRaisesRegex(SkillError, "source 'web' not supported yet"):
             dispatch("https://example.com", [], self.dir)
 
+    def test_unbuilt_url_source_falls_back_to_video(self):
+        self.source("video", FAKE_SOURCE.replace('"source": "web"', '"source": "video"'))
+        code, env = dispatch("https://x.com/jack/status/20", [], self.dir)
+        self.assertEqual((code, env["source"], env["url"]), (0, "video", "https://x.com/jack/status/20"))
+
+    def test_flags_before_the_input_are_rejected(self):
+        from prepare import main
+        with self.assertRaises(SystemExit):
+            main(["--lang", "de", "https://example.com"])
+
     def test_exit_code_passes_through(self):
         self.source("web", "import sys; sys.exit(2)")
         self.assertEqual(dispatch("https://example.com", [], self.dir), (2, None))

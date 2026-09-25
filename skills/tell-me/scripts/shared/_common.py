@@ -6,6 +6,7 @@ the parent of $DM_SUMMARIZE_VIDEO_ROOT (the old videos-only root), else ~/me/sum
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -53,8 +54,14 @@ KIND_DIRS = {"video": "videos", "web": "articles", "github": "repos", "x": "post
 def library_root() -> Path:
     if os.environ.get("TELL_ME_ROOT"):
         return Path(os.environ["TELL_ME_ROOT"]).expanduser()
-    if os.environ.get("DM_SUMMARIZE_VIDEO_ROOT"):  # pointed at <root>/videos
-        return Path(os.environ["DM_SUMMARIZE_VIDEO_ROOT"]).expanduser().parent
+    old = os.environ.get("DM_SUMMARIZE_VIDEO_ROOT")
+    if old:  # the videos-only root of earlier versions: <root>/videos
+        videos = Path(old).expanduser()
+        if videos.name != KIND_DIRS["video"]:
+            raise SkillError(f"DM_SUMMARIZE_VIDEO_ROOT={old} is not a folder named 'videos'. tell-me now keeps every "
+                             f"source under one root: set TELL_ME_ROOT to that root and move the videos into "
+                             f"<root>/videos (then run scripts/video/migrate_library.py --apply)")
+        return videos.parent
     return Path.home() / "me" / "summaries"
 
 
@@ -145,13 +152,23 @@ def dir_for(meta: dict, root: Path | None = None) -> Path:
         return folder / f"{extras.get('kind', 'issue')}s" / f"{number}-{slugify(title, 60)}" if number else folder
     if source == "x":
         user = extras.get("user") or meta.get("author")
-        return base / "x" / slugify(str(user or "unknown").lstrip("@")) / f"{slugify(title, 40)}-{meta.get('id')}"
+        return base / "x" / slugify(str(user or "unknown").lstrip("@")) / f"{slugify(title, 40)}-{meta['id']}"
     if source == "hn":
-        return base / "hn" / f"{slugify(title, 60)}-{meta.get('id')}"
+        return base / "hn" / f"{slugify(title, 60)}-{meta['id']}"
     if source == "file":
         path = Path(extras.get("original_path") or meta.get("url", "").removeprefix("file://") or "unknown")
         return base / slugify(path.parent.name or "root") / slugify(path.stem)
     raise ValueError(f"unknown source {source!r}")
+
+
+def unique_dir(meta: dict, root: Path | None = None) -> Path:
+    """dir_for(), plus a short hash of the id when that folder already holds a different item
+    (two pages titled "Home" on one site, two notes/x.pdf in different folders)."""
+    folder = dir_for(meta, root)
+    other = read_json(folder / "metadata.json").get("id")
+    if other and other != meta.get("id"):
+        folder = folder.with_name(f"{folder.name}-{hashlib.sha1(str(meta.get('id')).encode()).hexdigest()[:6]}")
+    return folder
 
 
 def host_slug(url: str | None) -> str:
@@ -203,6 +220,11 @@ def fmt_date(value: str | None) -> str | None:
     if value and re.fullmatch(r"\d{8}", value):
         return f"{value[:4]}-{value[4:6]}-{value[6:]}"
     return value
+
+
+def is_legacy(meta: dict) -> bool:
+    """metadata.json of a video folder written before the source contract (see video/migrate_library.py)."""
+    return bool(meta) and "source" not in meta and meta.get("kind") != "digest"
 
 
 def contract(meta: dict) -> dict:

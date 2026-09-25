@@ -10,7 +10,8 @@ Then <root>/library.js is rebuilt, the stale <root>/videos/library.js is removed
 server still serving the old videos root is stopped. Running it again finds nothing to do.
 
 Usage: migrate_library.py [--root DIR] [--apply]
-Prints one JSON object: {root, apply, folders: [{dir, actions}], removed, stopped}.
+Folders whose metadata.json can't be read, or whose video is still downloading, are skipped (listed).
+Prints one JSON object: {root, apply, folders: [{dir, actions}], skipped: [{dir, skipped}], removed, stopped}.
 """
 from __future__ import annotations
 
@@ -31,9 +32,17 @@ OLD_CONTENT = "transcript.md"
 CONTENT = "content.md"
 
 
-def plan_folder(folder: Path) -> tuple[list[str], dict]:
+def load(meta_path: Path) -> dict | None:
+    """metadata.json as a dict, or None when it exists but can't be read (never overwrite it then)."""
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def plan_folder(folder: Path, meta: dict) -> tuple[list[str], dict]:
     """(actions, new metadata) for one folder; no actions when it is already migrated."""
-    meta = read_json(folder / "metadata.json")
     actions = []
     if meta.get("kind") == "digest":
         return actions, meta
@@ -50,6 +59,37 @@ def plan_folder(folder: Path) -> tuple[list[str], dict]:
         new |= {k: c[k] for k in missing}
         actions.append(f"add contract fields: {', '.join(missing)}")
     return actions, new
+
+
+def migrate_folder(folder: Path, root: Path | None = None, apply: bool = True) -> dict | None:
+    """Migrate one folder: {dir, actions} or {dir, skipped}; None when there is nothing to do.
+    video/prepare.py and download_video.py call this for the folder they touch."""
+    root = (root or library_root()).resolve()
+    meta_path = folder / "metadata.json"
+    meta = load(meta_path)
+    if meta is None:
+        return {"dir": str(folder), "skipped": "metadata.json can't be read; fix or delete it by hand"}
+    actions, new = plan_folder(folder, meta)
+    note = folder / ("digest.md" if new.get("kind") == "digest" else "summary.md")
+    page = note.with_suffix(".html")
+    # Pages rendered before the move load ../../../library.js (the old videos root).
+    if page.exists() and 'library.js"' in (text := page.read_text(encoding="utf-8")) \
+            and f'src="{os.path.relpath(root, folder.resolve()).replace(os.sep, "/")}/library.js"' not in text:
+        actions.append("re-render page")
+    if not actions:
+        return None
+    if (read_json(folder / ".video-download.json")).get("status") == "running":
+        return {"dir": str(folder), "skipped": "a video download is running; run the migration again when it is done"}
+    if apply:
+        if (folder / OLD_CONTENT).exists() and not (folder / CONTENT).exists():
+            (folder / OLD_CONTENT).rename(folder / CONTENT)
+        if new != meta:
+            # re-read right before writing: merge, so nothing written meanwhile is lost
+            write_json(meta_path, (load(meta_path) or meta) | {k: v for k, v in new.items() if k not in meta})
+        if note.exists():
+            from render_html import write
+            write(folder, index=False)
+    return {"dir": str(folder), "actions": actions}
 
 
 def serves(pid: int, videos: Path) -> bool:
@@ -76,28 +116,11 @@ def stop_old_server(videos: Path) -> int | None:
 
 def migrate(root: Path, apply: bool) -> dict:
     videos = source_root("video", root)
-    folders = []
+    folders, skipped = [], []
     for meta_path in sorted(videos.rglob("metadata.json")) if videos.is_dir() else []:
-        folder = meta_path.parent
-        actions, new = plan_folder(folder)
-        note = folder / ("digest.md" if new.get("kind") == "digest" else "summary.md")
-        page = note.with_suffix(".html")
-        # Pages rendered before the move load ../../../library.js (the old videos root).
-        if page.exists() and 'library.js"' in (text := page.read_text(encoding="utf-8")) \
-                and f'src="{os.path.relpath(root, folder.resolve()).replace(os.sep, "/")}/library.js"' not in text:
-            actions.append("re-render page")
-        if not actions:
-            continue
-        folders.append({"dir": str(folder), "actions": actions})
-        if not apply:
-            continue
-        if (folder / OLD_CONTENT).exists() and not (folder / CONTENT).exists():
-            (folder / OLD_CONTENT).rename(folder / CONTENT)
-        if new != read_json(meta_path):
-            write_json(meta_path, new)
-        if note.exists():
-            from render_html import write
-            write(folder, index=False)
+        result = migrate_folder(meta_path.parent, root, apply)
+        if result:
+            (skipped if "skipped" in result else folders).append(result)
     stale = videos / "library.js"
     removed = str(stale) if stale.exists() else None
     stopped = None
@@ -108,7 +131,8 @@ def migrate(root: Path, apply: bool) -> dict:
         if folders or removed:
             from library import write_index
             write_index(root)
-    return {"root": str(root), "apply": apply, "folders": folders, "removed": removed, "stopped": stopped}
+    return {"root": str(root), "apply": apply, "folders": folders, "skipped": skipped, "removed": removed,
+            "stopped": stopped}
 
 
 def main(argv=None) -> int:
@@ -123,6 +147,8 @@ def main(argv=None) -> int:
     n = len(result["folders"])
     log(f"{n} folder(s) {'migrated' if args.apply else 'to migrate (dry run, pass --apply)'}" if n or result["removed"]
         else "nothing to migrate")
+    for s in result["skipped"]:
+        log(f"skipped {s['dir']}: {s['skipped']}")
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 

@@ -209,6 +209,15 @@ def start_background(folder: Path, url: str, quality: str, have_quality: str | N
     return status
 
 
+def refresh(folder: Path) -> list[Path]:
+    """Re-render the folder's note after the video changed (a folder from before the multi-source layout is
+    migrated first, so the page keeps its transcript)."""
+    from migrate_library import migrate_folder
+    from save_summary import refresh as refresh_note
+    migrate_folder(folder)
+    return refresh_note(folder)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("folder", type=Path)
@@ -222,7 +231,6 @@ def main(argv=None) -> int:
     ap.add_argument("--cookies-from-browser")
     args = ap.parse_args(argv)
 
-    from save_summary import refresh
     if args.status:
         print(json.dumps(download_status(args.folder)))
         return 0

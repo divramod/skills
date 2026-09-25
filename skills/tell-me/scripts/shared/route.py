@@ -30,8 +30,8 @@ SOURCES = ("video", "web", "github", "x", "hn", "file")
 VIDEO_HOSTS = (
     "youtube.com", "youtu.be", "youtube-nocookie.com", "vimeo.com", "tiktok.com", "twitch.tv", "dailymotion.com",
     "dai.ly", "rumble.com", "bilibili.com", "b23.tv", "soundcloud.com", "mixcloud.com", "bandcamp.com",
-    "podcasts.apple.com", "open.spotify.com", "ted.com", "loom.com", "streamable.com", "odysee.com",
-    "bitchute.com", "nebula.tv", "peertube.tv", "archive.org", "facebook.com/watch", "fb.watch",
+    "podcasts.apple.com", "open.spotify.com", "ted.com/talks", "loom.com", "streamable.com", "odysee.com",
+    "bitchute.com", "nebula.tv", "peertube.tv", "archive.org/details", "facebook.com/watch", "fb.watch",
     "instagram.com/reel", "instagram.com/p", "reddit.com/link", "v.redd.it", "kick.com", "vk.com/video",
     "nicovideo.jp", "coub.com", "wistia.com", "vidyard.com", "media.ccc.de", "infoq.com/presentations",
 )
@@ -58,10 +58,18 @@ def host_of(url: str) -> str:
     return re.sub(r"^(www|m|mobile)\.", "", host)
 
 
+# Subdomains that are not the parent site's media (web.archive.org is the Wayback Machine).
+NOT_VIDEO_HOSTS = {"web.archive.org"}
+
+
 def host_matches(host: str, path: str, patterns) -> bool:
+    """host is (a subdomain of) a pattern's domain and path is (below) the pattern's path, segment-wise."""
+    if host in NOT_VIDEO_HOSTS:
+        return False
     for pat in patterns:
         dom, _, prefix = pat.partition("/")
-        if (host == dom or host.endswith("." + dom)) and (not prefix or path.startswith("/" + prefix)):
+        if (host == dom or host.endswith("." + dom)) and (
+                not prefix or path == "/" + prefix or path.startswith("/" + prefix + "/")):
             return True
     return False
 
@@ -184,11 +192,12 @@ def route(text: str, cwd: Path | None = None) -> dict:
         return {"source": "x"} | x
     if (gh := github(host, segs)) is not None:
         return {"source": "github"} | gh
-    if suffix in MEDIA_EXT or host_matches(host, path, VIDEO_HOSTS):
-        return {"source": "video", "kind": "video", "id": clean_url(text), "url": text}
     if suffix in REMOTE_DOC_EXT:
         return {"source": "file", "kind": suffix.lstrip("."), "id": clean_url(text), "url": text}
-    return {"source": "web", "kind": "page", "id": clean_url(text), "url": clean_url(text)}
+    if suffix in MEDIA_EXT or host_matches(host, path, VIDEO_HOSTS):
+        return {"source": "video", "kind": "video", "id": clean_url(text), "url": text}
+    # id: canonical form for dedupe; url: what was given (http-only sites, #/hash routes keep working)
+    return {"source": "web", "kind": "page", "id": clean_url(text), "url": text}
 
 
 def main(argv=None) -> int:

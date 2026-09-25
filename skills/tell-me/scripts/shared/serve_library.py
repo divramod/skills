@@ -164,16 +164,25 @@ VIDEO_CLI = Path(__file__).resolve().parent.parent / "video" / "download_video.p
 
 
 def video_cli(folder: Path, *args: str) -> tuple[int, object]:
-    """Run `video/download_video.py <folder> <args>`; returns (exit code, parsed JSON stdout or the error text)."""
-    p = subprocess.run([sys.executable, str(VIDEO_CLI), str(folder), *args], capture_output=True, text=True)
+    """Run `video/download_video.py <folder> <args>`: (exit code, parsed JSON stdout) or (non-zero, error text)."""
+    try:
+        p = subprocess.run([sys.executable, str(VIDEO_CLI), str(folder), *args], capture_output=True, text=True,
+                           timeout=60)
+    except subprocess.TimeoutExpired:
+        return 1, f"{VIDEO_CLI.name} {' '.join(args)} timed out"
     if p.returncode != 0:
         return p.returncode, (p.stderr.strip().splitlines() or ["failed"])[-1].removeprefix("[tell-me] ")
-    return 0, json.loads(p.stdout or "null")
+    try:
+        return 0, json.loads(p.stdout or "null")
+    except json.JSONDecodeError:
+        return 1, f"{VIDEO_CLI.name} {' '.join(args)} printed no JSON"
 
 
 def video_state(folder: Path) -> dict:
     """What the page needs to know about the folder's video."""
-    _, status = video_cli(folder, "--status")
+    code, status = video_cli(folder, "--status")
+    if code != 0:
+        return {"status": "failed", "error": status}
     if isinstance(status, dict):
         return {k: status.get(k) for k in ("status", "progress", "stream", "error") if status.get(k) is not None}
     meta = read_json(folder / "metadata.json")
@@ -185,8 +194,8 @@ def video_state(folder: Path) -> dict:
 def remove_video(folder: Path) -> dict:
     """Delete the folder's video; download_video.py --delete re-renders the note (the page then offers the download again)."""
     code, out = video_cli(folder, "--delete")
-    if code != 0:
-        return {"status": "running", "error": out}
+    if code != 0:  # e.g. a download is still running: report the folder's actual state with the error
+        return video_state(folder) | {"error": out}
     return {"status": "none", "deleted": Path(out["deleted"]).name if out.get("deleted") else None}
 
 
@@ -201,7 +210,9 @@ def start_download(folder: Path) -> dict:
         args += ["--have-quality", meta["video_quality"]]
     if os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"):
         args += ["--cookies-from-browser", os.environ["DM_SUMMARIZE_VIDEO_BROWSER"]]
-    video_cli(folder, *args)
+    code, out = video_cli(folder, *args)
+    if code != 0:
+        return {"status": "failed", "error": out}
     return video_state(folder)
 
 

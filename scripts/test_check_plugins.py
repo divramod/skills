@@ -33,6 +33,7 @@ class TestPrereqRule(unittest.TestCase):
 
     def test_no_tools_no_requirement(self):
         self.write("web/prepare.py", "import urllib.request\n")
+        self.write("web/test_prepare.py", "import subprocess\n")  # tests don't count
         self.assertEqual(prereq_errors(self.skill), [])
 
     def test_source_folder_with_subprocess_needs_its_own_scripts(self):

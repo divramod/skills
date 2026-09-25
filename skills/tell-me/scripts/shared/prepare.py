@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _common import ENVELOPE_KEYS, SkillError, log, run_main
+from _common import ENVELOPE_KEYS, SkillError, is_legacy, log, read_json, run_main, source_root
 from route import route
 
 SOURCES_DIR = Path(__file__).resolve().parent.parent  # scripts/
@@ -30,7 +30,12 @@ def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR) -> tu
     r = route(text)
     script = sources_dir / r["source"] / "prepare.py"
     if not script.is_file():
-        raise SkillError(f"source '{r['source']}' not supported yet ({text})")
+        video = sources_dir / "video" / "prepare.py"
+        if not r.get("url") or not video.is_file():
+            raise SkillError(f"source '{r['source']}' not supported yet ({text})")
+        # yt-dlp reads many pages that later get their own source (X posts with a video, pages with an embed)
+        log(f"source '{r['source']}' not supported yet: trying the video source (yt-dlp)")
+        r, script = r | {"source": "video"}, video
     log(f"source: {r['source']} ({r['kind']}) -> {script.relative_to(sources_dir)}")
     p = subprocess.run([sys.executable, str(script), r.get("url") or r["path"], *flags],
                        stdout=subprocess.PIPE, text=True)
@@ -48,10 +53,23 @@ def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR) -> tu
     return 0, env
 
 
+def warn_legacy() -> None:
+    """Point at the migration when the video library still has folders from before the multi-source layout."""
+    videos = source_root("video")
+    n = sum(1 for m in videos.rglob("metadata.json") if is_legacy(read_json(m))) if videos.is_dir() else 0
+    if n:
+        log(f"{n} video folder(s) use the old layout: run {SOURCES_DIR / 'video' / 'migrate_library.py'} --apply "
+            "(tell the user; it renames transcript.md to content.md and re-renders the pages)")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input", help="URL or local file path")
-    args, flags = ap.parse_known_args(argv)
+    raw = sys.argv[1:] if argv is None else argv
+    if raw and raw[0].startswith("-") and raw[0] not in ("-h", "--help"):
+        ap.error(f"put the URL or path first, then the source flags (got {raw[0]!r} first)")
+    args, flags = ap.parse_known_args(raw)
+    warn_legacy()
     code, env = dispatch(args.input, flags)
     if env is not None:
         print(json.dumps(env, indent=2, ensure_ascii=False))

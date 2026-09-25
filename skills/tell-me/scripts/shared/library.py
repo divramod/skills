@@ -19,7 +19,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from _common import SkillError, contract, library_root, log, read_json, run_main
+from _common import SkillError, contract, is_legacy, library_root, log, read_json, run_main
 
 INDEX_FILE = "library.js"
 
@@ -316,10 +316,15 @@ def main(argv=None) -> int:
         return 0
     if args.pages:
         from render_html import write
+        legacy = 0
         for meta_path in sorted(root.rglob("metadata.json")):
             folder = meta_path.parent
+            legacy += is_legacy(read_json(meta_path))
             if (folder / "summary.md").exists() or (folder / "digest.md").exists():
                 log(f"rendering {write(folder, index=False)}")
+        if legacy:
+            log(f"{legacy} video folder(s) use the old layout (no transcript on their pages): "
+                "run scripts/video/migrate_library.py --apply")
     print(write_index(root))
     return 0
 

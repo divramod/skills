@@ -339,6 +339,10 @@ def main(argv=None) -> int:
     folder = existing or video_dir(info)
     folder.mkdir(parents=True, exist_ok=True)
     log(f"{'reusing' if existing else 'folder'}: {folder}")
+    if existing:  # a folder from before the multi-source layout keeps its transcript
+        from migrate_library import migrate_folder
+        if (done := migrate_folder(folder)) and done.get("actions"):
+            log(f"migrated to the multi-source layout: {', '.join(done['actions'])}")
 
     old_meta = read_json(folder / "metadata.json")
     have_quality = old_meta.get("video_quality")

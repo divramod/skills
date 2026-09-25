@@ -190,6 +190,15 @@ class TestApi(unittest.TestCase):
         self.assertEqual(started, [(self.root / "videos/youtube/chan/zeta-talk",
                                     (META["webpage_url"], "--background", "--quality", "best"))])
 
+    def test_video_cli_failures_become_json_errors(self):
+        folder = self.root / "videos/youtube/chan/zeta-talk"
+        with mock.patch("serve_library.video_cli", return_value=(1, "boom")):
+            self.assertEqual(self.call("/api/status?path=videos/youtube/chan/zeta-talk")[1], {"status": "failed", "error": "boom"})
+            code, data = self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
+        self.assertEqual((code, data["status"]), (202, "failed"))
+        with mock.patch("serve_library.VIDEO_CLI", folder / "nope.py"):
+            self.assertEqual(serve_library.video_cli(folder, "--status")[0], 2)
+
     def test_status_comes_from_the_video_cli(self):
         folder = self.root / "videos/youtube/chan/zeta-talk"
         (folder / ".video-download.json").write_text(json.dumps({"status": "failed", "error": "boom"}))

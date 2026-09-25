@@ -72,11 +72,17 @@ check_main() {
 # install_main <dir> [--upgrade]: install the missing tools of <dir>/check-prerequisites.sh (Homebrew first, then
 # apt-get), then run the check. --upgrade also upgrades yt-dlp (YouTube breaks old versions quickly).
 install_main() {
-  local dir="$1" upgrade=0 t pkg brew_pkgs=() apt_pkgs=() need_uv=0 need_ytdlp=0
+  local dir="$1" upgrade=0 t pkg missing=() brew_pkgs=() apt_pkgs=() need_uv=0 need_ytdlp=0
   shift
   [ "${1:-}" = "--upgrade" ] && upgrade=1
   for t in $("$dir/check-prerequisites.sh" --list); do
-    have "$t" && continue
+    have "$t" || missing+=("$t")
+  done
+  if [ "${#missing[@]}" -eq 0 ] && { [ "$upgrade" -eq 0 ] || ! have yt-dlp; }; then
+    "$dir/check-prerequisites.sh"
+    return
+  fi
+  for t in ${missing[@]+"${missing[@]}"}; do
     if have brew; then
       pkg="$(brew_pkg "$t")"
       case " ${brew_pkgs[*]-} " in *" $pkg "*) ;; *) brew_pkgs+=("$pkg") ;; esac
@@ -100,10 +106,10 @@ install_main() {
     if [ "${#apt_pkgs[@]}" -gt 0 ]; then
       $sudo apt-get update && $sudo apt-get install -y "${apt_pkgs[@]}"
     fi
+    export PATH="$HOME/.local/bin:$PATH"  # where uv and `uv tool install` put their commands
     if { [ "$need_uv" -eq 1 ] || [ "$need_ytdlp" -eq 1 ]; } && ! have uv; then
       echo "installing uv (https://astral.sh/uv)"
       curl -LsSf https://astral.sh/uv/install.sh | sh
-      export PATH="$HOME/.local/bin:$PATH"
     fi
     if [ "$need_ytdlp" -eq 1 ]; then
       uv tool install "yt-dlp[default]"
@@ -112,7 +118,7 @@ install_main() {
     fi
   else
     echo "error: neither Homebrew nor apt-get found. Install these by hand:" >&2
-    for t in $("$dir/check-prerequisites.sh" --list); do have "$t" || echo "  $t: $(hint "$t")" >&2; done
+    for t in ${missing[@]+"${missing[@]}"}; do echo "  $t: $(hint "$t")" >&2; done
     return 1
   fi
   "$dir/check-prerequisites.sh"

@@ -28,11 +28,12 @@ def load(rel):
 
 
 def uses_tools(folder: Path) -> bool:
-    """True when a script directly in folder (not the prereq scripts themselves) calls external tools."""
+    """True when a script directly in folder (not the prereq scripts or tests) calls external tools."""
     return any(
         any(marker in f.read_text(errors="ignore") for marker in TOOL_MARKERS)
         for f in folder.iterdir()
         if f.is_file() and f.suffix in (".py", ".sh") and f.name not in PREREQ_SCRIPTS
+        and not f.name.startswith("test_")  # tests may run scripts; they don't need tools of their own
     )
 
 

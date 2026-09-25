@@ -44,6 +44,14 @@ CASES = [
     ("https://example.com/blog/post?utm_source=x&page=2#comments", ("web", "page", "https://example.com/blog/post?page=2")),
     ("http://www.example.com", ("web", "page", "https://example.com/")),
     ("https://arxiv.org/pdf/1706.03762.pdf", ("file", "pdf", None)),
+    ("https://archive.org/details/some-lecture", ("video", "video", None)),
+    ("https://archive.org/details/book/book.pdf", ("file", "pdf", None)),
+    ("https://web.archive.org/web/2020/https://example.com/post", ("web", "page", None)),
+    ("https://www.instagram.com/p/Cabc123/", ("video", "video", None)),
+    ("https://www.instagram.com/photographer", ("web", "page", None)),
+    ("https://www.facebook.com/watchparty/1", ("web", "page", None)),
+    ("https://www.ted.com/talks/some_talk", ("video", "video", None)),
+    ("https://www.ted.com/read/some-article", ("web", "page", None)),
 ]
 
 
@@ -56,6 +64,11 @@ class TestRoute(unittest.TestCase):
                 if rid:
                     self.assertEqual(r["id"], rid)
                 self.assertTrue(r.get("url") or r.get("path"))
+
+    def test_web_url_is_kept_as_given(self):
+        r = route("http://localhost:8000/doc#/route?utm_source=x")
+        self.assertEqual(r["url"], "http://localhost:8000/doc#/route?utm_source=x")
+        self.assertEqual(r["id"], "https://localhost:8000/doc")
 
     def test_canonical_urls(self):
         self.assertEqual(route("https://youtu.be/dQw4w9WgXcQ")["url"], "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
