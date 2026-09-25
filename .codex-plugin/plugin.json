@@ -1,0 +1,21 @@
+{
+  "name": "divramod-skills",
+  "version": "0.2.0",
+  "description": "divramod's agent skills: summarize videos from a URL, and more.",
+  "author": {
+    "name": "Arvid Petermann",
+    "url": "https://github.com/divramod"
+  },
+  "homepage": "https://github.com/divramod/skills",
+  "repository": "https://github.com/divramod/skills",
+  "license": "MIT",
+  "keywords": ["skills", "video", "summarize", "youtube"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "divramod skills",
+    "shortDescription": "Summarize videos from a URL, and more.",
+    "developerName": "Arvid Petermann",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/divramod/skills"
+  }
+}

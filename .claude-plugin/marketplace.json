@@ -1,0 +1,17 @@
+{
+  "name": "divramod",
+  "owner": {
+    "name": "Arvid Petermann",
+    "url": "https://github.com/divramod"
+  },
+  "description": "divramod's skills, as an installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "divramod-skills",
+      "source": "./",
+      "description": "divramod's agent skills: summarize videos from a URL, and more.",
+      "category": "productivity",
+      "keywords": ["skills", "video", "summarize", "youtube"]
+    }
+  ]
+}
