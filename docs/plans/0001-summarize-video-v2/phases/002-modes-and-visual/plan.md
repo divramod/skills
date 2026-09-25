@@ -2,9 +2,12 @@
 name: modes-and-visual
 description: Summary mode templates with ready-made timestamp links; ffmpeg scene keyframes.
 status: shipped
-phase_id: "002"
-depends_on: ["001"]
-wave: "02"
+schema_version: 1
+phase_id: '002'
+depends_on:
+- '001'
+wave: 2
+created: '2026-09-25'
 tier: medium
 ---
 
@@ -37,3 +40,4 @@ The templates are plain markdown files, and SKILL.md tells the agent which one t
 ## Open Questions
 
 None.
+

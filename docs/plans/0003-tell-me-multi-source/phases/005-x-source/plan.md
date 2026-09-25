@@ -1,11 +1,13 @@
 ---
 name: x-source
-description: x.com: FxTwitter thread + replies always, quoted posts, community notes; post video → transcript + background download via the video source.
+description: 'x.com: FxTwitter thread + replies always, quoted posts, community notes; post video → transcript + background download via the video source.'
 status: shipped
-phase_id: "005"
-depends_on: ["001"]
-wave: "02"
-created: 2026-09-25
+schema_version: 1
+phase_id: '005'
+depends_on:
+- '001'
+wave: 2
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -86,3 +88,4 @@ FxTwitter is unofficial and can break or rate-limit; protected accounts are unre
 ## Open Questions
 
 None.
+

@@ -2,10 +2,17 @@
 name: library-ui-and-docs
 description: Library sidebar source filter + icons, per-source header panels, README/plugin metadata, final e2e.
 status: shipped
-phase_id: "008"
-depends_on: ["002", "003", "004", "005", "006", "007"]
-wave: "04"
-created: 2026-09-25
+schema_version: 1
+phase_id: '008'
+depends_on:
+- '002'
+- '003'
+- '004'
+- '005'
+- '006'
+- '007'
+wave: 4
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -75,3 +82,4 @@ Sidebar JS grows. Keep it dependency-free.
 ## Open Questions
 
 None.
+

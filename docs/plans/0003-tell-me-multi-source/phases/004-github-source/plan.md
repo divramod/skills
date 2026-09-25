@@ -2,10 +2,12 @@
 name: github-source
 description: GitHub repos via API/gh (+README, languages, release, tree, docs), --deep via repomix, issues/PRs/discussions in discussion shape, similar repos.
 status: shipped
-phase_id: "004"
-depends_on: ["001"]
-wave: "02"
-created: 2026-09-25
+schema_version: 1
+phase_id: '004'
+depends_on:
+- '001'
+wave: 2
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -108,3 +110,4 @@ Unauthenticated rate limit; big monorepos (budget + --deep warning); GraphQL is 
 ## Open Questions
 
 None.
+

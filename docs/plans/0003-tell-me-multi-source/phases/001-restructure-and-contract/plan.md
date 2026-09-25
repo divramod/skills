@@ -2,10 +2,11 @@
 name: restructure-and-contract
 description: Move tell-me to subskills/scripts/templates with shared/, add the router + source contract + per-folder prereqs; video only, no regressions.
 status: shipped
-phase_id: "001"
+schema_version: 1
+phase_id: '001'
 depends_on: []
-wave: "01"
-created: 2026-09-25
+wave: 1
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -134,3 +135,4 @@ Import breakage after `git mv`, and the shared→video coupling in serve_library
 ## Open Questions
 
 None.
+

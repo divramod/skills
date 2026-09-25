@@ -2,11 +2,13 @@
 name: tell-me-multi-source
 description: Masterplan for tell-me multi-source — restructure into subskills/scripts/templates with shared/, then add web, hn, github, x, file sources, multiple inputs and the library source filter.
 status: shipped
-created: 2026-09-25
-shipped: 2026-09-25
+schema_version: 1
+created: '2026-09-25'
+shipped: '2026-09-25'
 tier: large
 tier_source: manual
 ---
+
 
 # Masterplan: tell-me-multi-source
 
@@ -69,3 +71,4 @@ _Advisory grouping by `depends_on` — cadence stays `phase` unless `--cadence w
 ## Open Questions
 
 None. All were decided in the spec grill (`grill.md`).
+

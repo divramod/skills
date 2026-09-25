@@ -2,9 +2,11 @@
 name: scripted-core
 description: Move deterministic work to scripts; library folder; --download; reuse by ID; save_summary with frontmatter; tool checks.
 status: shipped
-phase_id: "001"
+schema_version: 1
+phase_id: '001'
 depends_on: []
-wave: "01"
+wave: 1
+created: '2026-09-25'
 tier: medium
 ---
 
@@ -39,3 +41,4 @@ Keep the proven caption and Whisper logic. When a video file already exists, Whi
 ## Open Questions
 
 None.
+

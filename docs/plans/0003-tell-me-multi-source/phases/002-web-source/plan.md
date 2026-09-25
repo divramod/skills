@@ -1,11 +1,13 @@
 ---
 name: web-source
-description: Blog posts / web articles: trafilatura + defuddle in parallel, best result wins; Jina Reader then Wayback fallback; paragraph anchors.
+description: 'Blog posts / web articles: trafilatura + defuddle in parallel, best result wins; Jina Reader then Wayback fallback; paragraph anchors.'
 status: shipped
-phase_id: "002"
-depends_on: ["001"]
-wave: "02"
-created: 2026-09-25
+schema_version: 1
+phase_id: '002'
+depends_on:
+- '001'
+wave: 2
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -86,3 +88,4 @@ defuddle calls itself a work in progress; Jina rate limit (20/min); text fragmen
 ## Open Questions
 
 None.
+

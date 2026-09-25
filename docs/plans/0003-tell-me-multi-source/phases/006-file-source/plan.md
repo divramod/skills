@@ -1,11 +1,13 @@
 ---
 name: file-source
-description: Local documents: markitdown → pdftotext/pandoc fallback, original copied, page anchors, sha256 dedupe.
+description: 'Local documents: markitdown → pdftotext/pandoc fallback, original copied, page anchors, sha256 dedupe.'
 status: shipped
-phase_id: "006"
-depends_on: ["001"]
-wave: "02"
-created: 2026-09-25
+schema_version: 1
+phase_id: '006'
+depends_on:
+- '001'
+wave: 2
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -75,3 +77,4 @@ markitdown is weak on multi-column PDFs and tables (docling is the future opt-in
 ## Open Questions
 
 None.
+

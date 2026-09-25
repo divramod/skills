@@ -2,9 +2,12 @@
 name: summarize-video-v2
 description: Masterplan for dm-summarize-video v2 (scripted core, library folder, -d, modes, visual pass, playlists, prerequisite rules).
 status: shipped
-created: 2026-09-25
+schema_version: 1
+created: '2026-09-25'
 tier: medium
+tier_source: manual
 ---
+
 
 # Masterplan: summarize-video-v2
 
@@ -26,3 +29,16 @@ playlist/channel digests, prerequisite scripts and the repo-wide script rules. S
 
 - Wave 01: 001
 - Wave 02: 002, 003 (independent files; can run in parallel)
+
+## Dependencies
+
+_See MIGRATION_NOTES.md._
+
+## Risks
+
+_See MIGRATION_NOTES.md._
+
+## Open Questions
+
+_See MIGRATION_NOTES.md._
+

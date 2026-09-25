@@ -2,12 +2,14 @@
 name: summarize-video-v2
 description: dm-summarize-video v2 — deterministic work moved into scripts, permanent library at ~/me/summaries/videos, --download, summary modes, visual pass, playlist/channel digests, prerequisite scripts + repo-wide script rules.
 status: shipped
-created: 2026-09-25
-approved: 2026-09-25
-shipped: 2026-09-25
+schema_version: 1
+created: '2026-09-25'
+approved: '2026-09-25'
+shipped: '2026-09-25'
 tier: medium
 tier_source: manual
 ---
+
 
 # Spec: summarize-video-v2
 
@@ -136,3 +138,12 @@ criteria:
 
 None blocking. Resolved defaults: slug style is lowercase kebab (max 80 chars); the default mode is `summary`;
 the frame cap is 40.
+
+## Background
+
+_See MIGRATION_NOTES.md._
+
+## Approach
+
+_See MIGRATION_NOTES.md._
+

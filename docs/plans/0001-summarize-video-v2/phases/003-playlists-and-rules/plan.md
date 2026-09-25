@@ -2,9 +2,12 @@
 name: playlists-and-rules
 description: Playlist/channel expansion + digest folder; check/install prerequisite scripts; repo rules in CLAUDE.md/AGENTS.md enforced by check-plugins.
 status: shipped
-phase_id: "003"
-depends_on: ["001"]
-wave: "02"
+schema_version: 1
+phase_id: '003'
+depends_on:
+- '001'
+wave: 2
+created: '2026-09-25'
 tier: medium
 ---
 
@@ -36,3 +39,4 @@ Bash prerequisite scripts; `check-plugins.py` flags a skill whose scripts call e
 ## Open Questions
 
 None.
+

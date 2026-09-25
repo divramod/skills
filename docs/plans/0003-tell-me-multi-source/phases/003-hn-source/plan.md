@@ -1,11 +1,14 @@
 ---
 name: hn-source
-description: Hacker News: Algolia comment tree, linked article via the web extractor, discussion as themes with attributed quotes, check_quotes.py, past discussions.
+description: 'Hacker News: Algolia comment tree, linked article via the web extractor, discussion as themes with attributed quotes, check_quotes.py, past discussions.'
 status: shipped
-phase_id: "003"
-depends_on: ["001", "002"]
-wave: "03"
-created: 2026-09-25
+schema_version: 1
+phase_id: '003'
+depends_on:
+- '001'
+- '002'
+wave: 3
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -86,3 +89,4 @@ Algolia lags minutes behind for brand-new items (Firebase fallback); very large 
 ## Open Questions
 
 None.
+

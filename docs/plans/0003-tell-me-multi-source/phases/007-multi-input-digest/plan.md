@@ -2,10 +2,12 @@
 name: multi-input-digest
 description: Multiple inputs in one call and a generalized digest across any sources.
 status: shipped
-phase_id: "007"
-depends_on: ["001"]
-wave: "02"
-created: 2026-09-25
+schema_version: 1
+phase_id: '007'
+depends_on:
+- '001'
+wave: 2
+created: '2026-09-25'
 tier: large
 tier_source: manual
 ---
@@ -64,3 +66,4 @@ Wave-02 overlap: edits `shared/prepare.py` and SKILL.md. Keep the diff small and
 ## Open Questions
 
 None.
+
