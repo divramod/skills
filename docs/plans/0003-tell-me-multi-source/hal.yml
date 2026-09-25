@@ -6,7 +6,7 @@ retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: planned 2026-09-25 (8 phases, 4 waves)
+last_action: phase 001 shipped; phase 002 web-source in progress
 active: true
 targets:
 - skills/tell-me
