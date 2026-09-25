@@ -16,7 +16,7 @@ Writes transcript.md (with timestamp links) + metadata.json (the shared contract
 yt-dlp keys) and prints the source envelope on stdout. A playlist or channel URL is handed to
 list_videos.py (--limit N) and prints its video list instead.
 
-Root: $DM_SUMMARIZE_VIDEO_ROOT or ~/me/summaries/videos.
+Folder: <root>/videos/<platform>/<user>/<title>/ (root: $TELL_ME_ROOT or ~/me/summaries).
 Requires: yt-dlp, ffmpeg; uvx only for the Whisper fallback.
 """
 from __future__ import annotations

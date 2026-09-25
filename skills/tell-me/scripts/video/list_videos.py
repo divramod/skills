@@ -24,8 +24,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
-from _common import (BOT_HINT, SkillError, SKILL_DIR, find_existing, is_bot_error, library_root, log, platform_of,
-                     require, run_main, slugify, user_of, write_json)
+from _common import (BOT_HINT, SkillError, SKILL_DIR, find_existing, is_bot_error, log, platform_of,
+                     require, run_main, slugify, source_root, user_of, write_json)
 
 _CHANNEL_RE = re.compile(r"youtube\.com/(@[^/?#]+|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?(\?.*)?$")
 
@@ -87,7 +87,7 @@ def main(argv=None) -> int:
 
     for v in listing["videos"]:
         v["summary_exists"] = bool((d := find_existing({**data, "id": v["id"]})) and (d / "summary.md").exists())
-    folder = library_root() / platform_of(data) / user_of(data) / "_digests" / listing["slug"]
+    folder = source_root("video") / platform_of(data) / user_of(data) / "_digests" / listing["slug"]
     folder.mkdir(parents=True, exist_ok=True)
     write_json(folder / "metadata.json", {
         "kind": "digest", "source_kind": kind, "title": listing["title"], "channel": listing["channel"],

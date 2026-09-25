@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _common import (MissingTool, detect_agent, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
+from _common import (MissingTool, detect_agent, dir_for, find_by_id, source_root, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
                      ts_url, user_of, video_dir)
 
 
@@ -35,9 +35,34 @@ class TestNaming(unittest.TestCase):
 
     def test_default_root_and_env_override(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(library_root(), Path.home() / "me" / "summaries" / "videos")
-        with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": "/tmp/x"}):
+            self.assertEqual(library_root(), Path.home() / "me" / "summaries")
+            self.assertEqual(source_root("video"), Path.home() / "me" / "summaries" / "videos")
+        with mock.patch.dict(os.environ, {"TELL_ME_ROOT": "/tmp/x", "DM_SUMMARIZE_VIDEO_ROOT": "/tmp/y/videos"}):
             self.assertEqual(library_root(), Path("/tmp/x"))
+        with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": "/tmp/y/videos"}, clear=True):
+            self.assertEqual(library_root(), Path("/tmp/y"))  # the old variable pointed at the videos subtree
+
+    def test_dir_for_each_source(self):
+        r = Path("/r")
+        cases = [
+            ({"extractor_key": "Youtube", "uploader_id": "@chan", "title": "My Video!"}, "videos/youtube/chan/my-video"),
+            ({"source": "video", "platform": "youtube", "extractor_key": "Youtube", "uploader_id": "@c", "title": "T"},
+             "videos/youtube/c/t"),
+            ({"source": "web", "site": "Simon Willison", "url": "https://simonwillison.net/x", "title": "A Post"},
+             "articles/simon-willison/a-post"),
+            ({"source": "web", "url": "https://www.example.com/x", "title": "A Post"}, "articles/example-com/a-post"),
+            ({"source": "github", "id": "yt-dlp/yt-dlp", "title": "yt-dlp"}, "repos/github/yt-dlp/yt-dlp"),
+            ({"source": "github", "id": "o/r#12", "title": "Crash on start", "extras": {"kind": "pull"}},
+             "repos/github/o/r/pulls/12-crash-on-start"),
+            ({"source": "x", "id": "20", "author": "Jack", "title": "just setting up my twttr", "extras": {"user": "jack"}},
+             "posts/x/jack/just-setting-up-my-twttr-20"),
+            ({"source": "hn", "id": "1", "title": "Y Combinator"}, "discussions/hn/y-combinator-1"),
+            ({"source": "file", "url": "file:///Users/a/Papers/Attention Is All You Need.pdf", "title": "x"},
+             "documents/papers/attention-is-all-you-need"),
+        ]
+        for meta, rel in cases:
+            with self.subTest(rel):
+                self.assertEqual(dir_for(meta, r), r / rel)
 
 
 class TestFindExisting(unittest.TestCase):
@@ -51,6 +76,19 @@ class TestFindExisting(unittest.TestCase):
             self.assertEqual(find_existing(info, root), old)
             self.assertIsNone(find_existing({**info, "id": "zzz"}, root))
             self.assertIsNone(find_existing({**info, "extractor_key": "Vimeo"}, root))
+
+
+class TestFindById(unittest.TestCase):
+    def test_finds_any_source_by_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            post = root / "articles" / "site" / "old-title"
+            post.mkdir(parents=True)
+            (post / "metadata.json").write_text(json.dumps({"source": "web", "id": "https://a.b/p"}))
+            self.assertEqual(find_by_id("web", "https://a.b/p", root), post)
+            self.assertIsNone(find_by_id("web", "https://a.b/q", root))
+            self.assertIsNone(find_by_id("hn", "https://a.b/p", root))
+            self.assertIsNone(find_by_id("web", None, root))
 
 
 class TestLinks(unittest.TestCase):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Library index + sidebar for the HTML pages: <root>/library.js lists every summarized video.
+"""Library index + sidebar for the HTML pages: <root>/library.js lists every summary of every source.
 
 Pages are opened from file://, where a page can't list folders or fetch JSON, but it can load a
 <script>. So every page loads <root>/library.js (window.DM_LIBRARY = {...}) and draws the
@@ -19,7 +19,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from _common import SkillError, library_root, log, read_json, run_main
+from _common import SkillError, contract, library_root, log, read_json, run_main
 
 INDEX_FILE = "library.js"
 
@@ -42,7 +42,8 @@ def downloaded_at(folder: Path, meta: dict) -> str:
         return datetime.fromtimestamp(birth).isoformat(timespec="seconds")
     if meta.get("prepared_at"):
         return meta["prepared_at"]
-    stamp = folder / "transcript.md"
+    content = contract(meta)["content_file"]
+    stamp = folder / content if content else folder / "metadata.json"
     stamp = stamp if stamp.exists() else folder / "metadata.json"
     mtime = datetime.fromtimestamp(stamp.stat().st_mtime).isoformat(timespec="seconds")
     return f"{meta['prepared']}T{mtime[11:]}" if meta.get("prepared") else mtime
@@ -66,11 +67,27 @@ def summarized_at(folder: Path, meta: dict) -> str:
 
 
 def last_summarized(root: Path) -> Path | None:
-    """Page of the most recently summarized video (digests excluded), or None."""
-    videos = [e for e in entries(root) if e["kind"] == "video"]
-    if not videos:
+    """Page of the most recent summary (digests excluded), or None."""
+    notes = [e for e in entries(root) if e["kind"] == "summary"]
+    if not notes:
         return None
-    return root / max(videos, key=lambda e: e["summarized"])["page"]
+    return root / max(notes, key=lambda e: e["summarized"])["page"]
+
+
+# Folder depth (below the root) of the folder that stands for an author/site/owner, per source:
+# videos/<platform>/<channel>, articles/<site>, repos/github/<owner>, posts/x/<user>. The sidebar
+# labels that folder with `group_name` instead of its slug.
+GROUP_DEPTH = {"video": 3, "web": 2, "github": 3, "x": 3}
+
+
+def group_of(rel: str, source: str | None, c: dict) -> tuple[str, str]:
+    """(group folder, its display name) for an entry, or ("", "")."""
+    depth = GROUP_DEPTH.get(source or "")
+    parts = rel.split("/")
+    if not depth or len(parts) <= depth:
+        return "", ""
+    name = c.get("site") if source == "web" else c.get("author")
+    return "/".join(parts[:depth]), name or ""
 
 
 def entries(root: Path) -> list[dict]:
@@ -84,13 +101,19 @@ def entries(root: Path) -> list[dict]:
         if not meta or not page.exists():
             continue
         rel = folder.relative_to(root).as_posix()
+        c = contract(meta)
+        source = c["source"] or ("video" if rel.startswith("videos/") else None)  # digests
+        group, group_name = group_of(rel, source, c)
         out.append({
             "path": rel,
             "page": f"{rel}/{page.name}",
-            "title": meta.get("title") or folder.name,
-            "author": meta.get("channel") or meta.get("uploader") or meta.get("user") or "",
+            "title": c["title"] or folder.name,
+            "author": c["author"] or "",
+            "source": source or "",
+            "group": group,
+            "group_name": group_name,
             "date": downloaded_at(folder, meta),
-            "kind": "digest" if digest else "video",
+            "kind": "digest" if digest else "summary",
             "mode": (meta.get("summary") or {}).get("mode", ""),
             "summarized": summarized_at(folder, meta),
         })
@@ -194,9 +217,9 @@ const hm=d=>(d||'').slice(11,16);                     // time the skill started 
 const when=d=>[day(d),hm(d)].filter(Boolean).join(' ');
 const by=it=>[it.author,when(it.date)].filter(Boolean).join(' · ');
 const link=(it,sub)=>`<li><a href="${esc(ROOT+'/'+it.page)}"${it.path===SELF?' class="current" aria-current="page"':''} title="${esc(it.path)}">${esc(it.title)}${sub?`<small>${esc(sub)}</small>`:''}</a></li>`;
-// channel folder "youtube/aidotengineer" -> display name "AI Engineer"
-const chan=it=>it.path.split('/').slice(0,2).join('/');
-const names={};for(const it of L.items)if(it.author)names[chan(it)]=it.author;
+// group folder (channel, site, owner, user) "videos/youtube/aidotengineer" -> display name "AI Engineer"
+const chan=it=>it.group||'';
+const names={};for(const it of L.items)if(it.group&&it.group_name)names[it.group]=it.group_name;
 const tech=(name,techName)=>name&&name!==techName?` <span class="tech">${esc(techName)}</span>`:'';
 function tree(items,d){
   const t={};
@@ -230,7 +253,7 @@ function render(){
     // grouped by channel folder (two channels may share a display name), headed "Name folder-name"
     const s=items.slice().sort((a,b)=>d*(col.compare(a.author,b.author)||col.compare(chan(a),chan(b)))||col.compare(a.title,b.title));let last=null;
     for(const it of s){const c=chan(it);if(c!==last){if(last!==null)h+='</ul>';
-      h+=`<div class="group">${esc(it.author||'unknown')}${tech(it.author,c.split('/')[1]||'')}</div><ul>`;last=c;}h+=link(it,when(it.date));}
+      h+=`<div class="group">${esc(it.author||'unknown')}${tech(it.author,c.split('/').pop()||'')}</div><ul>`;last=c;}h+=link(it,when(it.date));}
     h+='</ul>';
   }
   nav.innerHTML=h;
@@ -275,13 +298,13 @@ render();
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--root", type=Path, help="library root (default: $DM_SUMMARIZE_VIDEO_ROOT or ~/me/summaries/videos)")
+    ap.add_argument("--root", type=Path, help="library root (default: $TELL_ME_ROOT or ~/me/summaries)")
     ap.add_argument("--pages", action="store_true", help="also re-render every summary.html / digest.html")
     ap.add_argument("--open-last", action="store_true",
                     help="open the most recently summarized video in the browser (via the library server)")
     args = ap.parse_args(argv)
     if args.root:
-        os.environ["DM_SUMMARIZE_VIDEO_ROOT"] = str(args.root)
+        os.environ["TELL_ME_ROOT"] = str(args.root)
     root = library_root().resolve()
     if args.open_last:
         page = last_summarized(root)

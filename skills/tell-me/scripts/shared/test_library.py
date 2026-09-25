@@ -36,7 +36,7 @@ class TestLibrary(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name).resolve()
-        self.env = mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": str(self.root)})
+        self.env = mock.patch.dict(os.environ, {"TELL_ME_ROOT": str(self.root)})
         self.env.start()
 
     def tearDown(self):
@@ -44,21 +44,31 @@ class TestLibrary(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_entries_only_folders_with_pages(self):
-        make(self.root, "youtube/chan/zeta-talk", META)
-        make(self.root, "youtube/chan/unsummarized", META | {"id": "x"}, page=False)
-        make(self.root, "youtube/other/alpha", {"id": "y", "title": "Alpha", "uploader": "Other", "prepared": "2026-09-20"})
+        make(self.root, "videos/youtube/chan/zeta-talk", META)
+        make(self.root, "videos/youtube/chan/unsummarized", META | {"id": "x"}, page=False)
+        make(self.root, "videos/youtube/other/alpha", {"id": "y", "title": "Alpha", "uploader": "Other", "prepared": "2026-09-20"})
         items = {e["path"]: e for e in entries(self.root)}
-        self.assertEqual(set(items), {"youtube/chan/zeta-talk", "youtube/other/alpha"})
-        zeta = items["youtube/chan/zeta-talk"]
+        self.assertEqual(set(items), {"videos/youtube/chan/zeta-talk", "videos/youtube/other/alpha"})
+        zeta = items["videos/youtube/chan/zeta-talk"]
         self.assertTrue(zeta.pop("summarized"))  # summary.md mtime (no created_at in META)
         self.assertEqual(zeta, {
-            "path": "youtube/chan/zeta-talk", "page": "youtube/chan/zeta-talk/summary.html", "title": "Zeta talk",
-            "author": "Chan", "date": zeta["date"], "kind": "video", "mode": "tldr"})
+            "path": "videos/youtube/chan/zeta-talk", "page": "videos/youtube/chan/zeta-talk/summary.html", "title": "Zeta talk",
+            "author": "Chan", "source": "video", "group": "videos/youtube/chan", "group_name": "Chan",
+            "date": zeta["date"], "kind": "summary", "mode": "tldr"})
+
+    def test_group_per_source(self):
+        from library import group_of
+        self.assertEqual(group_of("articles/example-com/post", "web", {"site": "Example", "author": "Ann"}),
+                         ("articles/example-com", "Example"))
+        self.assertEqual(group_of("repos/github/yt-dlp/yt-dlp", "github", {"author": "yt-dlp"}),
+                         ("repos/github/yt-dlp", "yt-dlp"))
+        self.assertEqual(group_of("discussions/hn/title-1", "hn", {"author": "pg"}), ("", ""))
+        self.assertEqual(group_of("videos/youtube", "video", {"author": "x"}), ("", ""))
 
     def test_start_time_is_folder_creation_time(self):
         from datetime import datetime
         from library import downloaded_at
-        folder = make(self.root, "youtube/chan/zeta-talk", META)
+        folder = make(self.root, "videos/youtube/chan/zeta-talk", META)
         birth = getattr(folder.stat(), "st_birthtime", None)
         if not birth:
             self.skipTest("no folder creation time on this file system")
@@ -66,7 +76,7 @@ class TestLibrary(unittest.TestCase):
 
     def test_start_time_falls_back_without_creation_time(self):
         from library import downloaded_at
-        folder = make(self.root, "youtube/chan/zeta-talk", META)
+        folder = make(self.root, "videos/youtube/chan/zeta-talk", META)
         real = os.stat(folder)
         no_birth = mock.Mock(spec=["st_mtime"], st_mtime=real.st_mtime)
         with mock.patch.object(Path, "stat", lambda self, **kw: no_birth if self == folder else os.stat(self)):
@@ -75,30 +85,30 @@ class TestLibrary(unittest.TestCase):
 
     def test_last_summarized_prefers_created_at_and_skips_digests(self):
         self.assertIsNone(last_summarized(self.root))
-        make(self.root, "youtube/chan/old", META | {"summary": {"created_at": "2026-09-01T09:00:00"}})
-        make(self.root, "youtube/chan/new", META | {"id": "n", "summary": {"created_at": "2026-09-25T09:00:00"}})
-        make(self.root, "youtube/chan/_digests/pl", {"kind": "digest", "title": "PL", "summary": {"created_at": "2027-01-01T00:00:00"}})
-        (self.root / "youtube/chan/_digests/pl/digest.html").write_text("")
-        self.assertEqual(last_summarized(self.root), self.root / "youtube/chan/new/summary.html")
+        make(self.root, "videos/youtube/chan/old", META | {"summary": {"created_at": "2026-09-01T09:00:00"}})
+        make(self.root, "videos/youtube/chan/new", META | {"id": "n", "summary": {"created_at": "2026-09-25T09:00:00"}})
+        make(self.root, "videos/youtube/chan/_digests/pl", {"kind": "digest", "title": "PL", "summary": {"created_at": "2027-01-01T00:00:00"}})
+        (self.root / "videos/youtube/chan/_digests/pl/digest.html").write_text("")
+        self.assertEqual(last_summarized(self.root), self.root / "videos/youtube/chan/new/summary.html")
 
     def test_date_only_summary_does_not_jump_ahead_after_an_edit(self):
-        make(self.root, "youtube/chan/timed", META | {"summary": {"created_at": "2026-09-25T09:00:00"}})
-        old = make(self.root, "youtube/chan/dateonly", META | {"id": "d", "summary": {"created": "2026-09-25"}})
+        make(self.root, "videos/youtube/chan/timed", META | {"summary": {"created_at": "2026-09-25T09:00:00"}})
+        old = make(self.root, "videos/youtube/chan/dateonly", META | {"id": "d", "summary": {"created": "2026-09-25"}})
         (old / "summary.md").write_text((old / "summary.md").read_text())  # fresh mtime (e.g. dates refreshed)
-        self.assertEqual(last_summarized(self.root), self.root / "youtube/chan/timed/summary.html")
+        self.assertEqual(last_summarized(self.root), self.root / "videos/youtube/chan/timed/summary.html")
 
     def test_index_is_loadable_js(self):
-        make(self.root, "youtube/chan/zeta-talk", META)
+        make(self.root, "videos/youtube/chan/zeta-talk", META)
         text = (write_index(self.root)).read_text()
         self.assertTrue(text.startswith("window.DM_LIBRARY = {"))
         data = json.loads(text[len("window.DM_LIBRARY = "):].rstrip().rstrip(";"))
         self.assertEqual(len(data["items"]), 1)
 
     def test_page_gets_sidebar_and_relative_root(self):
-        folder = make(self.root, "youtube/chan/zeta-talk", META)
+        folder = make(self.root, "videos/youtube/chan/zeta-talk", META)
         page = build(folder)
-        self.assertIn('data-root="../../.." data-self="youtube/chan/zeta-talk"', page)
-        self.assertIn('<script src="../../../library.js"></script>', page)
+        self.assertIn('data-root="../../../.." data-self="videos/youtube/chan/zeta-talk"', page)
+        self.assertIn('<script src="../../../../library.js"></script>', page)
         for view in ("tree", "date", "title", "author"):
             self.assertIn(f'data-view="{view}"', page)
         write(folder)
@@ -111,15 +121,15 @@ class TestLibrary(unittest.TestCase):
             self.assertNotIn('id="lib"', build(folder))
 
     def test_youtube_player_without_local_video(self):
-        folder = make(self.root, "youtube/chan/zeta-talk", META)
+        folder = make(self.root, "videos/youtube/chan/zeta-talk", META)
         page = build(folder)
         self.assertIn('<div class="frame" data-yt="abc"><img src="https://i.ytimg.com/vi/abc/hqdefault.jpg"', page)
         self.assertNotIn("<video", page)
 
     def test_non_youtube_player_uses_thumbnail_or_plain_box(self):
         vimeo = {"id": "1", "title": "V", "platform": "vimeo", "webpage_url": "https://vimeo.com/1"}
-        self.assertIn('<div class="frame"><a class="play" href="https://vimeo.com/1"', build(make(self.root, "vimeo/u/v", vimeo)))
-        page = build(make(self.root, "vimeo/u/w", vimeo | {"thumbnail": "https://i.vimeocdn.com/t.jpg"}))
+        self.assertIn('<div class="frame"><a class="play" href="https://vimeo.com/1"', build(make(self.root, "videos/vimeo/u/v", vimeo)))
+        page = build(make(self.root, "videos/vimeo/u/w", vimeo | {"thumbnail": "https://i.vimeocdn.com/t.jpg"}))
         self.assertIn('<div class="frame"><img src="https://i.vimeocdn.com/t.jpg"', page)
 
 
@@ -127,7 +137,7 @@ class TestApi(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name).resolve()
-        make(self.root, "youtube/chan/zeta-talk", META)
+        make(self.root, "videos/youtube/chan/zeta-talk", META)
         self.srv = http.server.ThreadingHTTPServer(
             ("127.0.0.1", 0), lambda *a, **kw: RangeHandler(*a, directory=str(self.root), **kw))
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
@@ -149,11 +159,11 @@ class TestApi(unittest.TestCase):
                 return e.code, json.loads(e.read())
 
     def test_status(self):
-        self.assertEqual(self.call("/api/status?path=youtube/chan/zeta-talk"), (200, {"status": "none"}))
-        folder = self.root / "youtube/chan/zeta-talk"
+        self.assertEqual(self.call("/api/status?path=videos/youtube/chan/zeta-talk"), (200, {"status": "none"}))
+        folder = self.root / "videos/youtube/chan/zeta-talk"
         (folder / "video.mkv").write_bytes(b"")
         (folder / "metadata.json").write_text(json.dumps(META | {"video_file": "video.mkv", "video_quality": "best"}))
-        self.assertEqual(self.call("/api/status?path=youtube/chan/zeta-talk")[1]["status"], "done")
+        self.assertEqual(self.call("/api/status?path=videos/youtube/chan/zeta-talk")[1]["status"], "done")
 
     def test_unknown_or_escaping_paths(self):
         self.assertEqual(self.call("/api/status?path=../../etc")[0], 404)
@@ -161,10 +171,10 @@ class TestApi(unittest.TestCase):
         self.assertEqual(self.call("/api/download", {"path": "../x"}, {"X-DM-Summarize": "1"})[0], 404)
 
     def test_download_needs_header_and_same_host(self):
-        self.assertEqual(self.call("/api/download", {"path": "youtube/chan/zeta-talk"})[0], 403)
-        self.assertEqual(self.call("/api/download", {"path": "youtube/chan/zeta-talk"},
+        self.assertEqual(self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"})[0], 403)
+        self.assertEqual(self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"},
                                    {"X-DM-Summarize": "1", "Origin": "https://evil.example"})[0], 403)
-        self.assertEqual(self.call("/api/status?path=youtube/chan/zeta-talk", headers={"Host": "evil.example"})[0], 403)
+        self.assertEqual(self.call("/api/status?path=videos/youtube/chan/zeta-talk", headers={"Host": "evil.example"})[0], 403)
 
     def test_download_starts_best_quality_background_job(self):
         real = serve_library.video_cli
@@ -174,32 +184,32 @@ class TestApi(unittest.TestCase):
             calls.append((folder, args))
             return real(folder, *args) if args == ("--status",) else (0, {"status": "running"})
         with mock.patch("serve_library.video_cli", side_effect=fake):
-            code, _ = self.call("/api/download", {"path": "youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
+            code, _ = self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
         self.assertEqual(code, 202)
         started = [c for c in calls if "--background" in c[1]]
-        self.assertEqual(started, [(self.root / "youtube/chan/zeta-talk",
+        self.assertEqual(started, [(self.root / "videos/youtube/chan/zeta-talk",
                                     (META["webpage_url"], "--background", "--quality", "best"))])
 
     def test_status_comes_from_the_video_cli(self):
-        folder = self.root / "youtube/chan/zeta-talk"
+        folder = self.root / "videos/youtube/chan/zeta-talk"
         (folder / ".video-download.json").write_text(json.dumps({"status": "failed", "error": "boom"}))
-        self.assertEqual(self.call("/api/status?path=youtube/chan/zeta-talk")[1], {"status": "failed", "error": "boom"})
+        self.assertEqual(self.call("/api/status?path=videos/youtube/chan/zeta-talk")[1], {"status": "failed", "error": "boom"})
 
     def test_delete_video_endpoint(self):
-        folder = self.root / "youtube/chan/zeta-talk"
+        folder = self.root / "videos/youtube/chan/zeta-talk"
         (folder / "video.mkv").write_bytes(b"x" * 2048)
         (folder / "metadata.json").write_text(json.dumps(META | {"video_file": "video.mkv", "video_quality": "best"}))
         page = build(folder)
         self.assertIn('<div class="dl rm" hidden><button type="button">🗑 Delete downloaded video</button>', page)
         self.assertIn("video.mkv, 2 KB", page)
-        self.assertEqual(self.call("/api/delete-video", {"path": "youtube/chan/zeta-talk"})[0], 403)  # no header
-        code, data = self.call("/api/delete-video", {"path": "youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
+        self.assertEqual(self.call("/api/delete-video", {"path": "videos/youtube/chan/zeta-talk"})[0], 403)  # no header
+        code, data = self.call("/api/delete-video", {"path": "videos/youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
         self.assertEqual((code, data), (200, {"status": "none", "deleted": "video.mkv"}))
         self.assertFalse((folder / "video.mkv").exists())
         self.assertIn('data-yt="abc"', (folder / "summary.html").read_text())
 
     def test_page_has_download_button(self):
-        page = build(self.root / "youtube/chan/zeta-talk")
+        page = build(self.root / "videos/youtube/chan/zeta-talk")
         self.assertIn('<div class="dl" hidden><button type="button">', page)
 
 

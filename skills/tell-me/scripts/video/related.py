@@ -25,8 +25,8 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
 from link_dates import youtube_dates
-from _common import (BOT_HINT, SkillError, fmt_ts, is_bot_error, library_root, log, read_json, require,
-                     run_main, ytdlp_base)
+from _common import (BOT_HINT, SkillError, fmt_ts, is_bot_error, log, read_json, require,
+                     run_main, source_root, ytdlp_base)
 
 
 def search(query: str, limit: int, cookies: str | None = None) -> list[dict]:
@@ -91,7 +91,7 @@ def main(argv=None) -> int:
         raise SkillError(f"{args.folder}/metadata.json missing: run prepare.py first")
     with ThreadPoolExecutor(max_workers=4) as pool:
         found = list(pool.map(lambda q: (q, search(q, args.per_query, args.cookies_from_browser)), args.query))
-    videos = merge(found, meta.get("id"), summarized_ids(library_root()), args.folder.resolve())
+    videos = merge(found, meta.get("id"), summarized_ids(source_root("video")), args.folder.resolve())
     dates = youtube_dates([v["id"] for v in videos])
     for v in videos:
         if dates.get(v["id"]):

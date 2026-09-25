@@ -1,7 +1,8 @@
 """Shared helpers for the tell-me scripts. Stdlib only.
 
-Library layout: <root>/<platform>/<user>/<title-slug>/ with summary.md, transcript.md,
-metadata.json, video.<ext>, frames/. Root: $DM_SUMMARIZE_VIDEO_ROOT or ~/me/summaries/videos.
+Library layout: <root>/<kind>/.../ per source (see dir_for), each folder with summary.md,
+metadata.json and the content file; <root>/library.js indexes them all. Root: $TELL_ME_ROOT, else
+the parent of $DM_SUMMARIZE_VIDEO_ROOT (the old videos-only root), else ~/me/summaries.
 """
 from __future__ import annotations
 
@@ -41,8 +42,21 @@ def log(msg: str) -> None:
     print(f"[tell-me] {msg}", file=sys.stderr)
 
 
+# Top-level library folder per source.
+KIND_DIRS = {"video": "videos", "web": "articles", "github": "repos", "x": "posts", "hn": "discussions",
+             "file": "documents"}
+
+
 def library_root() -> Path:
-    return Path(os.environ.get("DM_SUMMARIZE_VIDEO_ROOT", Path.home() / "me" / "summaries" / "videos")).expanduser()
+    if os.environ.get("TELL_ME_ROOT"):
+        return Path(os.environ["TELL_ME_ROOT"]).expanduser()
+    if os.environ.get("DM_SUMMARIZE_VIDEO_ROOT"):  # pointed at <root>/videos
+        return Path(os.environ["DM_SUMMARIZE_VIDEO_ROOT"]).expanduser().parent
+    return Path.home() / "me" / "summaries"
+
+
+def source_root(source: str, root: Path | None = None) -> Path:
+    return (root or library_root()) / KIND_DIRS[source]
 
 
 def require(*tools: str) -> None:
@@ -91,13 +105,64 @@ def user_of(info: dict) -> str:
 
 
 def video_dir(info: dict, root: Path | None = None) -> Path:
-    root = root or library_root()
+    """<root>/videos/<platform>/<user>/<title-slug>; `root` is the videos folder when given."""
+    root = root or source_root("video")
     return root / platform_of(info) / user_of(info) / slugify(info.get("title"))
 
 
+def dir_for(meta: dict, root: Path | None = None) -> Path:
+    """Library folder for a source's metadata (contract fields; video uses its yt-dlp keys).
+
+    video   videos/<platform>/<channel>/<title>          web    articles/<site>/<title>
+    github  repos/github/<owner>/<repo>[/<kind>s/<n>-<title>]
+    x       posts/x/<user>/<first-words>-<id>            hn     discussions/hn/<title>-<id>
+    file    documents/<parent-folder>/<file-stem>
+    """
+    source = meta.get("source") or "video"
+    base = source_root(source, root)
+    extras = meta.get("extras") or {}
+    title = meta.get("title")
+    if source == "video":
+        return video_dir(meta, base)
+    if source == "web":
+        return base / slugify(meta.get("site") or host_slug(meta.get("url"))) / slugify(title)
+    if source == "github":
+        repo, _, number = str(meta.get("id") or "unknown/unknown").partition("#")
+        owner, _, name = repo.partition("/")
+        folder = base / "github" / slugify(owner) / slugify(name)
+        return folder / f"{extras.get('kind', 'issue')}s" / f"{number}-{slugify(title, 60)}" if number else folder
+    if source == "x":
+        user = extras.get("user") or meta.get("author")
+        return base / "x" / slugify(str(user or "unknown").lstrip("@")) / f"{slugify(title, 40)}-{meta.get('id')}"
+    if source == "hn":
+        return base / "hn" / f"{slugify(title, 60)}-{meta.get('id')}"
+    if source == "file":
+        path = Path(extras.get("original_path") or meta.get("url", "").removeprefix("file://") or "unknown")
+        return base / slugify(path.parent.name or "root") / slugify(path.stem)
+    raise ValueError(f"unknown source {source!r}")
+
+
+def host_slug(url: str | None) -> str:
+    host = re.sub(r"^https?://", "", url or "").split("/")[0].split(":")[0]
+    return re.sub(r"^www\.", "", host) or "unknown"
+
+
+def find_by_id(source: str, id_: str | None, root: Path | None = None) -> Path | None:
+    """Folder of an already-prepared item of this source with the same id (its title may have changed)."""
+    base = source_root(source, root)
+    if not id_ or not base.is_dir():
+        return None
+    for meta in base.rglob("metadata.json"):
+        data = read_json(meta)
+        if data.get("id") == id_ and (data.get("source") or "video") == source and data.get("kind") != "digest":
+            return meta.parent
+    return None
+
+
 def find_existing(info: dict, root: Path | None = None) -> Path | None:
-    """Folder of an already-prepared video with the same platform + id (title may have changed)."""
-    root = root or library_root()
+    """Folder of an already-prepared video with the same platform + id (title may have changed).
+    `root` is the videos folder when given."""
+    root = root or source_root("video")
     vid = info.get("id")
     base = root / platform_of(info)
     if not vid or not base.is_dir():
