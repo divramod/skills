@@ -1,3 +1,5 @@
 .hal/events/
 .hal/git/
 .hal/util/
+docs/shotfiles/
+__pycache__/
