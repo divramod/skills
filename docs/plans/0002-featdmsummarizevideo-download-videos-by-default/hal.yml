@@ -7,7 +7,7 @@ tier: micro
 tier_source: manual
 auto_downgrade: false
 last_action: shipped via /hal-lc-fix at (pending)
-active: true
+active: false
 targets: []
 targets_rationale: tier-zero /hal-lc-fix — single trivial change
 phases: []

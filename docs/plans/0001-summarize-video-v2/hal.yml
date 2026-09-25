@@ -7,11 +7,11 @@ tier: medium
 tier_source: manual
 auto_downgrade: false
 last_action: shipped 2026-09-25 (all 3 phases, verify-success 5/5)
-active: true
+active: false
 targets:
-  - skills/dm-summarize-video
-  - scripts/check-plugins.py
-  - AGENTS.md
+- skills/dm-summarize-video
+- scripts/check-plugins.py
+- AGENTS.md
 targets_rationale: dm-summarize-video v2 + repo-wide skill script rules
 phases: []
 queue_position: 0
