@@ -1,8 +1,9 @@
 ---
 name: tell-me-multi-source
 description: Masterplan for tell-me multi-source — restructure into subskills/scripts/templates with shared/, then add web, hn, github, x, file sources, multiple inputs and the library source filter.
-status: in_progress
+status: shipped
 created: 2026-09-25
+shipped: 2026-09-25
 tier: large
 tier_source: manual
 ---

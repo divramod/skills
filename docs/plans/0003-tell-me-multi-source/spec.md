@@ -1,8 +1,9 @@
 ---
 name: tell-me-multi-source
 description: 'Generalize tell-me from videos to blog posts, GitHub repos, X posts, Hacker News threads and local documents via a router SKILL.md + per-source subskills, scripts and templates with shared/ folders'
-status: in_progress
+status: shipped
 approved: '2026-09-25'
+shipped: 2026-09-25
 schema_version: 1
 created: '2026-09-25'
 tier: large

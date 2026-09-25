@@ -1,12 +1,13 @@
 schema_version: 1
-automode: running
+automode: completed
+completed_at: '2026-09-25T15:18:39.900861+00:00'
 cadence: phase
 gap_policy: small_inline_big_to_gaps_plan
 retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: '005 shipped (fixes 2b8079f); 006 fix agent + 008 review running; 007 fixes cba8a01, SKILL.md notes pending'
+last_action: '006-008 shipped (1e7832e, ae0f56e, 6d52304); verify-success 7/7; avoid-drift clean; masterplan ship'
 active: true
 targets:
 - skills/tell-me
