@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Unit tests for fetch_transcript.py (offline). Run: python3 -m unittest test_fetch_transcript.py"""
+"""Unit tests for prepare_video.py (offline)."""
 import unittest
 
-from fetch_transcript import fmt_ts, group_paragraphs, parse_ts, parse_vtt, pick_track
+from _common import fmt_ts, parse_ts
+from prepare_video import group_paragraphs, parse_vtt, pick_track
 
 ROLLING_AUTO_VTT = """WEBVTT
 Kind: captions
@@ -81,6 +82,38 @@ class TestGroupParagraphs(unittest.TestCase):
             group_paragraphs(lines, chapters),
             "### Intro (00:00)\n\n[00:00] a\n\n### Main (00:05)\n\n[00:06] b c",
         )
+
+    def test_custom_link_renderer(self):
+        out = group_paragraphs([(44, "x")], link=lambda s: f"L{int(s)}")
+        self.assertEqual(out, "[L44] x")
+
+
+class TestDownloadAction(unittest.TestCase):
+    def test_decisions(self):
+        from prepare_video import download_action
+        self.assertEqual(download_action(False, "best", None), "download")
+        self.assertEqual(download_action(True, "best", "best"), "reuse")
+        self.assertEqual(download_action(True, "best", "1080p"), "replace")
+        self.assertEqual(download_action(True, "best", None), "replace")  # pre-quality-tracking file
+        self.assertEqual(download_action(True, "1080p", "best"), "reuse")
+        self.assertEqual(download_action(True, "1080p", "1080p"), "reuse")
+
+    def test_best_format_has_no_height_cap(self):
+        from prepare_video import DOWNLOAD_FORMATS
+        self.assertNotIn("height", DOWNLOAD_FORMATS["best"])
+        self.assertIn("height<=1080", DOWNLOAD_FORMATS["1080p"])
+
+
+class TestRenderTranscript(unittest.TestCase):
+    def test_chapters_and_paragraphs_carry_youtube_links(self):
+        from _common import ts_link
+        from prepare_video import render_transcript
+        info = {"id": "abc", "extractor_key": "Youtube", "title": "T", "duration": 70,
+                "chapters": [{"start_time": 42, "title": "Main"}]}
+        body = group_paragraphs([(44, "x")], link=lambda s: ts_link(info, s))
+        md = render_transcript(info, "captions", body)
+        self.assertIn("- [00:42](https://www.youtube.com/watch?v=abc&t=42s) Main", md)
+        self.assertIn("[[00:44](https://www.youtube.com/watch?v=abc&t=44s)] x", md)
 
 
 if __name__ == "__main__":

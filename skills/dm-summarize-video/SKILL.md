@@ -1,78 +1,87 @@
 ---
 name: dm-summarize-video
-description: Summarize a video from a URL (YouTube first; also TikTok, X, Vimeo, podcasts and any yt-dlp-supported site). Fetches captions with yt-dlp, falls back to local Whisper transcription, then writes a chaptered summary with timestamp links. Use when the user pastes a video link and asks to summarize, get the gist of, or take notes from it.
+description: Summarize a video, playlist or channel from a URL (YouTube first; also TikTok, X, Vimeo, podcasts and any yt-dlp-supported site) into a markdown note in ~/me/summaries/videos. Captions via yt-dlp with a local Whisper fallback, optional video download (-d), keyframes for visual content, and modes tldr/summary/chapters/detailed/wisdom/qa. Use when the user pastes a video link and wants a summary, the gist, notes, or answers about it.
 ---
 
 # dm-summarize-video
 
-Turn a video URL into a timestamped transcript, then summarize it yourself.
-The script only fetches text. You, the agent, write the summary, so no extra LLM or API key is needed.
+Scripts do all deterministic work: fetching, folders, downloads, timestamp links, frames and file writing.
+Your job is the judgment: pick the mode, read, write the summary, and check it against the transcript.
+`S=<skill-dir>/scripts`. Every script prints what it did; JSON goes to stdout and progress to stderr.
 
-## Requirements
-
-- `yt-dlp` and `ffmpeg` on PATH (`brew install yt-dlp ffmpeg`)
-- `uv` only for the Whisper fallback (runs `mlx-whisper` on Apple Silicon, `openai-whisper` elsewhere, via `uvx`)
-
-## Workflow
-
-1. **Fetch the transcript**:
-
-   ```bash
-   python3 <skill-dir>/scripts/fetch_transcript.py "<url>"
-   ```
-
-   The last stdout line is the path to `transcript.md`. Progress goes to stderr.
-   The script tries captions first (manual, then auto-generated, one track only). If none exist, it downloads the
-   audio and transcribes it with Whisper. Results are cached per video in `~/.cache/dm-summarize-video/<platform>-<id>/`.
-
-   Useful flags:
-   - `--lang de`: preferred transcript language (default: the spoken language)
-   - `--source captions|whisper`: force one path (default `auto`)
-   - `--cookies-from-browser chrome`: use when YouTube answers "Sign in to confirm you're not a bot" or HTTP 429
-   - `--refresh`: ignore the cache
-
-   Whisper runs can take minutes, and the first run downloads the model (~1.5 GB). Run it in the background and tell the user.
-
-2. **Read `transcript.md`**. It contains the metadata, the chapters, the description and the transcript as `[mm:ss]` paragraphs.
-   For very long transcripts (more than ~150k words), summarize chapter by chapter, then merge.
-
-3. **Write the summary** in the user's language unless they ask otherwise:
-
-   ```markdown
-   # <title>
-   <channel> · <duration> · <published> · <url>
-
-   **TL;DR:** 2–3 sentences.
-
-   ## Key points
-   - point ([mm:ss](<url>&t=<seconds>s))
-
-   ## Chapter summaries   (only if the video has chapters or runs longer than ~15 min)
-   ### <chapter> ([mm:ss](<url>&t=<seconds>s))
-   - …
-
-   ## Notable quotes / numbers / resources mentioned
-   ```
-
-   - For timestamp links, use `&t=<seconds>s` on `watch?v=` URLs and `?t=<seconds>` on `youtu.be` URLs. On other platforms, write plain `mm:ss`.
-   - Auto-generated captions and Whisper both mishear names and jargon. Fix obvious errors using the title
-     and description as context, and do not invent content that is not in the transcript.
-   - Say so if the transcript source is auto-generated and the quality looks poor.
-   - If the user asked a specific question about the video, answer it first and cite timestamps.
-
-4. **Follow-up questions** reuse the cached `transcript.md`. Re-run the script for the same URL and it returns instantly.
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| `Sign in to confirm you're not a bot` / HTTP 429 | `--cookies-from-browser <browser>`, wait, or `brew upgrade yt-dlp` |
-| Extractor error on a non-YouTube site | `brew upgrade yt-dlp` (site extractors break often) |
-| `no usable captions` with `--source captions` | Drop the flag so it falls back to Whisper |
-| Private or members-only video | `--cookies-from-browser` with a logged-in browser |
-
-## Tests
+## 1. Prepare
 
 ```bash
-cd <skill-dir>/scripts && python3 -m unittest test_fetch_transcript.py
+python3 $S/prepare_video.py "<url>" [-d] [--visual] [--lang xx]
 ```
+
+- Pass `-d` / `--download` when the user asks to download or keep the video. It always fetches the **highest available
+  quality** (up to 4K: mp4, or mkv when the best streams don't fit mp4; no re-encoding) and upgrades an earlier
+  lower-quality file. Warn that 4K files can be several hundred MB.
+- Pass `--visual` when the video is visual: slides, code, UI demos, diagrams, or a user asking "what does it show".
+  On its own it downloads a <=1080p copy, which is enough for frames. Combine it with `-d` to keep the best quality.
+- Exit code 2 means a missing tool: run `$S/install-prerequisites.sh` (after telling the user) and retry.
+- A bot check or HTTP 429 in the output means retry with `--cookies-from-browser chrome`. If that fails too, run `$S/install-prerequisites.sh --upgrade`.
+- The Whisper fallback can take minutes. Run it in the background and tell the user.
+
+Read the JSON output. If `summary_exists` is true and the user did not ask for a new mode or language, show the
+existing `summary.md` instead of rewriting it.
+
+For a **playlist or channel URL**, run `python3 $S/list_videos.py "<url>" [--limit N]` first, then do steps 1–4 for every
+video where `summary_exists` is false. Use parallel subagents when there are more than 3. Finish with step 5.
+
+## 2. Choose the mode
+
+| Mode | When |
+|---|---|
+| `summary` (default) | Nothing specific asked |
+| `tldr` | "gist", "quick", "is it worth watching" |
+| `chapters` | The video has chapters or runs longer than ~20 min, and the user wants structure |
+| `detailed` | Lectures, courses, "notes", "study" |
+| `wisdom` | Podcasts, interviews, "ideas", "insights", "takeaways" |
+| `qa` | The user asked a specific question about the video |
+
+The output shape for each mode is in `<skill-dir>/templates/<mode>.md`. Read the one you picked.
+
+## 3. Read and write
+
+- Read `transcript.md`. For more than ~150k words, work chapter by chapter. With `--visual`, also read
+  `frames/index.md` and look at the frames that matter: slides, code, diagrams.
+- Write the body in the template's shape, in the user's language unless they ask otherwise. The frontmatter and title header come from the script, so leave them out.
+- **Copy timestamp links from `transcript.md`.** Never build them yourself.
+- Auto-captions and Whisper mishear names and jargon. Correct them using the title and description, and never add content that isn't in the transcript or frames.
+- If `transcript_source` is auto-generated or Whisper and the text looks garbled, say so in one line at the end.
+
+## 4. Save
+
+```bash
+python3 $S/save_summary.py "<dir>" --mode <mode> --summary-lang <xx> <<'EOF'
+<body>
+EOF
+```
+
+Then show the user the summary, plus the folder path. The folder holds `summary.md`, `transcript.md`, `metadata.json`,
+and `video.<ext>` / `frames/` when those were requested.
+
+## 5. Digest (playlists and channels only)
+
+Read each video's `summary.md` and write `templates/digest.md`: rank the videos by how worth watching they are, and pull out the themes they share.
+Save it with `python3 $S/save_summary.py "<digest_dir>" --mode digest <<'EOF' ... EOF`.
+
+## Follow-up questions
+
+Re-run step 1 for the same URL. It returns the existing folder instantly. Answer from `transcript.md` in `qa` shape,
+and only save the answer when the user asks.
+
+## Scripts
+
+| Script | Does |
+|---|---|
+| `prepare_video.py` | metadata → folder → [video] → transcript (captions, else Whisper) → [frames]; reuses folders by video id |
+| `list_videos.py` | playlist/channel → video list + digest folder |
+| `extract_frames.py` | scene-change keyframes → `frames/` + `index.md` (called by `--visual`) |
+| `save_summary.py` | body on stdin → `summary.md` / `digest.md` with frontmatter + header |
+| `check-prerequisites.sh` / `install-prerequisites.sh` | check / install yt-dlp, ffmpeg, python3, uv |
+
+The library root is `~/me/summaries/videos/<platform>/<user>/<title>/`, and `DM_SUMMARIZE_VIDEO_ROOT` overrides it.
+Tests: `cd $S && python3 -m unittest discover -p 'test_*.py'`.
