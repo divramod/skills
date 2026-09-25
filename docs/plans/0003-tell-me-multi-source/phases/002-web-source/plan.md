@@ -1,7 +1,7 @@
 ---
 name: web-source
 description: Blog posts / web articles: trafilatura + defuddle in parallel, best result wins; Jina Reader then Wayback fallback; paragraph anchors.
-status: approved
+status: in_progress
 phase_id: "002"
 depends_on: ["001"]
 wave: "02"
@@ -30,8 +30,8 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **Files**: skills/tell-me/scripts/web/extract.py, test_extract.py, fixtures/
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -41,8 +41,8 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **Files**: skills/tell-me/scripts/web/prepare.py, test_prepare.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -52,8 +52,8 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **Files**: skills/tell-me/scripts/web/*.sh
   **Size**: XS
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -63,8 +63,8 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **Files**: skills/tell-me/subskills/web/, skills/tell-me/templates/web/
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -74,8 +74,8 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **Files**: –
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
