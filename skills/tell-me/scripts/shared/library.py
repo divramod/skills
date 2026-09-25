@@ -149,6 +149,7 @@ body.has-lib main{flex:1 1 auto;min-width:0;margin:0 auto}
 #lib .bar .count{margin-left:auto;color:var(--muted);font-size:.75rem}
 #lib input{margin:0 10px 8px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--fg);font:inherit}
 #lib .types{display:flex;flex-wrap:wrap;gap:4px;margin:0 10px 8px}
+#lib .types[hidden]{display:none}
 #lib .types button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:.75rem}
 #lib .types button:hover{color:var(--fg)}
 #lib .types button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
@@ -218,6 +219,7 @@ const nav=aside.querySelector('nav'), q=aside.querySelector('input');
 const DEF={view:'tree',dir:{tree:1,date:-1,title:1,author:1},types:[]};
 let st=DEF;
 try{st=Object.assign({},DEF,JSON.parse(localStorage.getItem('dm-lib')||'{}'));st.dir=Object.assign({},DEF.dir,st.dir);}catch(e){}
+if(!Array.isArray(st.types))st.types=[];  // a stale or hand-edited value
 const save=()=>{try{localStorage.setItem('dm-lib',JSON.stringify(st))}catch(e){}};
 const col=new Intl.Collator(undefined,{sensitivity:'base',numeric:true});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -235,8 +237,8 @@ const chips=aside.querySelector('.types');
 function renderChips(){
   const n={};for(const it of L.items){const t=typeOf(it);n[t]=(n[t]||0)+1;}
   const present=Object.keys(TYPES).filter(t=>n[t]);
-  st.types=(st.types||[]).filter(t=>n[t]);
-  chips.hidden=present.length<2;  // one kind of item: nothing to filter
+  st.types=present.length<2?[]:st.types.filter(t=>n[t]);  // one kind of item: nothing to filter
+  chips.hidden=present.length<2;
   chips.innerHTML=present.map(t=>`<button type="button" data-type="${t}" aria-pressed="${st.types.includes(t)}" title="Show only ${esc(TYPES[t][1].toLowerCase())} (click more to add)">${TYPES[t][0]} ${esc(TYPES[t][1])} <small>${n[t]}</small></button>`).join('');
 }
 // group folder (channel, site, owner, user) "videos/youtube/aidotengineer" -> display name "AI Engineer"
@@ -251,7 +253,7 @@ function tree(items,d){
     const shown=k=>names[prefix?prefix+'/'+k:k]||k;
     const dirs=Object.keys(n).filter(k=>k!=='\0').sort((a,b)=>d*(col.compare(shown(a),shown(b))||col.compare(a,b)));
     const files=(n['\0']||[]).sort((a,b)=>d*col.compare(a.path.split('/').pop(),b.path.split('/').pop()));
-    return '<ul>'+dirs.map(k=>{const p=prefix?prefix+'/'+k:k,inner=rec(n[k],p);const open=SELF&&inner.includes('aria-current')||q.value||(st.types||[]).length?' open':'';
+    return '<ul>'+dirs.map(k=>{const p=prefix?prefix+'/'+k:k,inner=rec(n[k],p);const open=SELF&&inner.includes('aria-current')||q.value||st.types.length?' open':'';
       // channel folders show the channel's display name, then the folder name
       const label=names[p]&&names[p]!==k?`${esc(names[p])}${tech(names[p],k)}`:esc(k);
       return `<li><details${open}><summary>${label}</summary>${inner}</details></li>`;}).join('')+files.map(it=>link(it,when(it.date))).join('')+'</ul>';
@@ -260,8 +262,8 @@ function tree(items,d){
 }
 function render(){
   const f=q.value.trim().toLowerCase();
-  const types=st.types||[];
-  const items=L.items.filter(it=>(!types.length||types.includes(typeOf(it)))&&(!f||(it.title+' '+it.author+' '+it.path).toLowerCase().includes(f)));
+  const types=st.types;  // an item of a type without a chip (an unknown source) is never filtered out
+  const items=L.items.filter(it=>(!types.length||types.includes(typeOf(it))||!TYPES[typeOf(it)])&&(!f||(it.title+' '+it.author+' '+it.path).toLowerCase().includes(f)));
   const d=st.dir[st.view];
   let h='';
   if(!items.length)h='<p class="empty">No summaries match.</p>';
@@ -296,8 +298,8 @@ aside.querySelector('.bar').addEventListener('click',e=>{
 q.addEventListener('input',render);
 chips.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
-  const t=b.dataset.type,on=(st.types||[]).includes(t);
-  st.types=on?st.types.filter(x=>x!==t):[...(st.types||[]),t];
+  const t=b.dataset.type,on=st.types.includes(t);
+  st.types=on?st.types.filter(x=>x!==t):[...st.types,t];
   b.setAttribute('aria-pressed',!on);save();render();
 });
 document.getElementById('lib-toggle').addEventListener('click',()=>document.body.classList.toggle('lib-open'));

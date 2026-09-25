@@ -119,7 +119,7 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         except ValueError:
             return None
         meta = read_json(folder / "metadata.json")
-        return folder if meta and meta.get("kind") != "digest" and meta.get("webpage_url") else None
+        return folder if meta and meta.get("kind") != "digest" and video_source(meta)[0] else None
 
     def _api(self, method: str) -> None:
         if not self._same_host():
@@ -199,13 +199,24 @@ def remove_video(folder: Path) -> dict:
     return {"status": "none", "deleted": Path(out["deleted"]).name if out.get("deleted") else None}
 
 
+def video_source(meta: dict) -> tuple[str | None, int | None]:
+    """(the URL yt-dlp downloads the folder's video from, which of its videos): a video item's webpage_url, or an
+    x post's video part (metadata.json `video`: the post's URL and its playlist item)."""
+    if meta.get("webpage_url"):
+        return meta["webpage_url"], None
+    part = meta.get("video") if isinstance(meta.get("video"), dict) else {}
+    item = part.get("playlist_item")
+    return part.get("source_url") or part.get("webpage_url"), item if isinstance(item, int) else None
+
+
 def start_download(folder: Path) -> dict:
     """Same download as video/prepare.py's default: best quality, into <folder>/video.<ext>, in the background."""
     state = video_state(folder)
     meta = read_json(folder / "metadata.json")
     if state["status"] == "running" or (state["status"] == "done" and meta.get("video_quality") == "best"):
         return state
-    args = [meta["webpage_url"], "--background", "--quality", "best"]
+    url, item = video_source(meta)
+    args = [url, "--background", "--quality", "best"] + (["--playlist-item", str(item)] if item else [])
     if meta.get("video_quality"):
         args += ["--have-quality", meta["video_quality"]]
     if os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"):

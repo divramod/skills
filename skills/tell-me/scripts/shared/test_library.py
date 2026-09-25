@@ -213,6 +213,27 @@ class TestApi(unittest.TestCase):
         self.assertEqual(started, [(self.root / "videos/youtube/chan/zeta-talk",
                                     (META["webpage_url"], "--background", "--quality", "best"))])
 
+    def test_an_x_posts_video_downloads_from_the_post_with_its_item(self):
+        rel = "x/someone/1234-a-post"
+        make(self.root, rel, {"source": "x", "id": "1234", "title": "A post", "url": "https://x.com/someone/status/1234",
+                              "video": {"source_url": "https://x.com/someone/status/1234", "playlist_item": 2,
+                                        "webpage_url": "https://x.com/someone/status/1234"}})
+        calls = []
+
+        def fake(folder, *args):
+            calls.append(args)
+            return (0, None) if args == ("--status",) else (0, {"status": "running"})
+        with mock.patch("serve_library.video_cli", side_effect=fake):
+            self.assertEqual(self.call(f"/api/status?path={rel}")[0], 200)
+            self.assertEqual(self.call("/api/download", {"path": rel}, {"X-DM-Summarize": "1"})[0], 202)
+        self.assertIn(("https://x.com/someone/status/1234", "--background", "--quality", "best", "--playlist-item", "2"),
+                      calls)
+
+    def test_a_folder_without_a_video_is_unknown_to_the_api(self):
+        rel = "x/someone/99-no-video"
+        make(self.root, rel, {"source": "x", "id": "99", "title": "No video", "url": "https://x.com/someone/status/99"})
+        self.assertEqual(self.call(f"/api/status?path={rel}")[0], 404)
+
     def test_video_cli_failures_become_json_errors(self):
         folder = self.root / "videos/youtube/chan/zeta-talk"
         with mock.patch("serve_library.video_cli", return_value=(1, "boom")):

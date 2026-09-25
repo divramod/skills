@@ -21,7 +21,7 @@ import os
 import webbrowser
 from pathlib import Path
 
-from _common import SkillError, contract, read_json, run_main
+from _common import SkillError, contract, log, read_json, run_main
 from library import INDEX_FILE, SIDEBAR_CSS, SIDEBAR_JS, root_of, sidebar_html, write_index
 from panels import CSS as PANELS_CSS, PANELS
 
@@ -218,6 +218,7 @@ header h1{font-size:2rem;line-height:1.2;margin:0 0 .4rem;letter-spacing:-.01em}
 .frame .play span{display:grid;place-items:center;width:68px;height:48px;border-radius:14px;background:rgba(0,0,0,.72);font-size:1.4rem}
 .frame .play:hover span{background:#e62117}
 .dl{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:.85rem;color:var(--muted)}
+.dl[hidden]{display:none}
 .dl button{font:inherit;cursor:pointer;padding:5px 12px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 .dl button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
 .dl button:disabled{cursor:default;opacity:.6}
@@ -344,7 +345,7 @@ HEADER_PANELS = PANELS | {
     "video": player_html,
     # an x post with a video: its facts, then the player of the downloaded video
     "x": lambda folder, meta, url: PANELS["x"](folder, meta, url) + (
-        player_html(folder, meta, url) if meta.get("video_file") else ""),
+        player_html(folder, meta, url) if isinstance(meta.get("video"), dict) else ""),
 }
 # Label of the collapsed content-file section.
 CONTENT_LABELS = {"video": "Transcript", "web": "Article", "github": "Repository", "x": "Posts",
@@ -375,7 +376,11 @@ def build(folder: Path) -> str:
     chips_html = "".join(f"<li>{html.escape(c)}</li>" for c in chips if c)
 
     panel = HEADER_PANELS.get(c["source"])
-    panel_html = panel(folder, meta, url) if panel else ""
+    try:
+        panel_html = panel(folder, meta, url) if panel else ""
+    except Exception as e:  # unexpected metadata must not cost the page: render it without the panel
+        log(f"{c['source']} header panel skipped ({type(e).__name__}: {e})")
+        panel_html = ""
 
     extras = []
     frames = folder / "frames" / "index.md"
