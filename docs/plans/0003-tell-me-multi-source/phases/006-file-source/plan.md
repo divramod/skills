@@ -1,7 +1,7 @@
 ---
 name: file-source
 description: Local documents: markitdown → pdftotext/pandoc fallback, original copied, page anchors, sha256 dedupe.
-status: approved
+status: shipped
 phase_id: "006"
 depends_on: ["001"]
 wave: "02"
@@ -24,7 +24,7 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
 
 ## Tasks
 
-- [ ] **T501** — Converter chain + page splitting + title/author extraction
+- [x] **T501** — Converter chain + page splitting + title/author extraction
   **Acceptance**: fixture tests per type; fallback path tested with markitdown mocked missing
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/file/convert.py
@@ -32,10 +32,10 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T502** — `file/prepare.py`: copy, hash dedupe, content.md with page anchors, metadata
+- [x] **T502** — `file/prepare.py`: copy, hash dedupe, content.md with page anchors, metadata
   **Acceptance**: re-run of the same file reuses the folder; a changed file → new version note
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/file/prepare.py
@@ -43,10 +43,10 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T503** — prereq scripts (uvx required; pdftotext, pandoc optional) + SUBSKILL.md + template.md
+- [x] **T503** — prereq scripts (uvx required; pdftotext, pandoc optional) + SUBSKILL.md + template.md
   **Acceptance**: check-plugins passes
   **Verify**: review
   **Files**: skills/tell-me/scripts/file/*.sh, subskills/file/, templates/file/
@@ -54,10 +54,10 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T504** — E2E: a real PDF paper and a docx
+- [x] **T504** — E2E: a real PDF paper and a docx
   **Acceptance**: library pages, page links open the PDF at the page
   **Verify**: manual
   **Files**: –
@@ -65,8 +65,8 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
 ## Risks
 
