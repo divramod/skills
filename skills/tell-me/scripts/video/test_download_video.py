@@ -6,6 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import sys
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
+
 from download_video import (DOWNLOAD_FORMATS, STATUS_FILE, delete_video, download_action, download_status, ffmetadata,
                             is_running, parse_progress, record)
 from _common import SkillError

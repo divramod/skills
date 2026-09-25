@@ -8,7 +8,7 @@ views, published, query, summary?}]}, where `published` is the upload date (sear
 carry it, so each video is looked up with yt-dlp, in parallel) and `summary` is a path relative to
 <folder> to that video's page.
 
-Usage: similar_videos.py <folder> --query "fine-tuning llms with lora" [--query ...] [--per-query 8]
+Usage: related.py <folder> --query "fine-tuning llms with lora" [--query ...] [--per-query 8]
 Requires: yt-dlp.
 """
 from __future__ import annotations
@@ -19,6 +19,10 @@ import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import sys
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
 from link_dates import youtube_dates
 from _common import (BOT_HINT, SkillError, fmt_ts, is_bot_error, library_root, log, read_json, require,

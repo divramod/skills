@@ -31,6 +31,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
+
 from _common import (BOT_HINT, SkillError, find_existing, find_file, fmt_ts, is_bot_error, log,
                      parse_ts, platform_of, probe_duration, read_json, require, run_main, ts_link, update_json,
                      user_of, video_dir, ytdlp_base)

@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Unit tests for prepare_video.py (offline)."""
+"""Unit tests for video/prepare.py (offline)."""
 import unittest
 
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
+
 from _common import fmt_ts, parse_ts
-from prepare_video import group_paragraphs, parse_vtt, pick_track
+from prepare import group_paragraphs, parse_vtt, pick_track
 
 ROLLING_AUTO_VTT = """WEBVTT
 Kind: captions
@@ -90,13 +95,13 @@ class TestGroupParagraphs(unittest.TestCase):
 
 class TestDownloadPlan(unittest.TestCase):
     def test_downloads_best_in_background_by_default(self):
-        from prepare_video import download_plan
+        from prepare import download_plan
         self.assertEqual(download_plan(False, False, None, False), ("background", "best"))
         self.assertEqual(download_plan(False, False, "1080p", True), ("background", "best"))  # upgrade
         self.assertEqual(download_plan(False, False, "best", True), (None, "best"))
 
     def test_skip_download_and_visual(self):
-        from prepare_video import download_plan
+        from prepare import download_plan
         self.assertEqual(download_plan(True, False, None, False), (None, "1080p"))
         self.assertEqual(download_plan(False, True, None, False), ("wait", "best"))
         self.assertEqual(download_plan(True, True, None, False), ("wait", "1080p"))
@@ -104,7 +109,7 @@ class TestDownloadPlan(unittest.TestCase):
 
 class TestDescriptionLinks(unittest.TestCase):
     def test_groups_repos_slides_and_drops_noise(self):
-        from prepare_video import description_links
+        from prepare import description_links
         desc = """Code: https://github.com/unslothai/unsloth and https://github.com/unslothai/unsloth.
 Slides (PDF): https://cs229.stanford.edu/lectures/lecture1.pdf
 Deck https://speakerdeck.com/tim/fine-tuning
@@ -123,7 +128,7 @@ Profile https://github.com/techwithtim"""
 class TestRenderTranscript(unittest.TestCase):
     def test_chapters_and_paragraphs_carry_youtube_links(self):
         from _common import ts_link
-        from prepare_video import render_transcript
+        from prepare import render_transcript
         info = {"id": "abc", "extractor_key": "Youtube", "title": "T", "duration": 70,
                 "chapters": [{"start_time": 42, "title": "Main"}]}
         body = group_paragraphs([(44, "x")], link=lambda s: ts_link(info, s))

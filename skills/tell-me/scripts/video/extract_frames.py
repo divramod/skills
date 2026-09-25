@@ -17,6 +17,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import sys
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
+
 from _common import SkillError, find_file, fmt_ts, log, probe_duration, read_json, require, run_main, ts_link
 
 _PTS_RE = re.compile(r"\bpts_time:\s*([0-9.]+)")

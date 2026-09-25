@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Download a video into its library folder as video.<ext>; runs in the background by default.
 
-prepare_video.py starts this detached (unless --skip-download), so the transcript and summary don't
+video/prepare.py starts this detached (unless --skip-download), so the transcript and summary don't
 wait for a multi-hundred-MB download. While it runs, `.video-download.json` in the folder
 holds {status: running, pid, quality}. It becomes {status: failed, error} on failure and is removed on success.
 When it finishes it writes title, artist, date, URL and chapters into the file (ffmpeg remux, no
@@ -11,6 +11,8 @@ into metadata.json and, if the summary was already saved, refreshes summary.md +
 Usage: download_video.py <folder> <url> [--quality best|1080p] [--have-quality Q] [--cookies-from-browser B]
        download_video.py <folder> --tag      (write the metadata into an existing video.<ext>)
        download_video.py <folder> --delete   (delete video.<ext> and refresh the note)
+       download_video.py <folder> --status   (JSON status of a background download, or null)
+       download_video.py <folder> <url> --background   (start detached, print the status record)
 Requires: yt-dlp, ffmpeg.
 """
 from __future__ import annotations
@@ -24,6 +26,8 @@ import time
 import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
 from _common import (BOT_HINT, SkillError, find_file, is_bot_error, log, read_json, require, run_main,
                      update_json, write_json, ytdlp_base)
@@ -180,7 +184,7 @@ def delete_video(folder: Path) -> Path | None:
 
 
 def record(folder: Path, video: Path, quality: str) -> None:
-    """Merge the finished video into metadata.json (merge: prepare_video.py may write concurrently)."""
+    """Merge the finished video into metadata.json (merge: prepare.py may write concurrently)."""
     update_json(folder / "metadata.json", {"video_file": video.name, "video_quality": quality})
 
 
@@ -211,12 +215,17 @@ def main(argv=None) -> int:
     ap.add_argument("url", nargs="?")
     ap.add_argument("--tag", action="store_true", help="only write the metadata into the existing video.<ext>")
     ap.add_argument("--delete", action="store_true", help="delete video.<ext> and refresh summary.md/.html")
+    ap.add_argument("--status", action="store_true", help="print the background download's status as JSON (null: none)")
+    ap.add_argument("--background", action="store_true", help="start the download detached and print its status")
     ap.add_argument("--quality", choices=list(DOWNLOAD_FORMATS), default="best")
     ap.add_argument("--have-quality", help="quality of an existing video.<ext> (from metadata.json)")
     ap.add_argument("--cookies-from-browser")
     args = ap.parse_args(argv)
 
     from save_summary import refresh
+    if args.status:
+        print(json.dumps(download_status(args.folder)))
+        return 0
     if args.delete:
         video = delete_video(args.folder)
         refresh(args.folder)
@@ -229,7 +238,11 @@ def main(argv=None) -> int:
         print(json.dumps({"video_file": str(video), "tagged": tag_video(args.folder, video)}))
         return 0
     if not args.url:
-        ap.error("url is required unless --tag or --delete is given")
+        ap.error("url is required unless --tag, --delete or --status is given")
+    if args.background:
+        print(json.dumps(start_background(args.folder, args.url, args.quality, args.have_quality,
+                                          args.cookies_from_browser)))
+        return 0
     require("yt-dlp", "ffmpeg")
     status_path = args.folder / STATUS_FILE
     status = read_json(status_path)

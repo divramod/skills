@@ -6,9 +6,9 @@ Python's built-in http.server has no Range support, so the browser can't seek in
 This server fixes both. `ensure_running()` starts it detached (pid + port in <root>/.server.json)
 and returns the base URL; save_summary.py / render_html.py --open use it.
 
-It also lets a summary page download its video (same file and quality as prepare_video.py's default download):
+It also lets a summary page download its video (same file and quality as video/prepare.py's default download):
   GET  /api/status?path=<folder rel. to root>  -> {status: none|running|failed|done, progress, stream, error}
-  POST /api/download  {"path": "<folder>"}      -> starts download_video.py in the background
+  POST /api/download  {"path": "<folder>"}      -> starts video/download_video.py in the background
   POST /api/delete-video {"path": "<folder>"}   -> deletes video.<ext>, refreshes summary.md/.html
 The API only answers requests for this host (no DNS rebinding), and POST needs the
 X-DM-Summarize header, which other sites can't send cross-origin without a CORS preflight that
@@ -159,11 +159,22 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+# The video steps live in scripts/video/; shared code never imports them, it runs their CLI.
+VIDEO_CLI = Path(__file__).resolve().parent.parent / "video" / "download_video.py"
+
+
+def video_cli(folder: Path, *args: str) -> tuple[int, object]:
+    """Run `video/download_video.py <folder> <args>`; returns (exit code, parsed JSON stdout or the error text)."""
+    p = subprocess.run([sys.executable, str(VIDEO_CLI), str(folder), *args], capture_output=True, text=True)
+    if p.returncode != 0:
+        return p.returncode, (p.stderr.strip().splitlines() or ["failed"])[-1].removeprefix("[tell-me] ")
+    return 0, json.loads(p.stdout or "null")
+
+
 def video_state(folder: Path) -> dict:
     """What the page needs to know about the folder's video."""
-    from download_video import download_status
-    status = download_status(folder)
-    if status:
+    _, status = video_cli(folder, "--status")
+    if isinstance(status, dict):
         return {k: status.get(k) for k in ("status", "progress", "stream", "error") if status.get(k) is not None}
     meta = read_json(folder / "metadata.json")
     if meta.get("video_file") and (folder / meta["video_file"]).exists():
@@ -172,27 +183,25 @@ def video_state(folder: Path) -> dict:
 
 
 def remove_video(folder: Path) -> dict:
-    """Delete the folder's video and re-render its note (the page then offers the download again)."""
-    from download_video import delete_video
-    from save_summary import refresh
-    from _common import SkillError
-    try:
-        video = delete_video(folder)
-    except SkillError as e:
-        return {"status": "running", "error": str(e)}
-    refresh(folder)
-    return {"status": "none", "deleted": video.name if video else None}
+    """Delete the folder's video; download_video.py --delete re-renders the note (the page then offers the download again)."""
+    code, out = video_cli(folder, "--delete")
+    if code != 0:
+        return {"status": "running", "error": out}
+    return {"status": "none", "deleted": Path(out["deleted"]).name if out.get("deleted") else None}
 
 
 def start_download(folder: Path) -> dict:
-    """Same download as prepare_video.py's default: best quality, into <folder>/video.<ext>, in the background."""
-    from download_video import start_background
+    """Same download as video/prepare.py's default: best quality, into <folder>/video.<ext>, in the background."""
     state = video_state(folder)
     meta = read_json(folder / "metadata.json")
     if state["status"] == "running" or (state["status"] == "done" and meta.get("video_quality") == "best"):
         return state
-    start_background(folder, meta["webpage_url"], "best", meta.get("video_quality"),
-                     os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"))
+    args = [meta["webpage_url"], "--background", "--quality", "best"]
+    if meta.get("video_quality"):
+        args += ["--have-quality", meta["video_quality"]]
+    if os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"):
+        args += ["--cookies-from-browser", os.environ["DM_SUMMARIZE_VIDEO_BROWSER"]]
+    video_cli(folder, *args)
     return video_state(folder)
 
 

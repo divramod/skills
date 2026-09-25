@@ -9,7 +9,7 @@ every link and writes its date after it (check_links.py: publish date, release +
 
 Usage: save_summary.py <folder> [--mode summary] [--summary-lang en] [--agent NAME] [--model M]
                        [--body-file F] [--open] < body.md
-<folder> is a video folder from prepare_video.py or a digest folder from list_videos.py.
+<folder> is a video folder from prepare.py or a digest folder from list_videos.py.
 Prints the written file paths (markdown, then html).
 """
 from __future__ import annotations
@@ -123,7 +123,7 @@ def main(argv=None) -> int:
 
     meta = read_json(args.folder / "metadata.json")
     if not meta:
-        raise SkillError(f"{args.folder}/metadata.json missing: run prepare_video.py or list_videos.py first")
+        raise SkillError(f"{args.folder}/metadata.json missing: run prepare.py or list_videos.py first")
     body = args.body_file.read_text(encoding="utf-8") if args.body_file else sys.stdin.read()
     if not body.strip():
         raise SkillError("empty summary body")

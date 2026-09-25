@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Unit tests for similar_videos.py (offline)."""
+"""Unit tests for related.py (offline)."""
 import unittest
 from pathlib import Path
 
-from similar_videos import merge
+import sys
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
+
+from related import merge
 
 
 class TestMerge(unittest.TestCase):

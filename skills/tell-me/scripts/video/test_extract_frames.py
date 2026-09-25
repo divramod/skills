@@ -2,6 +2,11 @@
 """Unit tests for extract_frames.py (offline)."""
 import unittest
 
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
+
 from extract_frames import interval_seconds, min_scene_frames, parse_showinfo, render_index, sample_indices
 
 SHOWINFO = """\

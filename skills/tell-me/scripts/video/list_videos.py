@@ -19,6 +19,11 @@ import re
 import subprocess
 from datetime import date
 
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
+
 from _common import (BOT_HINT, SkillError, find_existing, is_bot_error, library_root, log, platform_of,
                      require, run_main, slugify, user_of, write_json)
 

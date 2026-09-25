@@ -14,6 +14,7 @@ from unittest import mock
 from library import INDEX_FILE, entries, last_summarized, root_of, write_index
 from render_html import build, write
 from save_summary import render
+import serve_library
 from serve_library import RangeHandler
 
 META = {"id": "abc", "title": "Zeta talk", "channel": "Chan", "webpage_url": "https://www.youtube.com/watch?v=abc",
@@ -166,12 +167,23 @@ class TestApi(unittest.TestCase):
         self.assertEqual(self.call("/api/status?path=youtube/chan/zeta-talk", headers={"Host": "evil.example"})[0], 403)
 
     def test_download_starts_best_quality_background_job(self):
-        with mock.patch("download_video.start_background") as start:
+        real = serve_library.video_cli
+        calls = []
+
+        def fake(folder, *args):
+            calls.append((folder, args))
+            return real(folder, *args) if args == ("--status",) else (0, {"status": "running"})
+        with mock.patch("serve_library.video_cli", side_effect=fake):
             code, _ = self.call("/api/download", {"path": "youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
         self.assertEqual(code, 202)
-        start.assert_called_once()
-        folder, url, quality, have, _cookies = start.call_args.args
-        self.assertEqual((folder, url, quality, have), (self.root / "youtube/chan/zeta-talk", META["webpage_url"], "best", None))
+        started = [c for c in calls if "--background" in c[1]]
+        self.assertEqual(started, [(self.root / "youtube/chan/zeta-talk",
+                                    (META["webpage_url"], "--background", "--quality", "best"))])
+
+    def test_status_comes_from_the_video_cli(self):
+        folder = self.root / "youtube/chan/zeta-talk"
+        (folder / ".video-download.json").write_text(json.dumps({"status": "failed", "error": "boom"}))
+        self.assertEqual(self.call("/api/status?path=youtube/chan/zeta-talk")[1], {"status": "failed", "error": "boom"})
 
     def test_delete_video_endpoint(self):
         folder = self.root / "youtube/chan/zeta-talk"
