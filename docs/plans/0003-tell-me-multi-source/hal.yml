@@ -6,7 +6,7 @@ retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: 'phase 002: built+tested (a22e28e), review fixes 717328c; next re-review then ship'
+last_action: 'phase 002: round-2 review fixes 865006d; round-3 re-review then ship'
 active: true
 targets:
 - skills/tell-me

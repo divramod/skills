@@ -1,7 +1,7 @@
 ---
 name: web-source
 description: Blog posts / web articles: trafilatura + defuddle in parallel, best result wins; Jina Reader then Wayback fallback; paragraph anchors.
-status: in_progress
+status: shipped
 phase_id: "002"
 depends_on: ["001"]
 wave: "02"
@@ -24,7 +24,7 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
 
 ## Tasks
 
-- [ ] **T101** — Extractor wrappers + scorer + merge (trafilatura, defuddle, Jina, Wayback), each with a timeout and a clear error
+- [x] **T101** — Extractor wrappers + scorer + merge (trafilatura, defuddle, Jina, Wayback), each with a timeout and a clear error
   **Acceptance**: fixture tests pick the expected winner; the fallback order is logged
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/web/extract.py, test_extract.py, fixtures/
@@ -32,10 +32,10 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T102** — `web/prepare.py`: content.md with paragraph text-fragment anchors, metadata contract, dedupe by canonical URL
+- [x] **T102** — `web/prepare.py`: content.md with paragraph text-fragment anchors, metadata contract, dedupe by canonical URL
   **Acceptance**: the anchor test (URL-encoding, uniqueness) passes; a re-run reuses the folder
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/web/prepare.py, test_prepare.py
@@ -43,10 +43,10 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T103** — `web/check-/install-prerequisites.sh` (uvx, npx/node)
+- [x] **T103** — `web/check-/install-prerequisites.sh` (uvx, npx/node)
   **Acceptance**: check-plugins passes
   **Verify**: `python3 scripts/check-plugins.py`
   **Files**: skills/tell-me/scripts/web/*.sh
@@ -54,10 +54,10 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T104** — `subskills/web/SUBSKILL.md` (article vs listicle vs docs page, paywall note, garbled extraction note) + `templates/web/template.md` (argument, evidence, counterpoints, Related reading via web search)
+- [x] **T104** — `subskills/web/SUBSKILL.md` (article vs listicle vs docs page, paywall note, garbled extraction note) + `templates/web/template.md` (argument, evidence, counterpoints, Related reading via web search)
   **Acceptance**: SUBSKILL < 150 lines
   **Verify**: review
   **Files**: skills/tell-me/subskills/web/, skills/tell-me/templates/web/
@@ -65,10 +65,10 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T105** — E2E: 2 real blog posts (one JS-heavy)
+- [x] **T105** — E2E: 2 real blog posts (one JS-heavy)
   **Acceptance**: summary.html in library, links dated
   **Verify**: manual
   **Files**: –
@@ -76,8 +76,8 @@ Verify the CLI flags against the installed tools (`uvx trafilatura --help`, `npx
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
 ## Risks
 
