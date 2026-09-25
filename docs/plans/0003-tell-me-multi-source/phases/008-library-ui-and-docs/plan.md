@@ -1,7 +1,7 @@
 ---
 name: library-ui-and-docs
 description: Library sidebar source filter + icons, per-source header panels, README/plugin metadata, final e2e.
-status: approved
+status: shipped
 phase_id: "008"
 depends_on: ["002", "003", "004", "005", "006", "007"]
 wave: "04"
@@ -24,7 +24,7 @@ Build the panels on the dispatch hook from 001; each panel is small and reads on
 
 ## Tasks
 
-- [ ] **T701** — Sidebar source filter + icons
+- [x] **T701** — Sidebar source filter + icons
   **Acceptance**: test_library covers the filter data; manual check in the browser
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/shared/library.py
@@ -32,10 +32,10 @@ Build the panels on the dispatch hook from 001; each panel is small and reads on
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T702** — Header panels per source
+- [x] **T702** — Header panels per source
   **Acceptance**: test_render_html renders each panel from fixture metadata
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/shared/render_html.py
@@ -43,10 +43,10 @@ Build the panels on the dispatch hook from 001; each panel is small and reads on
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T703** — README + plugin.json/.codex-plugin description/keywords + version bump
+- [x] **T703** — README + plugin.json/.codex-plugin description/keywords + version bump
   **Acceptance**: check-plugins passes
   **Verify**: `python3 scripts/check-plugins.py`
   **Files**: README.md, .claude-plugin/*, .codex-plugin/*
@@ -54,19 +54,19 @@ Build the panels on the dispatch hook from 001; each panel is small and reads on
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T704** — Final e2e: one input per source + `verify-success.sh`
+- [x] **T704** — Final e2e: one input per source + `verify-success.sh`
   **Acceptance**: all criteria pass
   **Verify**: `hal plan spec render-verify` + run
   **Files**: –
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] built
+  - [x] tested
+  - [x] reviewed
+  - [x] shipped
 
 ## Risks
 

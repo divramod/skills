@@ -30,7 +30,7 @@ Phase 003 (hn) reuses the web extractor. Phase 008 finishes the library UI and t
 | 005 | x-source | FxTwitter thread + replies, quoted posts, video part (transcript + download) | G6 G8 | 001 | 02 | shipped  |
 | 006 | file-source | markitdown → pdftotext, original copied, page anchors, sha256 dedupe | G2 | 001 | 02 | shipped  |
 | 007 | multi-input-digest | `prepare.py a b c`, generalized digest across sources | G10 | 001 | 02 | shipped  |
-| 008 | library-ui-and-docs | sidebar source filter + icons, per-source header panels, README/plugin keywords, e2e | G2 G3 | 002–007 | 04 | approved |
+| 008 | library-ui-and-docs | sidebar source filter + icons, per-source header panels, README/plugin keywords, e2e | G2 G3 | 002–007 | 04 | shipped  |
 
 ## Dependencies
 
