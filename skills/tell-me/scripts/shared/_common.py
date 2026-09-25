@@ -175,6 +175,26 @@ def unique_dir(meta: dict, root: Path | None = None) -> Path:
     return folder
 
 
+def digest_dir(items: list[dict], day: str, root: Path | None = None, folder: Path | None = None,
+               **fields) -> Path:
+    """The folder of a digest across items (a playlist's videos, several inputs) with its metadata.json
+    (kind: digest, items). Default folder: <root>/digests/<day>-<slug of the titles>/; the same items on the
+    same day reuse it."""
+    titles = [str(i.get("title") or "untitled") for i in items]
+    title = fields.pop("title", None) or (" · ".join(titles) if len(titles) <= 3 else
+                                         f"{' · '.join(titles[:2])} and {len(titles) - 2} more")
+    if folder is None:
+        slug = slugify(titles[0], 40) + (f"-and-{len(titles) - 1}-more" if len(titles) > 1 else "")
+        folder = (root or library_root()) / "digests" / f"{day}-{slug}"
+        ids = [i.get("dir") or i.get("url") for i in items]
+        if (old := read_json(folder / "metadata.json")) and [i.get("dir") or i.get("url") for i in
+                                                             old.get("items") or []] != ids:
+            folder = folder.with_name(f"{folder.name}-{hashlib.sha1(repr(ids).encode()).hexdigest()[:6]}")
+    folder.mkdir(parents=True, exist_ok=True)
+    write_json(folder / "metadata.json", {"kind": "digest", "title": title, "created": day, "items": items} | fields)
+    return folder
+
+
 def host_slug(url: str | None) -> str:
     host = re.sub(r"^https?://", "", url or "").split("/")[0].split(":")[0]
     return re.sub(r"^www\.", "", host) or "unknown"
@@ -338,9 +358,9 @@ def write_json(path: Path, data: dict) -> None:
     os.replace(tmp, path)
 
 
-def update_json(path: Path, fields: dict) -> dict:
-    """Merge fields into a JSON file (read-modify-write) and return the result."""
-    data = read_json(path) | fields
+def update_json(path: Path, fields: dict, drop: tuple[str, ...] = ()) -> dict:
+    """Merge fields into a JSON file (read-modify-write), remove the `drop` keys, and return the result."""
+    data = {k: v for k, v in (read_json(path) | fields).items() if k not in drop}
     write_json(path, data)
     return data
 

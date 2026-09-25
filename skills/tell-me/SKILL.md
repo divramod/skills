@@ -22,7 +22,7 @@ Tell the user what opened (the printed path) and its URL. If there are no summar
 ## 1. Prepare
 
 ```bash
-python3 $S/shared/prepare.py "<url-or-path>" [source flags]
+python3 $S/shared/prepare.py "<url-or-path>" ["<url-or-path>" …] [source flags]
 ```
 
 It routes the input to exactly one source, runs `scripts/<source>/prepare.py`, and prints the envelope:
@@ -47,7 +47,12 @@ source's own fields. Flags after the input go to the source script; the subskill
 - If `summary_exists` is true and the user did not ask for a new mode or language, show the existing page
   (`python3 $S/shared/render_html.py "<dir>" --open`) instead of rewriting it.
 - A playlist or channel (`kind: playlist|channel`) prints a list of items instead: prepare every item where
-  `summary_exists` is false (parallel subagents when there are more than 3), then write the digest (step 6).
+  `summary_exists` is false (parallel subagents when there are more than 3), then write the digest (step 7).
+- **Several inputs** in one call print `kind: inputs` with one envelope per input in `items` (or `{input, error,
+  exit_code}` for one that failed: tell the user, the others go on) and a `digest_dir` when at least two worked.
+  Each source gets only the flags it knows. Summarize every item through steps 2-6 as if it came alone (parallel
+  subagents when there are more than 3, each with its envelope), then write the digest (step 7). Ask the user
+  first only if they asked for single summaries and no digest.
 
 ## 2. Read the subskill
 
@@ -109,7 +114,8 @@ EOF
 ## 7. Digest (playlists, channels, several inputs)
 
 Read each item's `summary.md` and write `templates/shared/digest.md`: rank the items by how worth the user's time
-they are, and pull out the themes they share and where they disagree. Save it with
+they are, and pull out the themes they share and where they disagree. Across sources (a video, an article, a
+thread), name what each kind adds: the source's own claim, the evidence, the reactions. Save it with
 `python3 $S/shared/save_summary.py "<digest_dir>" --mode digest --model <your model id> --open <<'EOF' ... EOF`.
 
 ## Follow-up questions

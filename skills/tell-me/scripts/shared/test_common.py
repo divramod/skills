@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from _common import (MissingTool, SkillError, detect_agent, install_script, dir_for, find_by_id, source_root, unique_dir, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
-                     ts_url, user_of, video_dir)
+                     ts_url, update_json, user_of, video_dir)
 
 
 class TestNaming(unittest.TestCase):
@@ -150,6 +150,35 @@ class TestAgentAndFiles(unittest.TestCase):
             self.assertIsNone(find_file(d, "video"))
             (d / "video.mkv").write_bytes(b"")
             self.assertEqual(find_file(d, "video"), d / "video.mkv")
+
+    def test_update_json_merges_and_drops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "metadata.json"
+            path.write_text(json.dumps({"a": 1, "video": {"x": 1}, "keep": True}))
+            self.assertEqual(update_json(path, {"a": 2}, drop=("video", "absent")), {"a": 2, "keep": True})
+            self.assertEqual(json.loads(path.read_text()), {"a": 2, "keep": True})
+
+
+class TestDigestDir(unittest.TestCase):
+    def test_folder_metadata_reuse_and_collision(self):
+        import json
+        import tempfile
+        from _common import digest_dir
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            items = [{"title": "Alpha Post", "dir": "/a"}, {"title": "Beta", "dir": "/b"}]
+            folder = digest_dir(items, "2026-09-25", root)
+            self.assertEqual(folder, root / "digests" / "2026-09-25-alpha-post-and-1-more")
+            meta = json.loads((folder / "metadata.json").read_text())
+            self.assertEqual((meta["kind"], meta["title"], meta["items"]), ("digest", "Alpha Post · Beta", items))
+            self.assertEqual(digest_dir(items, "2026-09-25", root), folder)  # same items, same day
+            other = digest_dir([items[0], {"title": "Gamma", "dir": "/c"}], "2026-09-25", root)
+            self.assertNotEqual(other, folder)  # same slug, other items
+            self.assertTrue(other.name.startswith("2026-09-25-alpha-post-and-1-more-"))
+            many = digest_dir([{"title": t} for t in "ABCD"], "2026-09-25", root)
+            self.assertEqual(json.loads((many / "metadata.json").read_text())["title"], "A · B and 2 more")
+            fixed = digest_dir(items, "2026-09-25", folder=root / "x" / "_digests" / "pl", title="PL", channel="c")
+            self.assertEqual(json.loads((fixed / "metadata.json").read_text())["channel"], "c")
 
 
 if __name__ == "__main__":

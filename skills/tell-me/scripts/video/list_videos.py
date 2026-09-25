@@ -24,8 +24,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
-from _common import (BOT_HINT, SkillError, SKILL_DIR, find_existing, is_bot_error, log, platform_of,
-                     require, run_main, slugify, source_root, user_of, write_json)
+from _common import (BOT_HINT, SkillError, SKILL_DIR, digest_dir, find_existing, is_bot_error, log, platform_of,
+                     require, run_main, slugify, source_root, user_of)
 
 _CHANNEL_RE = re.compile(r"youtube\.com/(@[^/?#]+|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?(\?.*)?$")
 
@@ -87,12 +87,10 @@ def main(argv=None) -> int:
 
     for v in listing["videos"]:
         v["summary_exists"] = bool((d := find_existing({**data, "id": v["id"]})) and (d / "summary.md").exists())
-    folder = source_root("video") / platform_of(data) / user_of(data) / "_digests" / listing["slug"]
-    folder.mkdir(parents=True, exist_ok=True)
-    write_json(folder / "metadata.json", {
-        "kind": "digest", "source_kind": kind, "title": listing["title"], "channel": listing["channel"],
-        "webpage_url": args.url, "platform": platform_of(data), "videos": listing["videos"],
-    })
+    folder = digest_dir(listing["videos"], date.today().isoformat(),
+                        folder=source_root("video") / platform_of(data) / user_of(data) / "_digests" / listing["slug"],
+                        title=listing["title"], source_kind=kind, channel=listing["channel"], webpage_url=args.url,
+                        platform=platform_of(data), videos=listing["videos"])
     print(json.dumps({"source": "video", "dir": str(folder), "digest_dir": str(folder), **listing,
                       "subskill": str(SKILL_DIR / "subskills" / "video" / "SUBSKILL.md"),
                       "template": str(SKILL_DIR / "templates" / "shared" / "digest.md")}, indent=2, ensure_ascii=False))

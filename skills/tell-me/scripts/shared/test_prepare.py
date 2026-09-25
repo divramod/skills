@@ -43,6 +43,55 @@ class TestDispatch(unittest.TestCase):
         code, env = dispatch("https://x.com/jack/status/20", [], self.dir)
         self.assertEqual((code, env["source"], env["url"]), (0, "video", "https://x.com/jack/status/20"))
 
+    def argparse_source(self, name: str, flags: list[str], fail: str | None = None) -> None:
+        """A source script with argparse (so --help lists its flags) that echoes its argv in the envelope."""
+        opts = "".join(f"ap.add_argument({f!r}, nargs='?', const=True)\n" for f in flags)
+        body = (f"sys.stderr.write('progress\\nerror: {fail}\\n'); sys.exit(1)\n" if fail else
+                "print(json.dumps({'source': %r, 'kind': 'page', 'dir': '/d/' + %r, 'id': a.input, 'title': %r, "
+                "'url': a.input, 'content_file': '/d/c.md', 'summary': '/d/s.md', 'summary_exists': False, "
+                "'subskill': 's', 'template': 't', 'argv': sys.argv[2:]}))\n" % (name, name, name.upper()))
+        self.source(name, "import argparse, json, sys\nap = argparse.ArgumentParser()\nap.add_argument('input')\n"
+                    + opts + "a = ap.parse_args()\n" + body)
+
+    def test_several_inputs_each_source_gets_its_own_flags(self):
+        from prepare import prepare_many
+        self.argparse_source("web", ["--refresh"])
+        self.argparse_source("hn", ["--no-article", "--refresh"])
+        code, out = prepare_many(["https://example.com/a", "https://news.ycombinator.com/item?id=1"],
+                                 ["--no-article", "--refresh", "--lang", "de"], self.dir, root=self.dir / "lib")
+        self.assertEqual(code, 0)
+        self.assertEqual([i["argv"] for i in out["items"]], [["--refresh"], ["--no-article", "--refresh"]])
+        digest = Path(out["digest_dir"])
+        self.assertEqual(digest.parent, self.dir / "lib" / "digests")
+        self.assertTrue(digest.name.endswith("-web-and-1-more"))
+        meta = json.loads((digest / "metadata.json").read_text())
+        self.assertEqual((meta["kind"], meta["title"], [i["source"] for i in meta["items"]]),
+                         ("digest", "WEB · HN", ["web", "hn"]))
+        self.assertTrue(out["template"].endswith("templates/shared/digest.md"))
+
+    def test_a_failing_input_does_not_stop_the_others(self):
+        from prepare import prepare_many
+        self.argparse_source("web", [])
+        self.argparse_source("hn", [], fail="Hacker News has no item 1")
+        code, out = prepare_many(["https://news.ycombinator.com/item?id=1", "https://example.com/a"], [], self.dir,
+                                 root=self.dir / "lib")
+        self.assertEqual(code, 0)
+        self.assertEqual(out["items"][0], {"input": "https://news.ycombinator.com/item?id=1",
+                                           "error": "Hacker News has no item 1", "exit_code": 1})
+        self.assertEqual(out["items"][1]["source"], "web")
+        self.assertIsNone(out["digest_dir"])  # one input left: nothing to digest
+        code, out = prepare_many(["https://news.ycombinator.com/item?id=1", "nosuchfile.pdf"], [], self.dir,
+                                 root=self.dir / "lib")
+        self.assertEqual((code, out["items"][1]["exit_code"]), (1, 1))
+        self.assertIn("no such file", out["items"][1]["error"])
+
+    def test_flags_for_keeps_values(self):
+        from prepare import flags_for
+        self.argparse_source("video", ["--lang", "--skip-download"])
+        script = self.dir / "video" / "prepare.py"
+        self.assertEqual(flags_for(script, ["--lang", "de", "--max-replies", "5", "--skip-download", "--x=1"]),
+                         ["--lang", "de", "--skip-download"])
+
     def test_flags_before_the_input_are_rejected(self):
         from prepare import main
         with self.assertRaises(SystemExit):
