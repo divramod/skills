@@ -27,7 +27,7 @@ crit_004() {
 
 crit_005() {
   # no transcript.md left in new-layout scripts (content.md everywhere)
-  ! grep -rn 'transcript.md' skills/tell-me/scripts --include='*.py' | grep -v migrate_library | grep -v test_
+  ! grep -rnE '(^|[^-[:alnum:]_])transcript[.]md' skills/tell-me/scripts --include='*.py' | grep -v migrate_library | grep -v test_
 }
 
 crit_006() {

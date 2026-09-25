@@ -184,7 +184,7 @@ def warn_legacy() -> None:
     n = sum(1 for m in videos.rglob("metadata.json") if is_legacy(read_json(m))) if videos.is_dir() else 0
     if n:
         log(f"{n} video folder(s) use the old layout: run {SOURCES_DIR / 'video' / 'migrate_library.py'} --apply "
-            "(tell the user; it renames transcript.md to content.md and re-renders the pages)")
+            "(tell the user; it renames each old transcript file to content.md and re-renders the pages)")
 
 
 def main(argv=None) -> int:

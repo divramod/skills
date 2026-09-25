@@ -403,7 +403,9 @@ def main(argv=None) -> int:
     source = (old_meta.get(part) or {}).get("transcript_source") if part else old_meta.get("transcript_source")
     need_transcript = args.refresh or not (transcript.exists() and source) or (part and moved(old_meta.get(part), args))
     if not need_transcript:
-        log("using existing transcript (pass --refresh to refetch)")
+        # a part runs under its owner's script, which names the flag that reaches --refresh here (x: --refresh-video)
+        log("using existing transcript (pass --refresh to refetch)" if not part
+            else f"using the existing {part} transcript (the owning source's refresh flag refetches it)")
 
     # Title, chapters etc. first: the download tags the file from metadata.json when it finishes.
     if not part:  # a part: the owning source wrote its title already

@@ -197,7 +197,8 @@ criteria:
     verify: cd skills/tell-me && for s in video web github x hn file; do test -f subskills/$s/SUBSKILL.md && test -f templates/$s/template.md && grep -q "subskills/$s/SUBSKILL.md" SKILL.md || exit 1; done
     expected_exit: 0
   - description: no transcript.md left in new-layout scripts (content.md everywhere)
-    verify: "! grep -rn 'transcript.md' skills/tell-me/scripts --include='*.py' | grep -v migrate_library | grep -v test_"
+    # a bare transcript.md only: an x post's video part keeps <part>-transcript.md next to content.md (phase 005)
+    verify: "! grep -rnE '(^|[^-[:alnum:]_])transcript[.]md' skills/tell-me/scripts --include='*.py' | grep -v migrate_library | grep -v test_"
     expected_exit: 0
   - description: no nested skill files
     verify: test -z "$(find skills/tell-me -mindepth 2 -iname skill.md)"
