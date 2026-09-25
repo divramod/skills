@@ -1,165 +1,141 @@
 ---
 name: tell-me
-description: Summarize a video, playlist or channel from a URL (YouTube first; also TikTok, X, Vimeo, podcasts and any yt-dlp-supported site) into a markdown note in ~/me/summaries/videos. Captions via yt-dlp with a local Whisper fallback, video download (best quality, in the background; --skip-download to skip), keyframes for visual content, a links section (books, Wikipedia terms, tools, further reading), and modes tldr/summary/chapters/detailed/wisdom/qa. Use when the user pastes a video link and wants a summary, the gist, notes, or answers about it; called without a link it opens the last summarized video in the browser.
+description: Summarize anything from a URL or a path into a markdown note and an HTML page in ~/me/summaries — a video, playlist or channel (YouTube, TikTok, X, Vimeo, podcasts, any yt-dlp site), a blog post or web page, a GitHub repo, issue, pull request or discussion, an X post or thread with its replies, a Hacker News thread (article + discussion), or a local document (PDF, DOCX, PPTX, EPUB, Markdown). Several inputs at once get a digest across them. Each summary has anchor links back into the source, a links section (books, Wikipedia terms, repos, further reading, each with its date) and related items; modes tldr/summary/detailed/wisdom/qa (+ chapters for videos). Use when the user pastes a link or a file path and wants a summary, the gist, notes, or answers about it; called without input it opens the last summary in the browser.
 ---
 
 # tell-me
 
-Scripts do all deterministic work: fetching, folders, downloads, timestamp links, frames and file writing.
-Your job is the judgment: pick the mode, read, write the summary, and check it against the transcript.
+Scripts do all deterministic work: routing, fetching, folders, downloads, anchor links, file writing and link
+dates. Your job is the judgment: pick the mode, read, write the summary, and check it against the content.
 `S=<skill-dir>/scripts`. Every script prints what it did; JSON goes to stdout and progress to stderr.
 
-## 0. No link given
+## 0. No input given
 
-When the skill is called without a URL, open the most recently summarized video and stop:
+Open the most recent summary and stop:
 
 ```bash
-python3 $S/library.py --open-last
+python3 $S/shared/library.py --open-last
 ```
 
-Tell the user which video opened (the printed path) and the URL. If it fails because there are no summaries yet,
-ask for a link.
+Tell the user what opened (the printed path) and its URL. If there are no summaries yet, ask for a link or a path.
 
 ## 1. Prepare
 
 ```bash
-python3 $S/prepare_video.py "<url>" [--skip-download] [--visual] [--lang xx]
+python3 $S/shared/prepare.py "<url-or-path>" [source flags]
 ```
 
-- The video is **always downloaded and kept** in the **highest available quality** (up to 4K: mp4, or mkv when the
-  best streams don't fit mp4; no re-encoding); an earlier lower-quality file is upgraded. The download runs **in the
-  background** (`video_download.status: running` in the JSON), so carry on with steps 2–4 without waiting: when it
-  finishes it adds the video to `metadata.json`, `summary.md` and `summary.html` by itself.
-- Pass `--skip-download` only when the user says not to download or keep the video. The summary page then offers a
-  **Download video** button instead.
-- Pass `--visual` when the video is visual: slides, code, UI demos, diagrams, or a user asking "what does it show".
-  The script then waits for the download (frames need it), fetching the transcript in parallel. With
-  `--skip-download` it fetches only a <=1080p copy for the frames.
-- Exit code 2 means a missing tool: run `$S/install-prerequisites.sh` (after telling the user) and retry.
-- A bot check or HTTP 429 in the output means retry with `--cookies-from-browser chrome`. If that fails too, run `$S/install-prerequisites.sh --upgrade`.
-- The Whisper fallback can take minutes. Run it in the background and tell the user.
+It routes the input to exactly one source, runs `scripts/<source>/prepare.py`, and prints the envelope:
+`source`, `kind`, `dir` (the library folder), `content_file`, `summary_exists`, `subskill`, `template`, plus the
+source's own fields. Flags after the input go to the source script; the subskill lists them.
 
-Read the JSON output. If `summary_exists` is true and the user did not ask for a new mode or language, show the
-existing `summary.html` (`python3 $S/render_html.py "<dir>" --open`) instead of rewriting it.
+| Source | Input | Subskill |
+|---|---|---|
+| video | YouTube (video, playlist, channel), youtu.be, Vimeo, TikTok, podcasts, any yt-dlp site | [subskills/video/SUBSKILL.md](subskills/video/SUBSKILL.md) |
+| web | any other http(s) page: blog posts, articles, docs | [subskills/web/SUBSKILL.md](subskills/web/SUBSKILL.md) |
+| github | `github.com/<owner>/<repo>`, its `/issues/N`, `/pull/N`, `/discussions/N` | [subskills/github/SUBSKILL.md](subskills/github/SUBSKILL.md) |
+| x | `x.com` / `twitter.com` posts (`…/status/<id>`) | [subskills/x/SUBSKILL.md](subskills/x/SUBSKILL.md) |
+| hn | `news.ycombinator.com/item?id=<id>` | [subskills/hn/SUBSKILL.md](subskills/hn/SUBSKILL.md) |
+| file | a local path (`~/…`, `./…`, `file://…`) or a document URL (`.pdf`, `.docx`, `.epub`, …) | [subskills/file/SUBSKILL.md](subskills/file/SUBSKILL.md) |
 
-For a **playlist or channel URL**, run `python3 $S/list_videos.py "<url>" [--limit N]` first, then do steps 1–4 for every
-video where `summary_exists` is false. Use parallel subagents when there are more than 3. Finish with step 5.
+`python3 $S/shared/route.py "<input>"` shows the routing without fetching anything.
 
-## 2. Choose the mode
+- **Exit code 2** means a missing tool. The message names the source's installer: tell the user, run
+  `$S/<source>/install-prerequisites.sh`, and retry. `$S/check-prerequisites.sh` checks every source at once.
+- **Exit code 1** is an expected error (unsupported input, not found, blocked). Show the message; it names the
+  fallback that was tried.
+- If `summary_exists` is true and the user did not ask for a new mode or language, show the existing page
+  (`python3 $S/shared/render_html.py "<dir>" --open`) instead of rewriting it.
+- A playlist or channel (`kind: playlist|channel`) prints a list of items instead: prepare every item where
+  `summary_exists` is false (parallel subagents when there are more than 3), then write the digest (step 6).
+
+## 2. Read the subskill
+
+Read the envelope's `subskill` file. It says what that source needs beyond this file: extra flags, how to read its
+content file, what to emphasize, and how to fill the related section. Read it before choosing the mode.
+
+## 3. Choose the mode
 
 | Mode | When |
 |---|---|
 | `summary` (default) | Nothing specific asked |
-| `tldr` | "gist", "quick", "is it worth watching" |
-| `chapters` | The video has chapters or runs longer than ~20 min, and the user wants structure |
-| `detailed` | Lectures, courses, "notes", "study" |
-| `wisdom` | Podcasts, interviews, "ideas", "insights", "takeaways" |
-| `qa` | The user asked a specific question about the video |
+| `tldr` | "gist", "quick", "is it worth reading/watching" |
+| `detailed` | Lectures, papers, long docs, "notes", "study" |
+| `wisdom` | Podcasts, interviews, essays, "ideas", "insights", "takeaways" |
+| `qa` | The user asked a specific question about it |
+| `chapters` | Videos only: has chapters or runs longer than ~20 min, and the user wants structure |
 
-The output shape for each mode is in `<skill-dir>/templates/<mode>.md`. Read the one you picked.
+The shape of each mode is in `<skill-dir>/templates/shared/<mode>.md` (`chapters`: the envelope's `template`).
+Read the mode you picked **and** the envelope's `template`: it holds the source's related section and anything
+else that source adds.
 
-## 3. Read and write
+## 4. Read and write
 
-- Read `transcript.md`. For more than ~150k words, work chapter by chapter. With `--visual`, also read
-  `frames/index.md` and look at the frames that matter: slides, code, diagrams.
-- Write the body in the template's shape, in the user's language unless they ask otherwise. The frontmatter and title header come from the script, so leave them out.
-- **Copy timestamp links from `transcript.md`.** Never build them yourself.
-- Auto-captions and Whisper mishear names and jargon. Correct them using the title and description, and never add content that isn't in the transcript or frames.
-- If `transcript_source` is auto-generated or Whisper and the text looks garbled, say so in one line at the end.
+- Read the `content_file`. For more than ~150k words, work part by part (chapters, sections, pages).
+- Write the body in the template's shape, in the user's language unless they ask otherwise. The frontmatter and
+  the title header come from the script, so leave them out.
+- **Copy anchor links from the content file** (timestamps, paragraph links, line links, comment permalinks, page
+  links). Never build them yourself.
+- Never add content that isn't in the content file. Transcripts and OCR mishear names and jargon: correct them
+  using the title and description. If the content looks garbled, say so in one line at the end.
+- Discussions (HN threads, X replies, GitHub issues): follow
+  [subskills/shared/discussion.md](subskills/shared/discussion.md): themes with attributed verbatim quotes.
 
-### Links section
+## 5. Links
 
-End every summary (except `qa`) with the links section and the similar videos from `templates/links.md`. It turns
-the video into a reading and watching list: slides (lectures), GitHub repos, whatever the video mentions (books,
-theories, frameworks, tools, papers, people), Wikipedia for the terms a reader needs, a short "Further reading" list
-on the video's topic, and similar videos to watch next.
+End every summary (except `qa`) with the links section from `templates/shared/links.md`, then the source's related
+section from its `template`. Look every link up with web search and never guess a URL: the rules for books,
+Wikipedia terms, repos, papers, dates and broken links are in [subskills/shared/links.md](subskills/shared/links.md).
 
-- **Look every link up with web search; never guess a URL.** Only link what you found.
-- **Books:** the Amazon product page (`https://www.amazon.com/dp/<ASIN>`), which has the description and reviews.
-  If there is none, use Goodreads or the publisher's page. Name the author and say in one line what the book is about.
-- **Terms, theories, frameworks:** the English Wikipedia article, only for terms that matter for the summary. Skip
-  everyday words.
-- **Slides (lectures, talks, courses):** start with `description_links.slides` from the prepare JSON, then search the
-  course or conference page. Skip the sub-section for videos that aren't lectures or talks.
-- **GitHub repos:** every repo the video shows, uses or names, plus `description_links.repos`. Link the repo, not the
-  author's profile.
-- **Tools and projects:** the official site. **Papers:** arXiv, DOI or the publisher's page.
-- "Mentioned in the video" holds only what the transcript names, with its timestamp link. Anything else goes under
-  "Further reading" (3-5 of the best sources on the topic: official docs, the original paper, a good explainer, a
-  counterpoint), so it's always clear what the speaker said and what you added.
-- **Similar videos:** pick 2-4 search queries (the topic, the key concepts, the speaker or channel plus the topic)
-  and run `python3 $S/similar_videos.py "<dir>" --query "<q1>" --query "<q2>"`. Choose 4-6 of the results, best
-  first, and say in one line what each adds. Each result has its `published` date: prefer recent videos when the
-  topic moves fast. Only link videos from its output. Where a result has a `summary`
-  path, also add `([summary](<that path>))`.
-- **Dates are added for you.** When you save, `save_summary.py` checks every link and writes how current it is right
-  after it: videos, papers and articles get their publish date; GitHub repos their latest release (version + date)
-  and last commit on the default branch; packages their latest version; books the first-publication year; Wikipedia
-  the last edit. Never write dates yourself. To look at dates before saving (e.g. to prefer recent sources), run the
-  check below.
-- Fix or drop every link reported as broken (`BROKEN LINK:` when saving, `broken` below). `unverified` means the
-  site blocks scripts (often Amazon): keep those links when your web search showed the page.
+## 6. Save
 
 ```bash
-python3 $S/check_links.py <<'EOF'
+python3 $S/shared/save_summary.py "<dir>" --mode <mode> --summary-lang <xx> --model <your model id> --open <<'EOF'
 <body>
 EOF
 ```
 
-To refresh the dates of an existing summary later (new releases, new commits):
-`python3 $S/check_links.py --folder "<dir>" --annotate`.
+- It writes `summary.md` (frontmatter + header from `metadata.json`) and `summary.html`, checks every link and
+  writes its date after it (`BROKEN LINK:` lines: fix or drop the link and save again), records the agentic CLI
+  (auto-detected; pass `--agent <name>` if the output shows none or the wrong one), and rebuilds the library index
+  `<root>/library.js`.
+- `--open` starts the local library server (`serve_library.py`, http://127.0.0.1:8765, in the background) and
+  opens the page. The page has a sidebar with every summary (folder tree / date / title / author, each ascending or
+  descending), the source's header panel (e.g. the video player), the summary and the full content file. Every
+  link opens in a new tab; the sidebar links navigate in place.
+- **Don't paste the summary into the chat.** Reply with the TL;DR, the path to `summary.html`, and one line for
+  anything still running in the background (e.g. a video download).
 
-## 4. Save
+## 7. Digest (playlists, channels, several inputs)
 
-```bash
-python3 $S/save_summary.py "<dir>" --mode <mode> --summary-lang <xx> --model <your model id> --open <<'EOF'
-<body>
-EOF
-```
-
-- The script records which agentic CLI wrote the summary (`agent` in the frontmatter and `metadata.json`). It is
-  auto-detected (Claude Code, Codex, Grok, Gemini CLI, …). If the output shows no `agent`, or shows the wrong one,
-  pass `--agent <name>` (e.g. `--agent grok`).
-- It writes `summary.md` plus `summary.html` and rebuilds the library index (`<root>/library.js`). `--open` starts
-  the local library server (`serve_library.py`, http://127.0.0.1:8765, in the background) and opens the page there.
-  The page has a sidebar with every summary (folder tree / download date / title / author, each ascending or
-  descending), a player (the local video, else the YouTube embed; timestamps seek it), keyframes and the transcript.
-  With a local video the page has a **Delete downloaded video** button (it asks for confirmation first; the page then
-  falls back to the YouTube player). Without a local video the page has a **Download video** button: the server runs the same download that
-  `prepare_video.py` does by default (best quality, same folder) and the page switches to the local file when it's done.
-- Every link on the page opens in a new tab, so the summary stays open; the sidebar links navigate in place.
-- Downloaded videos carry the title, channel, date, URL and chapters as file metadata, so players like VLC show the
-  title instead of `video.mkv`. For a video downloaded before that, run `python3 $S/download_video.py "<dir>" --tag`.
-- **Don't paste the summary into the chat.** Reply with the TL;DR, the path to `summary.html`, and a one-line note if
-  the video download is still running in the background. The folder holds `summary.md`, `summary.html`,
-  `transcript.md`, `metadata.json`, and `video.<ext>` / `frames/` when those were requested.
-
-## 5. Digest (playlists and channels only)
-
-Read each video's `summary.md` and write `templates/digest.md`: rank the videos by how worth watching they are, and pull out the themes they share.
-Save it with `python3 $S/save_summary.py "<digest_dir>" --mode digest --model <your model id> --open <<'EOF' ... EOF`.
+Read each item's `summary.md` and write `templates/shared/digest.md`: rank the items by how worth the user's time
+they are, and pull out the themes they share and where they disagree. Save it with
+`python3 $S/shared/save_summary.py "<digest_dir>" --mode digest --model <your model id> --open <<'EOF' ... EOF`.
 
 ## Follow-up questions
 
-Re-run step 1 for the same URL. It returns the existing folder instantly. Answer from `transcript.md` in `qa` shape,
-and only save the answer when the user asks.
+Re-run step 1 for the same input. It returns the existing folder instantly. Answer from the `content_file` in `qa`
+shape, and only save the answer when the user asks.
 
-## Scripts
+## Shared scripts (`scripts/shared/`)
 
 | Script | Does |
 |---|---|
-| `prepare_video.py` | metadata → folder → [video in background] → transcript (captions, else Whisper) → [frames]; reuses folders by video id |
-| `download_video.py` | video download (detached by default, status in `.video-download.json`), then metadata + chapters into the file; `--tag`, `--delete` |
-| `similar_videos.py` | YouTube search for the agent's queries → similar videos (deduped, marks already-summarized ones) |
-| `list_videos.py` | playlist/channel → video list + digest folder |
-| `extract_frames.py` | scene-change keyframes → `frames/` + `index.md` (called by `--visual`) |
-| `save_summary.py` | body on stdin → `summary.md` / `digest.md` with frontmatter + header + agent, then the HTML page |
+| `prepare.py` | route → `scripts/<source>/prepare.py` → envelope (checks the contract) |
+| `route.py` | input → `{source, kind, id, url or path}`, no network |
+| `save_summary.py` | body on stdin → `summary.md` / `digest.md` with frontmatter + header + agent, link dates, HTML page |
 | `check_links.py` | checks every external link: ok / unverified / broken, plus its dates; `--annotate` writes them in |
 | `link_dates.py` | how current a link is: publish date, release + last commit, package version, book year, wiki edit |
-| `render_html.py` | `summary.md` → `summary.html` (sidebar, player, keyframes, transcript); `--open` |
-| `library.py` | rebuild `<root>/library.js` (sidebar index); `--pages` re-renders every page; `--open-last` opens the latest summary |
-| `serve_library.py` | local http server for the library (YouTube embeds, video seeking, the page's download button); `--ensure`, `--stop` |
-| `check-prerequisites.sh` / `install-prerequisites.sh` | check / install yt-dlp, ffmpeg, python3, uv |
+| `render_html.py` | `summary.md` → `summary.html` (sidebar, header panel, content file); `--open` |
+| `library.py` | rebuild `<root>/library.js`; `--pages` re-renders every page; `--open-last` opens the latest summary |
+| `serve_library.py` | local http server for the library (embeds, video seeking, download button); `--ensure`, `--stop` |
 
-The library root is `~/me/summaries/videos/<platform>/<user>/<title>/`, and `DM_SUMMARIZE_VIDEO_ROOT` overrides it.
-Tests: `cd $S && python3 -m unittest discover -p 'test_*.py'`.
+Each source's own scripts are listed in its subskill. Every `scripts/<source>/` that calls external tools has
+`check-prerequisites.sh` and `install-prerequisites.sh`; `$S/check-prerequisites.sh` / `$S/install-prerequisites.sh
+[--source <s>]` run them all.
+
+The library root is `~/me/summaries` (`TELL_ME_ROOT` overrides it): `videos/<platform>/<channel>/<title>/`,
+`articles/<site>/<title>/`, `repos/github/<owner>/<repo>/`, `posts/x/<user>/<words>-<id>/`,
+`discussions/hn/<title>-<id>/`, `documents/<folder>/<file>/`. A video library from before this layout is migrated
+once with `python3 $S/video/migrate_library.py --apply` (dry run without `--apply`).
+Tests: `cd $S && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`.

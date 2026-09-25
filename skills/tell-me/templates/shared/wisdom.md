@@ -2,16 +2,16 @@
 **TL;DR:** <one sentence>
 
 ## Ideas
-- <10-20 surprising or insightful ideas, one line each> (<timestamp link>)
+- <10-20 surprising or insightful ideas, one line each> (<anchor link>)
 
 ## Insights
 - <5-10 refined, abstracted insights from the ideas>
 
 ## Quotes
-- "<verbatim quote>" (<timestamp link>)
+- "<verbatim quote>" (<anchor link>)
 
 ## Habits / practices
-- <habits or practices the speaker recommends or follows>
+- <habits or practices the author recommends or follows>
 
 ## Facts
 - <verifiable facts and numbers>
@@ -19,4 +19,4 @@
 ## Recommendations
 - <actionable recommendations>
 
-<links section: templates/links.md>
+<links section: templates/shared/links.md, then the related section from the source's template.md>
