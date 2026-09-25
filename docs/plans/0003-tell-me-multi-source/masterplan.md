@@ -23,7 +23,7 @@ Phase 003 (hn) reuses the web extractor. Phase 008 finishes the library UI and t
 
 | Phase | Slug | Summary | Goals | Depends on | Wave | Status |
 |-------|------|---------|-------|------------|------|--------|
-| 001 | restructure-and-contract | new layout, shared/, router, contract, content.md migration, per-folder prereqs; video only | G1 G2 G3 G4 G5 | – | 01 | approved |
+| 001 | restructure-and-contract | new layout, shared/, router, contract, content.md migration, per-folder prereqs; video only | G1 G2 G3 G4 G5 | – | 01 | shipped  |
 | 002 | web-source | trafilatura + defuddle (best wins) → Jina → Wayback; paragraph anchors | G2 G7 | 001 | 02 | approved |
 | 003 | hn-source | Algolia tree, article + discussion, check_quotes.py, past discussions | G6 G7 | 001, 002 | 03 | approved |
 | 004 | github-source | repo via API/gh + README, --deep repomix, issues/PRs/discussions, similar repos | G7 G9 G11 | 001 | 02 | approved |

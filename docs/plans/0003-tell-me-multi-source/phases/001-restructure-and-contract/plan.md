@@ -1,7 +1,7 @@
 ---
 name: restructure-and-contract
 description: Move tell-me to subskills/scripts/templates with shared/, add the router + source contract + per-folder prereqs; video only, no regressions.
-status: approved
+status: shipped
 phase_id: "001"
 depends_on: []
 wave: "01"
@@ -105,27 +105,27 @@ Restructure without new behaviour. Afterwards the video flow works exactly as be
   - [x] reviewed
   - [x] shipped
 
-- [ ] **T008** — Per-folder prereqs: `scripts/{shared,video}/check-/install-prerequisites.sh`, stubs for other sources, top-level aggregators `--source x`; `require()` hint names the source's install script; `check-plugins.py` per-folder rule + test; CLAUDE.md/AGENTS.md rule text
+- [x] **T008** — Per-folder prereqs: `scripts/{shared,video}/check-/install-prerequisites.sh`, stubs for other sources, top-level aggregators `--source x`; `require()` hint names the source's install script; `check-plugins.py` per-folder rule + test; CLAUDE.md/AGENTS.md rule text
   **Acceptance**: `check-plugins.py` passes; removing a source's prereq script makes it fail
   **Verify**: `python3 scripts/check-plugins.py` + its new test
   **Files**: skills/tell-me/scripts/*/*-prerequisites.sh, skills/tell-me/scripts/*-prerequisites.sh, scripts/check-plugins.py, CLAUDE.md, AGENTS.md
   **Size**: M
   **State**:
   - [x] built
-  - [ ] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] tested
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T009** — Update spec success-criteria test command to the per-folder loop; e2e: summarize one real YouTube video end to end on a temp root
+- [x] **T009** — Update spec success-criteria test command to the per-folder loop; e2e: summarize one real YouTube video end to end on a temp root
   **Acceptance**: summary.html opens in the library with the player, content.md, links with dates
   **Verify**: manual e2e + `hal plan spec render-verify`
   **Files**: docs/plans/0003-tell-me-multi-source/spec.md
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] built
+  - [x] tested
+  - [x] reviewed
+  - [x] shipped
 
 ## Risks
 
