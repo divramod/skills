@@ -43,24 +43,30 @@ class TestDispatch(unittest.TestCase):
         code, env = dispatch("https://x.com/jack/status/20", [], self.dir)
         self.assertEqual((code, env["source"], env["url"]), (0, "video", "https://x.com/jack/status/20"))
 
-    def argparse_source(self, name: str, flags: list[str], fail: str | None = None) -> None:
-        """A source script with argparse (so --help lists its flags) that echoes its argv in the envelope."""
-        opts = "".join(f"ap.add_argument({f!r}, nargs='?', const=True)\n" for f in flags)
-        body = (f"sys.stderr.write('progress\\nerror: {fail}\\n'); sys.exit(1)\n" if fail else
-                "print(json.dumps({'source': %r, 'kind': 'page', 'dir': '/d/' + %r, 'id': a.input, 'title': %r, "
-                "'url': a.input, 'content_file': '/d/c.md', 'summary': '/d/s.md', 'summary_exists': False, "
-                "'subskill': 's', 'template': 't', 'argv': sys.argv[2:]}))\n" % (name, name, name.upper()))
+    def argparse_source(self, name: str, flags: list[str], fail: str | None = None, big: bool = False) -> None:
+        """A source script with argparse (so --help lists its flags; `--x=` takes a value) that echoes its argv in
+        the envelope. `fail`: it logs the message the way run_main does and exits 1."""
+        opts = "".join(f"ap.add_argument({f.rstrip('=')!r})\n" if f.endswith("=") else
+                       f"ap.add_argument({f!r}, action='store_true')\n" for f in flags)
+        body = (f"sys.stderr.write('[tell-me] progress\\n[tell-me] {fail}\\n'); sys.exit(1)\n" if fail else
+                "print(json.dumps({'source': %r, 'kind': 'page', 'dir': '/d/' + %r + a.input[-1], 'id': a.input, "
+                "'title': %r, 'url': a.input, 'content_file': '/d/c.md', 'summary': '/d/s.md', "
+                "'summary_exists': False, 'subskill': 's', 'template': 't', 'argv': sys.argv[2:]%s}))\n"
+                % (name, name, name.upper(), ", 'pad': 'x' * 300000" if big else ""))
         self.source(name, "import argparse, json, sys\nap = argparse.ArgumentParser()\nap.add_argument('input')\n"
                     + opts + "a = ap.parse_args()\n" + body)
 
-    def test_several_inputs_each_source_gets_its_own_flags(self):
+    def many(self, inputs: list[str], flags: list[str]):
         from prepare import prepare_many
+        return prepare_many(inputs, flags, self.dir, root=self.dir / "lib")
+
+    def test_several_inputs_each_source_gets_its_own_flags(self):
         self.argparse_source("web", ["--refresh"])
-        self.argparse_source("hn", ["--no-article", "--refresh"])
-        code, out = prepare_many(["https://example.com/a", "https://news.ycombinator.com/item?id=1"],
-                                 ["--no-article", "--refresh", "--lang", "de"], self.dir, root=self.dir / "lib")
+        self.argparse_source("hn", ["--no-article", "--refresh", "--lang="])
+        code, out = self.many(["https://example.com/a", "https://news.ycombinator.com/item?id=1"],
+                              ["--no-article", "--refresh", "--lang", "de"])
         self.assertEqual(code, 0)
-        self.assertEqual([i["argv"] for i in out["items"]], [["--refresh"], ["--no-article", "--refresh"]])
+        self.assertEqual([i["argv"] for i in out["items"]], [["--refresh"], ["--no-article", "--refresh", "--lang", "de"]])
         digest = Path(out["digest_dir"])
         self.assertEqual(digest.parent, self.dir / "lib" / "digests")
         self.assertTrue(digest.name.endswith("-web-and-1-more"))
@@ -68,29 +74,74 @@ class TestDispatch(unittest.TestCase):
         self.assertEqual((meta["kind"], meta["title"], [i["source"] for i in meta["items"]]),
                          ("digest", "WEB · HN", ["web", "hn"]))
         self.assertTrue(out["template"].endswith("templates/shared/digest.md"))
+        self.assertFalse(out["digest_exists"])
+        # a saved digest keeps its record when the same inputs are prepared again
+        (digest / "metadata.json").write_text(json.dumps(meta | {"summary": {"mode": "digest"}}))
+        (digest / "digest.md").write_text("x")
+        code, out = self.many(["https://example.com/a", "https://news.ycombinator.com/item?id=1"], [])
+        self.assertEqual(Path(out["digest_dir"]), digest)
+        self.assertTrue(out["digest_exists"])
+        self.assertEqual(json.loads((digest / "metadata.json").read_text())["summary"], {"mode": "digest"})
 
     def test_a_failing_input_does_not_stop_the_others(self):
-        from prepare import prepare_many
         self.argparse_source("web", [])
         self.argparse_source("hn", [], fail="Hacker News has no item 1")
-        code, out = prepare_many(["https://news.ycombinator.com/item?id=1", "https://example.com/a"], [], self.dir,
-                                 root=self.dir / "lib")
+        code, out = self.many(["https://news.ycombinator.com/item?id=1", "https://example.com/a"], [])
         self.assertEqual(code, 0)
         self.assertEqual(out["items"][0], {"input": "https://news.ycombinator.com/item?id=1",
                                            "error": "Hacker News has no item 1", "exit_code": 1})
         self.assertEqual(out["items"][1]["source"], "web")
         self.assertIsNone(out["digest_dir"])  # one input left: nothing to digest
-        code, out = prepare_many(["https://news.ycombinator.com/item?id=1", "nosuchfile.pdf"], [], self.dir,
-                                 root=self.dir / "lib")
+        code, out = self.many(["https://news.ycombinator.com/item?id=1", "nosuchfile.pdf"], [])
         self.assertEqual((code, out["items"][1]["exit_code"]), (1, 1))
         self.assertIn("no such file", out["items"][1]["error"])
 
-    def test_flags_for_keeps_values(self):
-        from prepare import flags_for
-        self.argparse_source("video", ["--lang", "--skip-download"])
-        script = self.dir / "video" / "prepare.py"
-        self.assertEqual(flags_for(script, ["--lang", "de", "--max-replies", "5", "--skip-download", "--x=1"]),
-                         ["--lang", "de", "--skip-download"])
+    def test_misplaced_inputs_and_unknown_flags_are_errors(self):
+        self.argparse_source("web", ["--refresh", "--lang="])
+        a, b = "https://example.com/a", "https://example.com/b"
+        with self.assertRaisesRegex(SkillError, "'https://example.com/c' after the flags"):
+            self.many([a, b], ["--refresh", "https://example.com/c"])
+        with self.assertRaisesRegex(SkillError, "--refersh is a flag none"):
+            self.many([a, b], ["--refersh"])
+        code, out = self.many([a, b], ["--lang", "de", "--refresh"])  # a value is not an input
+        self.assertEqual([i["argv"] for i in out["items"]], [["--lang", "de", "--refresh"]] * 2)
+        code, out = self.many([a, b], ["--lang=de"])
+        self.assertEqual(out["items"][0]["argv"], ["--lang=de"])
+
+    def test_a_usage_error_is_exit_1_not_a_missing_tool(self):
+        self.argparse_source("web", ["--lang="])
+        errors = []
+        code, env = dispatch("https://example.com/a", ["--lang"], self.dir, errors)  # no value
+        self.assertEqual((code, env), (1, None))
+        self.assertIn("expected one argument", errors[0])
+
+    def test_a_big_envelope_does_not_block(self):
+        self.argparse_source("web", [], big=True)
+        code, env = dispatch("https://example.com/a", [], self.dir, [])
+        self.assertEqual((code, len(env["pad"])), (0, 300000))
+
+    def test_the_same_input_twice_is_prepared_once(self):
+        self.argparse_source("web", [])
+        code, out = self.many(["https://example.com/a", "https://example.com/a", "https://example.com/b"], [])
+        self.assertEqual([i["url"] for i in out["items"]], ["https://example.com/a", "https://example.com/b"])
+
+    def test_known_flags_from_the_usage_block(self):
+        from prepare import known_flags
+        self.argparse_source("video", ["--lang=", "--skip-download"])
+        self.assertEqual(known_flags(self.dir / "video" / "prepare.py"), {"--lang": True, "--skip-download": False})
+
+    def test_error_of(self):
+        from prepare import error_of
+        self.assertEqual(error_of(["[tell-me] fetching", "[tell-me] HTTP 404 for https://x", ""]),
+                         "HTTP 404 for https://x")
+        self.assertEqual(error_of(["usage: p [-h] url", "p: error: unrecognized arguments: --x"]),
+                         "unrecognized arguments: --x")
+        self.assertEqual(error_of([]), "failed")
+
+    def test_no_input_is_a_usage_error(self):
+        from prepare import main
+        with self.assertRaises(SystemExit):
+            main([])
 
     def test_flags_before_the_input_are_rejected(self):
         from prepare import main

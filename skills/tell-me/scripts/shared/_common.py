@@ -191,7 +191,8 @@ def digest_dir(items: list[dict], day: str, root: Path | None = None, folder: Pa
                                                              old.get("items") or []] != ids:
             folder = folder.with_name(f"{folder.name}-{hashlib.sha1(repr(ids).encode()).hexdigest()[:6]}")
     folder.mkdir(parents=True, exist_ok=True)
-    write_json(folder / "metadata.json", {"kind": "digest", "title": title, "created": day, "items": items} | fields)
+    # merge: a saved digest's `summary` record stays
+    update_json(folder / "metadata.json", {"kind": "digest", "title": title, "created": day, "items": items} | fields)
     return folder
 
 

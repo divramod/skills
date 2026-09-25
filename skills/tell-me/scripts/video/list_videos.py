@@ -90,7 +90,7 @@ def main(argv=None) -> int:
     folder = digest_dir(listing["videos"], date.today().isoformat(),
                         folder=source_root("video") / platform_of(data) / user_of(data) / "_digests" / listing["slug"],
                         title=listing["title"], source_kind=kind, channel=listing["channel"], webpage_url=args.url,
-                        platform=platform_of(data), videos=listing["videos"])
+                        platform=platform_of(data))
     print(json.dumps({"source": "video", "dir": str(folder), "digest_dir": str(folder), **listing,
                       "subskill": str(SKILL_DIR / "subskills" / "video" / "SUBSKILL.md"),
                       "template": str(SKILL_DIR / "templates" / "shared" / "digest.md")}, indent=2, ensure_ascii=False))

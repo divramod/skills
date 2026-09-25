@@ -22,6 +22,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -35,8 +36,9 @@ LIST_KINDS = ("playlist", "channel")
 
 def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR,
              errors: list[str] | None = None) -> tuple[int, dict | None]:
-    """(exit code, envelope). The source script's progress goes to stderr as it comes; with `errors`, the
-    last lines of a failing script are appended to it."""
+    """(exit code, envelope). The source script's progress goes to stderr as it comes; the error message of a
+    failing script is appended to `errors`. A usage error of the script (argparse exits 2, like a missing tool)
+    becomes exit 1."""
     r = route(text)
     script = sources_dir / r["source"] / "prepare.py"
     if not script.is_file():
@@ -47,13 +49,10 @@ def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR,
         log(f"source '{r['source']}' not supported yet: trying the video source (yt-dlp)")
         r, script = r | {"source": "video"}, video
     log(f"source: {r['source']} ({r['kind']}) -> {script.relative_to(sources_dir)}")
-    cmd = [sys.executable, str(script), r.get("url") or r["path"], *flags]
-    if errors is None:
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
-    else:
-        p = run_teeing(cmd, errors)
+    p = run_teeing([sys.executable, str(script), r.get("url") or r["path"], *flags],
+                   errors if errors is not None else [])
     if p.returncode != 0:
-        return p.returncode, None
+        return (1 if p.returncode == 2 and p.stderr == "usage" else p.returncode), None
     try:
         env = json.loads(p.stdout)
     except json.JSONDecodeError as e:
@@ -67,43 +66,67 @@ def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR,
 
 
 def run_teeing(cmd: list[str], errors: list[str]) -> subprocess.CompletedProcess:
-    """Run cmd with its stderr passed through line by line; on failure the last message goes to `errors`."""
+    """Run cmd with its stderr passed through line by line while stdout is collected in a thread (a big envelope
+    must not fill the pipe). On failure its error message goes to `errors`; the result's stderr is "usage" for
+    an argparse usage error."""
     tail: list[str] = []
     with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+        out: list[str] = []
+        reader = threading.Thread(target=lambda: out.append(proc.stdout.read()), daemon=True)
+        reader.start()
         for line in proc.stderr:
             sys.stderr.write(line)
             tail = (tail + [line.rstrip()])[-8:]
-        out = proc.stdout.read()
+        reader.join()
+    usage = any(": error: " in line for line in tail)
     if proc.returncode != 0:
         errors.append(error_of(tail))
-    return subprocess.CompletedProcess(cmd, proc.returncode, out, "")
+    return subprocess.CompletedProcess(cmd, proc.returncode, "".join(out), "usage" if usage else "")
 
 
 def error_of(tail: list[str]) -> str:
-    """The error message from the end of a failing script's stderr (run_main prints `error: …`)."""
-    for i in range(len(tail) - 1, -1, -1):
-        if tail[i].startswith("error:"):
-            return "\n".join(tail[i:]).removeprefix("error:").strip()
-    return "\n".join(line for line in tail if line.strip())[-500:] or "failed"
+    """A failing script's error message: argparse's text after `: error: `, else its last message (run_main
+    logs it as `[tell-me] <message>`)."""
+    lines = [line for line in tail if line.strip()]
+    for line in reversed(lines):
+        if ": error: " in line:
+            return line.split(": error: ", 1)[1].strip()
+    return lines[-1].removeprefix("[tell-me] ").strip() if lines else "failed"
+
+
+_OPTION_RE = re.compile(r"\[(--?[A-Za-z][\w-]*)( [^\]\s]+)?\]")
 
 
 @lru_cache(maxsize=None)
-def known_flags(script: Path) -> frozenset[str]:
-    """The option strings a source script's argparse knows (from its --help)."""
+def known_flags(script: Path) -> dict[str, bool]:
+    """{option: takes a value} for a source script, from the usage block of its --help (`[--lang LANG]`)."""
     p = subprocess.run([sys.executable, str(script), "--help"], capture_output=True, text=True)
-    return frozenset(re.findall(r"(?<![\w-])(--?[A-Za-z][\w-]*)", p.stdout))
+    usage = p.stdout.split("\n\n", 1)[0]
+    return {flag: bool(value) for flag, value in _OPTION_RE.findall(usage) if flag not in ("-h", "--help")}
 
 
-def flags_for(script: Path, flags: list[str]) -> list[str]:
-    """The flags (with their values) this script knows; the others are for other inputs' sources."""
-    known, out, i = known_flags(script), [], 0
+def split_flags(flags: list[str], known: dict[str, bool]) -> list[tuple[str, list[str]]]:
+    """[(flag, its value tokens)] for the flags after the inputs; SkillError for a token that is neither a flag
+    nor the value of one (an input after the flags) and for a flag no source knows."""
+    out, i = [], 0
     while i < len(flags):
-        flag = flags[i]
-        value = [flags[i + 1]] if i + 1 < len(flags) and not flags[i + 1].startswith("-") else []
-        if flag.split("=", 1)[0] in known:
-            out += [flag] + value
+        token = flags[i]
+        if not token.startswith("-"):
+            raise SkillError(f"{token!r} after the flags: put every URL or path first, then the flags "
+                             f"(a path starting with '-': ./{token})")
+        name = token.split("=", 1)[0]
+        if name not in known:
+            raise SkillError(f"{name} is a flag none of these inputs' sources knows")
+        value = [flags[i + 1]] if known[name] and "=" not in token and i + 1 < len(flags) else []
+        out.append((token, value))
         i += 1 + len(value)
     return out
+
+
+def flags_for(script: Path, flags: list[tuple[str, list[str]]]) -> list[str]:
+    """The flags (with their values) this script knows; the others are for other inputs' sources."""
+    known = known_flags(script)
+    return [t for flag, value in flags if flag.split("=", 1)[0] in known for t in (flag, *value)]
 
 
 def script_of(text: str, sources_dir: Path = SOURCES_DIR) -> Path:
@@ -114,16 +137,34 @@ def script_of(text: str, sources_dir: Path = SOURCES_DIR) -> Path:
 
 def prepare_many(inputs: list[str], flags: list[str], sources_dir: Path = SOURCES_DIR,
                  root: Path | None = None) -> tuple[int, dict]:
-    """(exit code, {kind: inputs, items, digest_dir})."""
-    items, codes = [], []
+    """(exit code, {kind: inputs, items, digest_dir, digest_exists, template}). The same input twice is
+    prepared once."""
+    inputs = list(dict.fromkeys(inputs))
+    scripts = {}
+    for text in inputs:
+        try:
+            scripts[text] = script_of(text, sources_dir)
+        except SkillError:
+            scripts[text] = None  # dispatch reports it
+    known: dict[str, bool] = {}
+    for script in {s for s in scripts.values() if s}:
+        known |= known_flags(script)
+    parsed = split_flags(flags, known)
+    items, codes, dirs = [], [], set()
     for n, text in enumerate(inputs, 1):
         log(f"input {n}/{len(inputs)}: {text}")
         errors: list[str] = []
         try:
-            code, env = dispatch(text, flags_for(script_of(text, sources_dir), flags), sources_dir, errors)
+            script = scripts[text]
+            code, env = dispatch(text, flags_for(script, parsed) if script else [], sources_dir, errors)
         except SkillError as e:
             code, env, errors = 1, None, [str(e)]
         codes.append(code)
+        if env is not None and env.get("dir") in dirs:
+            log(f"{text} is the same item as an earlier input: listed once")
+            continue
+        if env is not None:
+            dirs.add(env.get("dir"))
         items.append(env if env is not None else {"input": text, "error": errors[-1] if errors else "failed",
                                                   "exit_code": code})
     ok = [i for i in items if "error" not in i]
@@ -133,6 +174,7 @@ def prepare_many(inputs: list[str], flags: list[str], sources_dir: Path = SOURCE
                              for i in ok], date.today().isoformat(), root)
     code = 0 if ok else max(codes)
     return code, {"kind": "inputs", "items": items, "digest_dir": str(folder) if folder else None,
+                  "digest_exists": (folder / "digest.md").exists() if folder else None,
                   "template": str(SOURCES_DIR.parent / "templates" / "shared" / "digest.md") if folder else None}
 
 
@@ -155,6 +197,8 @@ def main(argv=None) -> int:
         ap.parse_args(["--help"])
     first_flag = next((i for i, a in enumerate(raw) if a.startswith("-")), len(raw))
     inputs, flags = raw[:first_flag], raw[first_flag:]
+    if not inputs:
+        ap.error("give at least one URL or path")
     warn_legacy()
     if len(inputs) > 1:
         code, out = prepare_many(inputs, flags)
