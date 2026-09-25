@@ -121,5 +121,7 @@ install_main() {
     for t in ${missing[@]+"${missing[@]}"}; do echo "  $t: $(hint "$t")" >&2; done
     return 1
   fi
+  # a folder's install script may define after_install (e.g. download pinned packages now, not on first use)
+  if declare -F after_install >/dev/null; then after_install; fi
   "$dir/check-prerequisites.sh"
 }

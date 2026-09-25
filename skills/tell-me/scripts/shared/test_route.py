@@ -77,6 +77,11 @@ class TestRoute(unittest.TestCase):
         self.assertEqual(route("https://docsify.js.org/#/")["id"], route("https://docsify.js.org/")["id"])
         self.assertEqual(route("https://a.app/#/q?id=3&utm_source=x")["id"], "https://a.app/#/q?id=3")
 
+    def test_query_kept_byte_for_byte_minus_tracking(self):
+        self.assertEqual(route("https://a.dev/p?flag&path=%2Fx/y&utm_source=rss&b=1")["id"],
+                         "https://a.dev/p?flag&path=%2Fx/y&b=1")
+        self.assertEqual(route("https://a.dev/p?utm_%73ource=x&fbclid=1")["id"], "https://a.dev/p")
+
     def test_canonical_urls(self):
         self.assertEqual(route("https://youtu.be/dQw4w9WgXcQ")["url"], "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         self.assertEqual(route("https://twitter.com/jack/status/20?s=20")["url"], "https://x.com/jack/status/20")

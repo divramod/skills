@@ -20,7 +20,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 
 from _common import SkillError, run_main
 
@@ -81,10 +81,9 @@ def is_route_fragment(fragment: str) -> bool:
 
 
 def clean_query(query: str) -> str:
-    """A query string without tracking params (utm_*, fbclid, ...)."""
-    pairs = [(k, v) for k, vs in parse_qs(query, keep_blank_values=True).items() if not TRACKING_PARAMS.match(k)
-             for v in vs]
-    return urlencode(pairs)
+    """A query string without tracking params (utm_*, fbclid, ...); every other param is kept byte for byte
+    (`?flag` stays bare, `%2F` and `/` stay as written)."""
+    return "&".join(p for p in query.split("&") if p and not TRACKING_PARAMS.match(unquote(p.partition("=")[0])))
 
 
 def route_fragment(fragment: str) -> str:

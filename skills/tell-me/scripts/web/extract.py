@@ -18,6 +18,7 @@ Requires: uvx, npx.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
 import subprocess
@@ -57,6 +58,7 @@ TEXT_TYPE_RE = re.compile(r"^(text/|application/(xhtml\+xml|xml|json|.*\+xml$))"
 # Extractor versions, pinned: they parse untrusted pages, and a new release may change their output format.
 TRAFILATURA = "trafilatura==2.2.0"
 DEFUDDLE = "defuddle@0.19.4"
+WARM_TIMEOUT = 600  # the first download of either package
 
 
 class HttpError(SkillError):
@@ -157,8 +159,11 @@ def iso_day(value) -> str | None:
 
 def from_defuddle(output: str) -> Extraction:
     data = json.loads(output)
+    if not isinstance(data, dict):
+        raise SkillError("defuddle answered no JSON object")
     schema = data.get("schemaOrgData") or []
-    schema = schema[0] if isinstance(schema, list) and schema else schema if isinstance(schema, dict) else {}
+    schema = schema[0] if isinstance(schema, list) and schema else schema
+    schema = schema if isinstance(schema, dict) else {}  # malformed schema.org data is ignored
     return Extraction((data.get("content") or "").strip(), {
         "title": data.get("title") or schema.get("headline"), "author": data.get("author"),
         "published": iso_day(data.get("published")) or iso_day(schema.get("datePublished")), "site": data.get("site") or data.get("domain"),
@@ -201,7 +206,8 @@ def strip_unsafe_links(markdown: str) -> str:
     button's data: URL) is not a link a reader can follow, and javascript: must never reach a page. The target
     may hold spaces and parentheses: it ends at its balanced `)`, else at the end of the line."""
     out, pos = [], 0
-    for m in re.finditer(r"!?\[([^\]]*)\]\(\s*(?!(?:https?|mailto):)[a-z][a-z0-9+.-]*:", markdown, re.I):
+    # the label has no brackets: in [![logo](data:...)](https://home) only the inner image is unsafe
+    for m in re.finditer(r"!?\[([^\[\]]*)\]\(\s*(?!(?:https?|mailto):)[a-z][a-z0-9+.-]*:", markdown, re.I):
         if m.start() < pos:
             continue
         depth, end = 1, m.end()
@@ -213,16 +219,29 @@ def strip_unsafe_links(markdown: str) -> str:
     return "".join(out) + markdown[pos:]
 
 
+def outside_code(line: str, fn) -> str:
+    """fn applied to the parts of a line that are not `code spans`."""
+    return "".join(part if i % 2 else fn(part) for i, part in enumerate(re.split(r"(`+[^`]*`+)", line)))
+
+
 def normalize(markdown: str) -> str:
-    """Non-web links (data:, javascript:) reduced to their text, a blank line before every heading (Jina and some extractors glue it to the
-    line above, which would merge two blocks), at most one blank line in a row; fenced code is left alone."""
+    """Control characters dropped; outside fenced code: non-web links (data:, javascript:) reduced to their text
+    (not inside `code spans`), a heading set apart by blank lines (Jina and some extractors glue it to the lines
+    around it, which would merge blocks) and at most one blank line in a row."""
     out: list[str] = []
-    fence = False
-    for line in strip_unsafe_links(markdown).splitlines():
+    fence = heading = False
+    for line in re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", markdown).splitlines():
         if line.lstrip(" >").startswith("```"):
             fence = not fence
-        elif not fence and re.match(r"#{1,6}\s", line) and out and out[-1].strip():
-            out.append("")
+            if heading:
+                out.append("")
+            heading = False
+        elif not fence:
+            line = outside_code(line, strip_unsafe_links)
+            is_heading = bool(re.match(r"#{1,6}\s", line))
+            if (is_heading or heading) and line.strip() and out and out[-1].strip():
+                out.append("")
+            heading = is_heading
         if not line.strip() and out and not out[-1].strip() and not fence:
             continue
         out.append(line.rstrip() if not fence else line)
@@ -254,19 +273,37 @@ def decode(data: bytes, header_charset: str | None) -> str:
         return data.decode("utf-8", errors="replace")
 
 
+class RedirectLog(urllib.request.HTTPRedirectHandler):
+    """Follows redirects like the default handler and notes their status codes on the final response."""
+
+    def http_error_302(self, req, fp, code, msg, headers):
+        r = super().http_error_302(req, fp, code, msg, headers)
+        if r is not None:
+            r.redirect_codes = [code] + getattr(r, "redirect_codes", [])
+        return r
+
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = http_error_302
+
+
+def open_url(req: urllib.request.Request, timeout: int):
+    return urllib.request.build_opener(RedirectLog).open(req, timeout=timeout)
+
+
 def http_get(url: str, timeout: int = TIMEOUT, accept: str = "text/html,*/*",
-             headers: dict | None = None) -> tuple[str, str]:
-    """(body, final URL). Raises HttpError with the status (and the error page), NotAPage for a PDF or another
-    non-text document, SkillError for a network error."""
+             headers: dict | None = None) -> tuple[str, str, bool]:
+    """(body, final URL, whether every redirect on the way was permanent: 301/308). Raises HttpError with the
+    status (and the error page), NotAPage for a PDF or another non-text document, SkillError for a network
+    error."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept,
                                                "Accept-Language": "en;q=0.9,*;q=0.5"} | (headers or {}))
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with open_url(req, timeout) as r:
             ctype = r.headers.get_content_type()
             if not TEXT_TYPE_RE.match(ctype):
                 raise NotAPage(f"{url} is a {ctype} document, not a web page: summarize it as a file "
                                f"(download it and pass the path)")
-            return decode(r.read(MAX_BYTES), r.headers.get_content_charset()), r.geturl()
+            permanent = all(c in (301, 308) for c in getattr(r, "redirect_codes", []))
+            return decode(r.read(MAX_BYTES), r.headers.get_content_charset()), r.geturl(), permanent
     except urllib.error.HTTPError as e:
         body = decode(e.read(MAX_BYTES), e.headers.get_content_charset() if e.headers else None)
         raise HttpError(e.code, url, body)
@@ -274,11 +311,12 @@ def http_get(url: str, timeout: int = TIMEOUT, accept: str = "text/html,*/*",
         raise SkillError(f"could not fetch {url}: {getattr(e, 'reason', e)}")
 
 
-def run_tool(name: str, cmd: list[str], stdin: str | None = None) -> str:
+def run_tool(name: str, cmd: list[str], stdin: str | None = None, timeout: int = TIMEOUT) -> str:
     try:
-        p = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=TIMEOUT)
+        p = subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout)
     except subprocess.TimeoutExpired:
-        raise SkillError(f"{name} timed out after {TIMEOUT}s")
+        raise SkillError(f"{name} timed out after {timeout}s")
     if p.returncode != 0 or p.stdout.startswith("Error:"):  # defuddle prints "Error: ..." on stdout
         out = p.stderr.strip() or p.stdout.strip()
         raise SkillError(out.splitlines()[-1] if out else f"{name} exited {p.returncode}")
@@ -298,7 +336,7 @@ def defuddle(html: str) -> Extraction:
 def jina(url: str) -> Extraction:
     """r.jina.ai renders the page in a browser. It refuses browser user agents (403), and a `#` in the target
     must be encoded or it drops a single-page app's route."""
-    body, _ = http_get(JINA + url.replace("#", "%23"), accept="text/plain",
+    body, _, _ = http_get(JINA + url.replace("#", "%23"), accept="text/plain",
                        headers={"User-Agent": "tell-me", "X-Timeout": "30", "X-No-Cache": "true"})
     return from_jina(body)
 
@@ -313,7 +351,7 @@ def extract_html(html: str, base: str, attempts: list[str], label: str = "") -> 
                 ex = fut.result()
                 attempts.append(f"{label}{name}: {ex.words} words")
                 results.append(ex)
-            except (SkillError, json.JSONDecodeError) as e:
+            except Exception as e:  # one extractor failing (bad output, a crash) never loses the other's text
                 attempts.append(f"{label}{name}: failed ({e})")
     best = pick(results)
     if best:
@@ -325,7 +363,7 @@ def extract_html(html: str, base: str, attempts: list[str], label: str = "") -> 
 
 def wayback_snapshot(url: str) -> str | None:
     """URL of the latest archived copy (the page with the Wayback toolbar, for people), or None."""
-    body, _ = http_get(WAYBACK_API + urllib.parse.quote(url, safe=""), accept="application/json")
+    body, _, _ = http_get(WAYBACK_API + urllib.parse.quote(url, safe=""), accept="application/json")
     try:
         snap = (json.loads(body).get("archived_snapshots") or {}).get("closest") or {}
     except json.JSONDecodeError:
@@ -347,6 +385,7 @@ class Page:
     final_url: str  # after redirects
     snapshot: str | None = None  # the Wayback copy the text came from
     gone: int = 0  # 404/410: the live page no longer exists
+    permanent: bool = True  # no redirect, or only permanent ones: the URL asked for names this page for good
 
 
 def is_app_shell(html: str) -> bool:
@@ -356,56 +395,105 @@ def is_app_shell(html: str) -> bool:
     return bool(re.search(r"<script\b", html, re.I)) and len(text.split()) < 50
 
 
+def is_soft_404(url: str, final_url: str) -> bool:
+    """A deep link that redirects to a site's home page: the page is gone (dead GeoCities pages land on Yahoo,
+    removed posts on the blog's front page)."""
+    def path(u: str) -> str:
+        return re.sub(r"/(index|default)\.\w+$", "/", urllib.parse.urlsplit(u).path).rstrip("/")
+    a, b = urllib.parse.urlsplit(url), urllib.parse.urlsplit(final_url)
+    # on the same site, a query may still select the page (/?p=123)
+    return bool(path(url)) and not path(final_url) and (a.hostname != b.hostname or not b.query)
+
+
+def is_private(url: str) -> bool:
+    """localhost, a LAN/intranet address or a single-label/.local/.internal host: never sent to Jina or the
+    Wayback Machine (the URL may carry a token, and they could not reach it anyway)."""
+    host = (urllib.parse.urlsplit(url).hostname or "").rstrip(".")
+    try:
+        return not ipaddress.ip_address(host).is_global
+    except ValueError:
+        return "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa", ".localhost"))
+
+
+WALL_RE = re.compile(r"^(consent|login|signin|accounts?|auth)\.|/(consent|collectconsent|login|signin|sign-in)\b",
+                     re.I)
+
+
+def is_wall(url: str, final_url: str) -> bool:
+    """A redirect to a cookie-consent or login page (consent.yahoo.com, /login?next=...): that page is not the
+    article. Jina Reader (which fetches from elsewhere) or the archive may still have it."""
+    b = urllib.parse.urlsplit(final_url)
+    return final_url != url and bool(WALL_RE.search(f"{b.hostname or ''}{b.path}"))
+
+
 def extract(url: str) -> Page:
     """The best text of the page, with the attempts log. SkillError when nothing worked."""
     require("uvx", "npx")
     attempts: list[str] = []
     best = None
-    final_url = url
-    gone = 0
+    final_url, permanent = url, True
+    gone = wall = status = 0
     try:
-        html, final_url = http_get(url)
-        log(f"fetched {final_url} ({len(html) // 1024} KB); running trafilatura + defuddle")
-        best = extract_html(html, final_url, attempts)
+        html, final_url, permanent = http_get(url)
+        if is_soft_404(url, final_url):
+            attempts.append(f"fetch: redirected to the home page {final_url} (the page is gone)")
+            gone, final_url = 404, url
+        elif is_wall(url, final_url):
+            attempts.append(f"fetch: redirected to a consent or login page {final_url}")
+            wall, final_url = 1, url
+        else:
+            log(f"fetched {final_url} ({len(html) // 1024} KB); running trafilatura + defuddle")
+            best = extract_html(html, final_url, attempts)
     except NotAPage:
         raise
     except SkillError as e:
         attempts.append(f"fetch: {e}")
-        if isinstance(e, HttpError) and e.code in GONE and not is_app_shell(e.body):
-            gone = e.code
+        if isinstance(e, HttpError):
+            status = e.code
+            if e.code in GONE and not is_app_shell(e.body):
+                gone = e.code
     if best and best.words >= MIN_WORDS:
         log(f"{'; '.join(attempts)} -> using {best.extractor}")
-        return Page(best, attempts, final_url)
+        return Page(best, attempts, final_url, permanent=permanent)
 
-    if gone:  # Jina would only render the error page
-        attempts.append("jina: skipped (the page is gone)")
-    else:
-        log(f"{'; '.join(attempts)} -> under {MIN_WORDS} words, trying Jina Reader (renders JavaScript)")
-        try:
-            rendered = jina(url)
-            rendered.markdown = normalize(absolutize(rendered.markdown, final_url))
-            attempts.append(f"jina: {rendered.words} words")
-            if rendered.words >= MIN_WORDS:
-                rendered.meta = merge_meta(best.meta if best else {}, rendered.meta)
-                log(f"{attempts[-1]} -> using jina")
-                return Page(rendered, attempts, final_url)
-            best = best if best and best.words >= rendered.words else rendered
-        except SkillError as e:
-            attempts.append(f"jina: failed ({e})")
-
-    log(f"{attempts[-1]} -> trying the Wayback Machine")
     snapshot = None
-    try:
-        snapshot = wayback_snapshot(url)
-        if snapshot:
-            html, _ = http_get(raw_snapshot(snapshot))
-            archived = extract_html(html, final_url, attempts, label="wayback+")
-            if archived and (not best or archived.words > best.words):
-                best = archived
+    if is_private(url):
+        attempts.append("jina, wayback: skipped (a private address is not sent to third parties)")
+        steps = []
+    else:  # Jina follows the same redirect, so behind a wall the archive goes first
+        steps = ["wayback", "jina"] if wall else ["jina", "wayback"]
+    for step in steps:
+        if step == "jina":
+            if gone:  # Jina would only render the error page
+                attempts.append("jina: skipped (the page is gone)")
+                continue
+            log(f"{'; '.join(attempts)} -> trying Jina Reader (renders JavaScript)")
+            try:
+                rendered = jina(url)
+                rendered.markdown = normalize(absolutize(rendered.markdown, final_url))
+                attempts.append(f"jina: {rendered.words} words")
+                if rendered.words >= MIN_WORDS:
+                    rendered.meta = merge_meta(best.meta if best else {}, rendered.meta)
+                    log(f"{attempts[-1]} -> using jina")
+                    return Page(rendered, attempts, final_url, permanent=permanent)
+                best = best if best and best.words >= rendered.words else rendered
+            except SkillError as e:
+                attempts.append(f"jina: failed ({e})")
         else:
-            attempts.append("wayback: no snapshot")
-    except SkillError as e:
-        attempts.append(f"wayback: failed ({e})")
+            log(f"{'; '.join(attempts)} -> trying the Wayback Machine")
+            try:
+                snapshot = wayback_snapshot(url)
+                if snapshot:
+                    html, _, _ = http_get(raw_snapshot(snapshot))
+                    archived = extract_html(html, final_url, attempts, label="wayback+")
+                    if archived and (not best or archived.words > best.words):
+                        best = archived
+                else:
+                    attempts.append("wayback: no snapshot")
+            except SkillError as e:
+                attempts.append(f"wayback: failed ({e})")
+            if wall and best and best.words >= MIN_WORDS:
+                break
     log("; ".join(attempts))
     archived = bool(best and best.extractor.startswith("wayback+"))
     if gone and not archived:
@@ -413,15 +501,35 @@ def extract(url: str) -> Page:
                          + "; ".join(attempts[1:]))
     if not best or not best.words:
         raise SkillError(f"no text could be extracted from {url}. Tried: " + "; ".join(attempts))
+    if (status or wall) and not archived and best.words < MIN_WORDS:  # the rescue only rendered a challenge page
+        raise SkillError(f"{url} answered {f'HTTP {status}' if status else 'with a consent or login page'} and "
+                         f"no fallback got the article (only {best.words} words). Tried: " + "; ".join(attempts))
     if best.words < MIN_WORDS:
         log(f"only {best.words} words: paywall, login wall or a mostly-visual page")
-    return Page(best, attempts, final_url, snapshot if archived else None, gone)
+    return Page(best, attempts, final_url, snapshot if archived else None, gone, permanent)
+
+
+def warm() -> int:
+    """Run both pinned extractors once, so uvx/npx download them without the per-page timeout."""
+    require("uvx", "npx")
+    for name, cmd in (("trafilatura", ["uvx", TRAFILATURA, "--version"]),
+                      ("defuddle", ["npx", "-y", DEFUDDLE, "--version"])):
+        log(f"fetching {name} (first time only)")
+        run_tool(name, cmd, timeout=WARM_TIMEOUT)
+    log("trafilatura and defuddle are ready")
+    return 0
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("url")
+    ap.add_argument("url", nargs="?")
+    ap.add_argument("--warm", action="store_true",
+                    help="download the pinned trafilatura and defuddle now (install-prerequisites.sh runs this)")
     args = ap.parse_args(argv)
+    if args.warm:
+        return warm()
+    if not args.url:
+        ap.error("a URL is required")
     page = extract(args.url)
     best = page.best
     print(json.dumps({"markdown": best.markdown, "meta": best.meta, "extractor": best.extractor, "words": best.words,

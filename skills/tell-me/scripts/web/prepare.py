@@ -51,31 +51,41 @@ def page_url(url: str) -> str:
 
 
 class HeadingIds(HTMLParser):
-    """Collects {normalized heading text: id} for h1-h6 that carry an id (or contain an element with one)."""
+    """Collects {normalized heading text: id} for h1-h6. The id comes from the heading itself, else from an element
+    inside it (id, or `<a name>`), else from its permalink (`<a href="#id">`, Sphinx), else from the `<section id>`
+    that the heading opens (Sphinx without permalinks)."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.ids: dict[str, str] = {}
         self._level = 0
-        self._id = None
+        self._id = self._href = self._section = None
         self._text: list[str] = []
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         if re.fullmatch(r"h[1-6]", tag):
-            self._level, self._id, self._text = 1, a.get("id"), []
+            self._level, self._id, self._href, self._text = 1, a.get("id"), None, []
         elif self._level:
             self._id = self._id or a.get("id") or (a.get("name") if tag == "a" else None)
+            href = a.get("href") or ""
+            if tag == "a" and href.startswith("#") and len(href) > 1:
+                self._href = self._href or urllib.parse.unquote(href[1:])
+        else:
+            self._section = a.get("id") if tag == "section" else None
 
     def handle_endtag(self, tag):
         if re.fullmatch(r"h[1-6]", tag) and self._level:
-            if self._id:
-                self.ids.setdefault(norm(" ".join(self._text)), self._id)
-            self._level = 0
+            hid = self._id or self._href or self._section
+            if hid:
+                self.ids.setdefault(norm(" ".join(self._text)), hid)
+            self._level, self._section = 0, None
 
     def handle_data(self, data):
         if self._level:
             self._text.append(data)
+        elif data.strip():
+            self._section = None
 
 
 def heading_ids(page_html: str) -> dict[str, str]:
@@ -162,6 +172,7 @@ def anchor(markdown: str, url: str, ids: dict[str, str] | None = None, preamble:
     for i, block in enumerate(parts):
         k = kind(block)
         if k == "heading":
+            block = PERMALINK_RE.sub("", block)
             hid = ids.get(norm(" ".join(block_words(block.lstrip("#")))))
             out.append(f"{block} [#]({base}#{quote_id(hid)})" if hid else block)
             continue
@@ -179,6 +190,11 @@ def anchor(markdown: str, url: str, ids: dict[str, str] | None = None, preamble:
         first = f"{m.group(1)}{link} {first[m.end():]}" if m else f"{link} {first}"
         out.append(first + ("\n" + rest if rest else ""))
     return "\n\n".join(out)
+
+
+# a docs generator's own heading permalink ("¶", "#", "§", "🔗" or empty text) at the end of a heading: its URL
+# is often mangled by the extractor, and the heading gets our own [#] link instead
+PERMALINK_RE = re.compile(r"\s*\[(?:[¶#§]|🔗|\u200b)?\]\([^)\s]*\)\s*$")
 
 
 def quote_id(hid: str) -> str:
@@ -218,15 +234,15 @@ def render_content(meta: dict, extras: dict, body: str) -> str:
 
 
 def canonical_url(url: str, final_url: str, declared: str | None) -> str:
-    """The page's own URL: its declared canonical/og:url when that is on the same site (and not the homepage for
-    an article), else the URL after redirects. An app route (`#/page`) is kept: both of those drop it."""
+    """The page's own URL: its declared canonical/og:url when it names the same path on the same site (it drops
+    a query variant or picks http(s)/www), else the URL after redirects. A canonical with another path is not
+    trusted: misconfigured sites point every post at /blog/ or every page at page 1. An app route (`#/page`) is
+    kept: both of those drop it."""
     if is_route_fragment(urllib.parse.urlsplit(url).fragment):
         return page_url(url)
-    final = urllib.parse.urlsplit(final_url)
-    if declared and re.match(r"https?://", declared):
-        d = urllib.parse.urlsplit(declared)
-        if host_of(declared) == host_of(final_url) and (d.path.strip("/") or not final.path.strip("/")):
-            return page_url(declared)
+    if declared and re.match(r"https?://", declared) and host_of(declared) == host_of(final_url) and \
+            urllib.parse.urlsplit(declared).path.rstrip("/") == urllib.parse.urlsplit(final_url).path.rstrip("/"):
+        return page_url(declared)
     return page_url(final_url)
 
 
@@ -248,9 +264,11 @@ def main(argv=None) -> int:
     page = extract(page_url(r["url"]))
     best, m = page.best, page.best.meta
     url = canonical_url(r["url"], page.final_url, m.get("url"))
-    # the same page reached by a short link, a redirect or a URL variant: one folder, known by every id
-    ids = list(dict.fromkeys([clean_url(url), r["id"], clean_url(page_url(page.final_url))]))
-    for other in ids[1:]:
+    # the same page reached by a short link, a permanent redirect or a URL variant: one folder, known by every id
+    # (a temporary redirect, like /latest or a locale switch, may lead somewhere else next time)
+    ids = list(dict.fromkeys([clean_url(url), *([r["id"]] if page.permanent else []),
+                              clean_url(page_url(page.final_url))]))
+    for other in ids:
         existing = existing or find_by_id("web", other)
     if existing and (existing / "content.md").exists() and not args.refresh:
         log(f"reusing: {existing}, the same page as {args.url} (pass --refresh to refetch)")

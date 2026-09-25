@@ -130,6 +130,20 @@ class TestHeadingIds(unittest.TestCase):
         self.assertEqual(anchor("## Setup\n\n## Run", URL, ids),
                          f"## Setup [#]({URL}#setup)\n\n## Run [#]({URL}#run)")
 
+    def test_sphinx_ids_from_permalink_or_section(self):
+        # docs.python.org: the id is on the <section>, the heading only links to it
+        page = ('<section id="intro">\n<h1>Intro<a class="headerlink" href="#intro">¶</a></h1>\n<p>x</p>'
+                '<section id="use-it">\n<h2>Use it</h2></section>'
+                '<section id="s"><p>text first</p><h2>Late</h2></section>'
+                '<h2>Linked <a href="https://x.test/#y">y</a></h2>')
+        self.assertEqual(heading_ids(page), {"intro": "intro", "use it": "use-it"})
+
+    def test_extracted_permalinks_replaced(self):
+        # trafilatura keeps Sphinx's ¶ link but drops the path from its URL
+        md = "# Intro[¶](https://docs.python.org#intro)\n\n## Use it [](#use-it)\n\n## See [docs](https://d.test)"
+        self.assertEqual(anchor(md, URL, {"intro": "intro"}).split("\n\n"),
+                         [f"# Intro [#]({URL}#intro)", "## Use it", "## See [docs](https://d.test)"])
+
 
 class TestPageUrl(unittest.TestCase):
     def test_tracking_and_fragment_dropped(self):
@@ -225,9 +239,27 @@ class TestMain(unittest.TestCase):
         self.assertEqual({again["dir"], plain["dir"]}, {first["dir"]})
         self.assertTrue(plain["reused"])
 
-    def test_off_site_or_homepage_canonical_is_ignored(self):
+    def test_query_variants_share_the_canonical_folder(self):
+        self.post.meta["url"] = URL
+        first, _ = self.run_main(URL + "?ref=a")
+        self.post.meta["title"] = "Retitled"  # a second folder would show up as a duplicate
+        second, _ = self.run_main(URL + "?ref=b")
+        self.assertEqual((second["dir"], second["reused"]), (first["dir"], True))
+        aliases = read_json(Path(first["dir"]) / "metadata.json")["extras"]["aliases"]
+        self.assertEqual(aliases, [URL + "?ref=a", URL + "?ref=b"])
+
+    def test_temporary_redirect_is_no_alias(self):
+        latest = "https://example.com/latest"
+        first, _ = self.run_main(latest, page=self.page(final_url=URL, permanent=False))
+        self.assertNotIn(latest, read_json(Path(first["dir"]) / "metadata.json")["extras"].get("aliases", []))
+        _, ex = self.run_main(latest, page=self.page(final_url=URL + "next/", permanent=False))
+        ex.assert_called_once()  # fetched again: /latest may be another post now
+
+    def test_off_site_or_other_path_canonical_is_ignored(self):
         self.assertEqual(prepare.canonical_url(URL, URL, "https://other.site/p"), URL)
         self.assertEqual(prepare.canonical_url(URL, URL, "https://simonwillison.net/"), URL)
+        self.assertEqual(prepare.canonical_url(URL, URL, "https://simonwillison.net/2024/"), URL)
+        self.assertEqual(prepare.canonical_url(URL, URL + "?page=2", URL.rstrip("/")), URL.rstrip("/"))
         self.assertEqual(prepare.canonical_url(URL, URL + "?utm_source=x", None), URL)
         self.assertEqual(prepare.canonical_url("https://d.io/#/start", "https://d.io/", "https://d.io/"),
                          "https://d.io/#/start")

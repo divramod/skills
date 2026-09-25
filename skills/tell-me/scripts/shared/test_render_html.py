@@ -44,6 +44,11 @@ class TestInline(unittest.TestCase):
         self.assertEqual(inline("video_file and snake_case"), "video_file and snake_case")
 
 
+class TestUntrustedText(unittest.TestCase):
+    def test_stray_nul_does_not_hang(self):
+        self.assertEqual(inline("a\x00b \x001\x00 `c`"), "ab 1 <code>c</code>")
+
+
 class TestBlocks(unittest.TestCase):
     def test_nested_lists(self):
         html = markdown("- a\n  - b\n- c\n\n1. x\n2. y")

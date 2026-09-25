@@ -61,6 +61,7 @@ def _url_attr(url: str, base: str) -> str:
 def inline(text: str, base: str = "") -> str:
     """Inline Markdown -> HTML. Code spans are protected from the other rules."""
     slots: list[str] = []
+    text = text.replace("\x00", "")  # the slot marker; a stray one in page text would never be resolved
 
     def keep(fragment: str) -> str:
         slots.append(fragment)
@@ -87,7 +88,7 @@ def inline(text: str, base: str = "") -> str:
     text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: f"<strong>{m.group(1) or m.group(2)}</strong>", text)
     text = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])|(?<![\w])_(?!\s)(.+?)(?<!\s)_(?![\w])",
                   lambda m: f"<em>{m.group(1) or m.group(2)}</em>", text)
-    while "\x00" in text:
+    while re.search(r"\x00\d+\x00", text):  # slots nest: a link label holds a code span
         text = re.sub(r"\x00(\d+)\x00", lambda m: slots[int(m.group(1))], text)
     return text
 

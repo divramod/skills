@@ -4,7 +4,9 @@ import email.message
 import json
 import subprocess
 import sys
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -53,6 +55,21 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(ex.meta["language"], "en-gb")
         self.assertIsNone(ex.meta["published"], "empty published stays empty")
         self.assertIn("```", ex.markdown)
+
+    def test_defuddle_malformed_schema_org_is_ignored(self):
+        for schema in ('[[{"headline": "x"}]]', '["str"]', '"str"'):
+            ex = from_defuddle(f'{{"content": "text", "schemaOrgData": {schema}}}')
+            self.assertEqual((ex.markdown, ex.meta["title"]), ("text", None), schema)
+        with self.assertRaisesRegex(SkillError, "no JSON object"):
+            from_defuddle("[1]")
+
+    def test_one_crashing_extractor_keeps_the_other(self):
+        attempts = []
+        with mock.patch.object(extract, "trafilatura", return_value=traf()), \
+                mock.patch.object(extract, "defuddle", side_effect=AttributeError("boom")):
+            best = extract.extract_html("<p>x</p>", URL, attempts)
+        self.assertEqual(best.extractor, "trafilatura")
+        self.assertIn("defuddle: failed (boom)", attempts)
 
     def test_defuddle_date_as_written_is_left_to_trafilatura(self):
         ex = from_defuddle('{"content": "x", "published": "March 5, 2024"}')
@@ -125,7 +142,11 @@ class TestAbsolutize(unittest.TestCase):
 
 class TestNormalize(unittest.TestCase):
     def test_heading_gets_its_own_block(self):
-        self.assertEqual(normalize("`cmd`\n## Next\ntext\n\n\n\nmore  "), "`cmd`\n\n## Next\ntext\n\nmore")
+        self.assertEqual(normalize("`cmd`\n## Next\ntext\n\n\n\nmore  "), "`cmd`\n\n## Next\n\ntext\n\nmore")
+        self.assertEqual(normalize("## A\n```\nx\n```"), "## A\n\n```\nx\n```")
+
+    def test_control_characters_dropped(self):
+        self.assertEqual(normalize("a\x00b\x1bc\td"), "abc\td")
 
     def test_script_links_become_text(self):
         self.assertEqual(normalize("[click](javascript:alert(document.cookie)) ![i](vbscript:x) [m](mailto:a@b.c)"),
@@ -139,6 +160,16 @@ class TestNormalize(unittest.TestCase):
     def test_fenced_code_untouched(self):
         md = "```\n# comment\n\n\n# another\n```"
         self.assertEqual(normalize(md), md)
+        md = "```md\n![dot](data:image/png;base64,AA)\n```"
+        self.assertEqual(normalize(md), md)
+
+    def test_code_spans_untouched(self):
+        self.assertEqual(normalize("use `[a](data:text/plain,hi)` not [b](data:x)"),
+                         "use `[a](data:text/plain,hi)` not b")
+
+    def test_linked_data_image_keeps_the_link(self):
+        self.assertEqual(normalize("[![logo](data:image/png;base64,AA)](https://site.dev/home)"),
+                         "[logo](https://site.dev/home)")
 
 
 class TestUrls(unittest.TestCase):
@@ -146,7 +177,7 @@ class TestUrls(unittest.TestCase):
         self.assertEqual(raw_snapshot(SNAPSHOT), SNAPSHOT_RAW)
 
     def test_jina_keeps_the_app_route(self):
-        with mock.patch.object(extract, "http_get", return_value=("Markdown Content:\nx", "")) as get:
+        with mock.patch.object(extract, "http_get", return_value=("Markdown Content:\nx", "", True)) as get:
             extract.jina("https://docsify.js.org/#/quickstart")
         self.assertEqual(get.call_args.args[0], "https://r.jina.ai/https://docsify.js.org/%23/quickstart")
 
@@ -185,7 +216,9 @@ class FakeWeb:
             raise page
         if page is None:
             raise HttpError(404, url)
-        return page, url
+        if isinstance(page, tuple):  # a redirect: (html, final URL[, permanent])
+            return (*page, True)[:3]
+        return page, url, True
 
     def tool(self, name):
         def run(html):
@@ -250,6 +283,65 @@ class TestFallbackOrder(unittest.TestCase):
                          ["fetch", "jina", "wayback+trafilatura", "wayback+defuddle"])
         self.assertEqual(page.attempts[1], "jina: skipped (the page is gone)")
 
+    def test_redirect_to_home_page_is_gone(self):
+        home = "https://example.com/?p=us"
+        web, page = self.run_extract({URL: (self.post, home), **self.archived()})
+        self.assertEqual(web.calls, [URL, WAYBACK_API, SNAPSHOT_RAW])
+        self.assertEqual((page.best.extractor, page.gone, page.final_url), ("wayback+trafilatura", 404, URL))
+        self.assertIn("redirected to the home page", page.attempts[0])
+
+    def test_consent_wall_is_not_the_article(self):
+        wall = "https://consent.yahoo.com/v2/collectConsent?sessionId=1"
+        web, page = self.run_extract({URL: (self.post, wall), JINA: fixture("post.jina.txt"),
+                                      WAYBACK_API: '{"archived_snapshots": {}}'})
+        self.assertEqual(web.calls, [URL, WAYBACK_API, JINA])  # Jina would follow the same redirect
+        self.assertEqual((page.best.extractor, page.gone, page.final_url), ("jina", 0, URL))
+        self.assertIn("consent or login page", page.attempts[0])
+
+    def test_consent_wall_prefers_the_archive(self):
+        wall = "https://a.test/login?next=/post"
+        web, page = self.run_extract({URL: (self.post, wall), **self.archived()})
+        self.assertEqual(web.calls, [URL, WAYBACK_API, SNAPSHOT_RAW])
+        self.assertEqual((page.best.extractor, page.snapshot, page.gone), ("wayback+trafilatura", SNAPSHOT, 0))
+
+    def test_wall(self):
+        for final, wall in [("https://consent.yahoo.com/v2/collectConsent?s=1", True),
+                            ("https://a.test/login?next=/post/1", True), ("https://accounts.b.test/x", True),
+                            ("https://a.test/post/1", False), ("https://a.test/blog/logins-explained", False)]:
+            self.assertEqual(extract.is_wall("https://a.test/post/1", final), wall, final)
+
+    def test_temporary_redirect_is_not_permanent(self):
+        _, page = self.run_extract({URL: (self.post, URL + "?v=2", False)})
+        self.assertFalse(page.permanent)
+        _, page = self.run_extract({URL: self.post})
+        self.assertTrue(page.permanent)
+
+    def test_private_address_never_sent_to_third_parties(self):
+        local = "http://localhost:8080/notes"
+        web = FakeWeb({local: self.spa}, self.extractions)
+        with web.patch(), mock.patch.object(extract, "log"):
+            page = extract.extract(local)
+        self.assertEqual(web.calls, [local])
+        self.assertIn("skipped (a private address", page.attempts[-1])
+        for url, private in [("http://10.0.0.5/x", True), ("http://intranet/x", True), ("http://nas.local/", True),
+                             ("http://[::1]/", True), ("https://8.8.8.8/", False), ("https://a.test/", False)]:
+            self.assertEqual(extract.is_private(url), private, url)
+
+    def test_challenge_page_is_not_saved_as_the_article(self):
+        short = Extraction("Just a moment... checking your browser", extractor="jina")
+        with mock.patch.object(extract, "from_jina", return_value=short):
+            with self.assertRaisesRegex(SkillError, "answered HTTP 403 and no fallback got the article"):
+                self.run_extract({URL: HttpError(403, URL, "<p>Just a moment</p>"), JINA: "x", WAYBACK_API: "{}"})
+
+    def test_soft_404(self):
+        for url, final, soft in [("https://a.test/post/1", "https://b.test/", True),
+                                 ("https://a.test/post/1", "https://a.test", True),
+                                 ("https://a.test/index.html", "https://a.test/", False),
+                                 ("https://a.test/", "https://a.test/", False),
+                                 ("https://a.test/post/1", "https://a.test/?id=1", False),
+                                 ("https://a.test/post/1", "https://a.test/new/post", False)]:
+            self.assertEqual(extract.is_soft_404(url, final), soft, (url, final))
+
     def test_app_shell_404_still_tries_jina(self):
         # a single-page app on GitHub Pages answers 404 (its 404.html) for every deep link
         web, page = self.run_extract({URL: HttpError(404, URL, self.spa), JINA: fixture("post.jina.txt")})
@@ -307,14 +399,45 @@ class TestHttpGet(unittest.TestCase):
 
     def test_charset_from_meta_when_the_header_has_none(self):
         page = '<meta charset="iso-8859-1"><p>Café</p>'.encode("latin-1")
-        with mock.patch.object(extract.urllib.request, "urlopen", return_value=self.response(page, "text/html")):
+        with mock.patch.object(extract, "open_url", return_value=self.response(page, "text/html")):
             self.assertIn("Café", extract.http_get(URL)[0])
 
     def test_pdf_is_not_a_page(self):
-        with mock.patch.object(extract.urllib.request, "urlopen",
-                               return_value=self.response(b"%PDF-1.7", "application/pdf")):
+        with mock.patch.object(extract, "open_url", return_value=self.response(b"%PDF-1.7", "application/pdf")):
             with self.assertRaisesRegex(extract.NotAPage, "application/pdf document"):
                 extract.http_get(URL)
+
+
+class Redirects(BaseHTTPRequestHandler):
+    """/p301 -> /p308 -> /page (both permanent); /temp -> /page (302)."""
+    ROUTES = {"/p301": (301, "/p308"), "/p308": (308, "/page"), "/temp": (302, "/page")}
+
+    def do_GET(self):
+        if self.path in self.ROUTES:
+            code, to = self.ROUTES[self.path]
+            self.send_response(code)
+            self.send_header("Location", to)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"<p>page</p>")
+
+    def log_message(self, *args):
+        pass
+
+
+class TestRedirectLog(unittest.TestCase):
+    def test_permanence_of_the_redirect_chain(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Redirects)  # local only: no network
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_port}"
+        self.assertEqual(extract.http_get(base + "/p301"), ("<p>page</p>", base + "/page", True))
+        self.assertEqual(extract.http_get(base + "/temp")[1:], (base + "/page", False))
+        self.assertEqual(extract.http_get(base + "/page")[1:], (base + "/page", True))
 
 
 if __name__ == "__main__":
