@@ -13,10 +13,13 @@ python3 $S/shared/prepare.py "<url>" [--refresh]
 - The page is fetched once and run through **trafilatura and defuddle**; the better text wins. Under 200 words
   (a JavaScript-only page, a teaser) it tries **Jina Reader** (renders JavaScript), then the latest **Wayback
   Machine** snapshot. The envelope's `extractor` says which one won and `attempts` lists every try.
-- A page that was prepared before is reused by its canonical URL (no `www.`, tracking params or `#fragment`).
-  `--refresh` refetches it into the same folder, e.g. when the user says the article was updated.
-- `snapshot` set means the live page is gone and the text comes from the archive: say so in one line, and the
-  anchor links open the archived copy.
+- A page that was prepared before is reused by its canonical URL (no `www.`, tracking params or `#section`; an
+  app route like `#/guide` is kept). Short links, redirects and the page's declared canonical URL all find the same
+  folder. `--refresh` refetches it into the same folder, e.g. when the user says the article was updated.
+- `snapshot` set means the text comes from the Wayback Machine, and the anchor links open that archived copy. Say
+  which case in one line: `gone` (404/410) set means the live page no longer exists; otherwise the live page was
+  cut off (paywall, JavaScript) and the archive had more.
+- A URL that serves a PDF or another document exits 1 and says so: that is a file input, not a web page.
 
 ## Anchor links
 

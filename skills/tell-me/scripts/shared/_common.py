@@ -177,13 +177,15 @@ def host_slug(url: str | None) -> str:
 
 
 def find_by_id(source: str, id_: str | None, root: Path | None = None) -> Path | None:
-    """Folder of an already-prepared item of this source with the same id (its title may have changed)."""
+    """Folder of an already-prepared item of this source with the same id (its title may have changed), or with
+    that id among its `extras.aliases` (e.g. a web page's short link or pre-redirect URL)."""
     base = source_root(source, root)
     if not id_ or not base.is_dir():
         return None
     for meta in base.rglob("metadata.json"):
         data = read_json(meta)
-        if data.get("id") == id_ and (data.get("source") or "video") == source and data.get("kind") != "digest":
+        known = data.get("id") == id_ or id_ in ((data.get("extras") or {}).get("aliases") or [])
+        if known and (data.get("source") or "video") == source and data.get("kind") != "digest":
             return meta.parent
     return None
 

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Prepare a web page (blog post, article, docs page) for summarizing.
 
-1. route.py's canonical URL is the id: an already-prepared page is reused (--refresh refetches).
+1. route.py's canonical URL is the id: an already-prepared page is reused (--refresh refetches). After the
+   fetch, the page's declared canonical URL and the URL after redirects are ids too (`extras.aliases`), so a
+   short link or a URL variant finds the same folder.
 2. extract.py: trafilatura + defuddle on the fetched HTML, the better one wins; Jina Reader, then the
    Wayback Machine when the page yields under 200 words.
 3. content.md: a header, the description and the article, where every paragraph, list and quote starts
    with an anchor link [¶n](<url>#:~:text=<its first words>) (a text fragment: browsers scroll to and
    highlight that text) and headings get [#](<url>#<id>) when the page gives them an id.
-4. metadata.json: the shared contract fields (extras: description, language, image, attempts, snapshot).
+4. metadata.json: the shared contract fields, `url` the canonical URL (extras: description, language, image,
+   attempts, snapshot, gone, aliases).
 Folder: <root>/articles/<site>/<title>/. Prints the source envelope on stdout.
 
 Usage: prepare.py <url> [--refresh]
@@ -29,7 +32,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _comm
 
 from _common import SkillError, envelope, find_by_id, fmt_date, log, read_json, run_main, unique_dir, update_json
 from extract import extract
-from route import TRACKING_PARAMS, is_route_fragment, route
+from route import clean_query, clean_url, host_of, is_route_fragment, route, route_fragment
 
 LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 FRAGMENT_WORDS = 5  # a text fragment starts with this many words, more when that is not unique
@@ -43,10 +46,8 @@ def page_url(url: str) -> str:
     """The URL as given, minus tracking params (utm_*, fbclid, ...) and the fragment, unless the fragment is a
     single-page app's route (`#/page`): the base of every anchor."""
     parts = urllib.parse.urlsplit(url)
-    query = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
-             if not TRACKING_PARAMS.match(k)]
-    fragment = parts.fragment if is_route_fragment(parts.fragment) else ""
-    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query), fragment=fragment))
+    return urllib.parse.urlunsplit(parts._replace(query=clean_query(parts.query),
+                                                  fragment=route_fragment(parts.fragment)))
 
 
 class HeadingIds(HTMLParser):
@@ -87,7 +88,9 @@ def heading_ids(page_html: str) -> dict[str, str]:
 
 
 def norm(text: str) -> str:
-    return re.sub(r"\s+", " ", html.unescape(text)).strip().lower()
+    """Heading text for matching: letters, digits and single spaces only. Docs generators add a `¶` permalink
+    (Sphinx, MkDocs) or a zero-width space (Docusaurus) inside the heading."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", html.unescape(text))).strip().lower()
 
 
 def blocks(markdown: str) -> list[str]:
@@ -113,13 +116,19 @@ def fragment(words: list[str], base: str = "") -> str:
     return (":~:text=" if "#" in base else "#:~:text=") + urllib.parse.quote(" ".join(words), safe="").replace("-", "%2D")
 
 
+ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")  # a CommonMark backslash escape: \_ \* \[ \. ...
+
+
 def block_words(block: str) -> list[str]:
     """Words of a block as the browser shows them: list and quote markers, link targets, images, backticks
-    and emphasis marks removed (the underscore in snake_case stays: the page shows it)."""
-    text = re.sub(r"^\s*(?:(?:>\s*)+|(?:[-*+]|\d+[.)])\s+)", "", block, flags=re.M)
+    and emphasis marks removed (the underscore in snake_case stays: the page shows it), and backslash escapes
+    (defuddle writes `snake\\_case`, `1\\.`) turned back into their character."""
+    text = ESCAPE_RE.sub(lambda m: f"\ue000{ord(m.group(1)):x}\ue001", block)  # out of the way of the rules below
+    text = re.sub(r"^\s*(?:(?:>\s*)+|(?:[-*+]|\d+[.)])\s+)", "", text, flags=re.M)
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"(?<!\w)[*_]+|[*_]+(?!\w)|`", "", text)
+    text = re.sub(r"\ue000([0-9a-f]+)\ue001", lambda m: chr(int(m.group(1), 16)), text)
     return html.unescape(text).split()
 
 
@@ -135,26 +144,34 @@ def lead(block: str) -> str:
     return "\n".join(out)
 
 
-def anchor(markdown: str, url: str, ids: dict[str, str] | None = None) -> str:
-    """Add [¶n](url#:~:text=...) to every paragraph/list/quote and [#](url#id) to headings with a known id."""
+def anchor(markdown: str, url: str, ids: dict[str, str] | None = None, preamble: str = "") -> str:
+    """Add [¶n](url#:~:text=...) to every paragraph/list/quote and [#](url#id) to headings with a known id.
+
+    A browser jumps to the first match anywhere on the page, ignoring case, so a fragment grows (up to
+    MAX_FRAGMENT_WORDS) until its first match in the page text (`preamble`, e.g. the title, then every block)
+    is its own paragraph."""
     base = page_url(url)
     ids = {} if "#" in base else ids or {}  # an #id would replace the app route
     parts = blocks(markdown)
     words = [block_words(lead(b)) if kind(b) == "text" else [] for b in parts]
+    page, starts = " " + " ".join(preamble.split()).lower(), []
+    for b in parts:
+        starts.append(len(page) + 1)
+        page += " " + " ".join(block_words(b) if kind(b) != "code" else b.split()).lower()
     out, n = [], 0
     for i, block in enumerate(parts):
         k = kind(block)
         if k == "heading":
             hid = ids.get(norm(" ".join(block_words(block.lstrip("#")))))
-            out.append(f"{block} [#]({base}#{hid})" if hid else block)
+            out.append(f"{block} [#]({base}#{quote_id(hid)})" if hid else block)
             continue
         if k != "text" or not words[i]:
             out.append(block)
             continue
         n += 1
-        count = FRAGMENT_WORDS
-        while count < min(MAX_FRAGMENT_WORDS, len(words[i])) and any(
-                j != i and w[:count] == words[i][:count] for j, w in enumerate(words) if w):
+        count = min(FRAGMENT_WORDS, len(words[i]))
+        while count < min(MAX_FRAGMENT_WORDS, len(words[i])) and \
+                page.find(" " + " ".join(words[i][:count]).lower()) + 1 != starts[i]:
             count += 1
         link = f"[¶{n}]({base}{fragment(words[i][:count], base)})"
         first, _, rest = block.partition("\n")
@@ -162,6 +179,12 @@ def anchor(markdown: str, url: str, ids: dict[str, str] | None = None) -> str:
         first = f"{m.group(1)}{link} {first[m.end():]}" if m else f"{link} {first}"
         out.append(first + ("\n" + rest if rest else ""))
     return "\n\n".join(out)
+
+
+def quote_id(hid: str) -> str:
+    """A heading id from the page, percent-encoded for a URL fragment inside a markdown link (spaces and
+    parentheses too: they would end the link)."""
+    return urllib.parse.quote(hid, safe="-._~!$&'*+,;=:@/?")
 
 
 def kind(block: str) -> str:
@@ -194,6 +217,19 @@ def render_content(meta: dict, extras: dict, body: str) -> str:
     return "\n".join(rows)
 
 
+def canonical_url(url: str, final_url: str, declared: str | None) -> str:
+    """The page's own URL: its declared canonical/og:url when that is on the same site (and not the homepage for
+    an article), else the URL after redirects. An app route (`#/page`) is kept: both of those drop it."""
+    if is_route_fragment(urllib.parse.urlsplit(url).fragment):
+        return page_url(url)
+    final = urllib.parse.urlsplit(final_url)
+    if declared and re.match(r"https?://", declared):
+        d = urllib.parse.urlsplit(declared)
+        if host_of(declared) == host_of(final_url) and (d.path.strip("/") or not final.path.strip("/")):
+            return page_url(declared)
+    return page_url(final_url)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url")
@@ -209,15 +245,29 @@ def main(argv=None) -> int:
         meta = read_json(existing / "metadata.json")
         return print_envelope(existing, meta, reused=True)
 
-    url = page_url(r["url"])
-    best, attempts, snapshot = extract(url)
-    m = best.meta
+    page = extract(page_url(r["url"]))
+    best, m = page.best, page.best.meta
+    url = canonical_url(r["url"], page.final_url, m.get("url"))
+    # the same page reached by a short link, a redirect or a URL variant: one folder, known by every id
+    ids = list(dict.fromkeys([clean_url(url), r["id"], clean_url(page_url(page.final_url))]))
+    for other in ids[1:]:
+        existing = existing or find_by_id("web", other)
+    if existing and (existing / "content.md").exists() and not args.refresh:
+        log(f"reusing: {existing}, the same page as {args.url} (pass --refresh to refetch)")
+        old = read_json(existing / "metadata.json")
+        extras = (old.get("extras") or {}) | {"aliases": aliases_of(old, old.get("id"), ids)}
+        meta = update_json(existing / "metadata.json", {"extras": extras})
+        return print_envelope(existing, meta, reused=True)
+    old = read_json(existing / "metadata.json") if existing else {}
+    id_ = old.get("id") or ids[0]
+
     title = m.get("title") or urllib.parse.urlsplit(url).path.strip("/").split("/")[-1] or url
     host = urllib.parse.urlsplit(url).hostname or ""
     extras = {k: v for k, v in {"description": m.get("description"), "language": m.get("language"),
-                                "image": m.get("image"), "attempts": attempts, "snapshot": snapshot}.items() if v}
+                                "image": m.get("image"), "attempts": page.attempts, "snapshot": page.snapshot,
+                                "gone": page.gone, "aliases": aliases_of(old, id_, ids)}.items() if v}
     meta = {
-        "source": "web", "id": r["id"], "url": url, "title": title, "author": m.get("author"),
+        "source": "web", "id": id_, "url": url, "title": title, "author": m.get("author"),
         "published": fmt_date(m.get("published")), "fetched": datetime.now().isoformat(timespec="seconds"),
         "site": m.get("site") or re.sub(r"^www\.", "", host), "word_count": best.words, "duration": None,
         "extractor": best.extractor, "content_file": "content.md", "extras": extras,
@@ -225,19 +275,25 @@ def main(argv=None) -> int:
     folder = existing or unique_dir(meta)
     folder.mkdir(parents=True, exist_ok=True)
     log(f"{'refreshing' if existing else 'folder'}: {folder}")
-    # text from an archived copy: the live page is gone, so the anchors open the snapshot
-    body = anchor(best.markdown, snapshot or url, heading_ids(best.html) if best.html else {})
+    # text from an archived copy: the anchors open the snapshot (the live page is gone or cut off)
+    body = anchor(best.markdown, page.snapshot or url, heading_ids(best.html) if best.html else {}, preamble=title)
     (folder / "content.md").write_text(render_content(meta, extras, body), encoding="utf-8")
-    old = read_json(folder / "metadata.json")
     meta = update_json(folder / "metadata.json", meta | {"prepared_at": old.get("prepared_at") or meta["fetched"]})
     return print_envelope(folder, meta, reused=bool(existing))
+
+
+def aliases_of(old: dict, id_: str | None, ids: list[str]) -> list[str]:
+    """The other ids this page is known by (find_by_id matches them too): the earlier ones plus these."""
+    known = list((old.get("extras") or {}).get("aliases") or []) + ids
+    return [i for i in dict.fromkeys(known) if i != id_]
 
 
 def print_envelope(folder: Path, meta: dict, reused: bool) -> int:
     extras = meta.get("extras") or {}
     print(json.dumps(envelope(folder, meta, "page", reused=reused, site=meta.get("site"),
                               words=meta.get("word_count"), extractor=meta.get("extractor"),
-                              snapshot=extras.get("snapshot"), attempts=extras.get("attempts")),
+                              snapshot=extras.get("snapshot"), gone=extras.get("gone"),
+                              attempts=extras.get("attempts")),
                      indent=2, ensure_ascii=False))
     return 0
 

@@ -18,8 +18,9 @@ BODY = """**TL;DR:** x ([00:44](https://www.youtube.com/watch?v=abc&t=44s))
 class TestCheckLinks(unittest.TestCase):
     def test_extract_skips_article_anchor_links(self):
         body = ("- point ([¶3](https://blog.dev/p#:~:text=some%20words), [¶4](https://blog.dev/p#:~:text=x))\n"
-                "- section [#](https://blog.dev/p#setup) and [the docs](https://docs.dev/#setup)")
-        self.assertEqual(extract_links(body), ["https://docs.dev/#setup"])
+                "- section [#](https://blog.dev/p#setup) and [the docs](https://docs.dev/#setup)\n"
+                "- [a quote elsewhere](https://other.dev/a#:~:text=foo)")
+        self.assertEqual(extract_links(body), ["https://docs.dev/#setup", "https://other.dev/a#:~:text=foo"])
 
     def test_extract_skips_video_timestamps_and_dedupes(self):
         self.assertEqual(extract_links(BODY), [

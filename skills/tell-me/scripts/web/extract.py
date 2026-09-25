@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Extract the main text of a web page as markdown + metadata, with the best extractor available.
 
-1. Fetch the HTML once (urllib, browser user agent).
+1. Fetch the HTML once (urllib, browser user agent; a PDF or other document is refused: that's the file source).
 2. Run trafilatura (`uvx trafilatura --markdown --with-metadata`) and defuddle (`npx -y defuddle parse --markdown
-   --json`) on it in parallel; score both (main-content words minus boilerplate lines) and keep the better text.
-   Metadata is merged: defuddle (schema.org) first, trafilatura fills the gaps.
+   --json`), both pinned, on it in parallel; score both (content words, code included, minus boilerplate) and keep
+   the better text. Metadata is merged: defuddle (schema.org) first, trafilatura fills the gaps.
 3. Under MIN_WORDS words (a JS-rendered page, a paywall teaser) or when the fetch fails: Jina Reader
-   (`r.jina.ai/<url>`, renders JavaScript), then the latest Wayback Machine snapshot (extractors again).
-Every step is logged to stderr; when all fail the error lists what was tried.
+   (`r.jina.ai/<url>`, renders JavaScript), then the latest Wayback Machine snapshot (extractors again). A page
+   that is gone (404/410) skips Jina, and fails when the archive has no copy either.
+Links other than http(s)/mailto are reduced to their text. Every step is logged to stderr; when all fail the
+error lists what was tried.
 
-Usage: extract.py <url>   (prints {markdown, meta, extractor, attempts} as JSON; prepare.py imports extract())
+Usage: extract.py <url>   (prints {markdown, meta, extractor, words, attempts, final_url, snapshot, gone} as JSON;
+prepare.py imports extract())
 Requires: uvx, npx.
 """
 from __future__ import annotations
@@ -49,12 +52,21 @@ LINK_DENSITY = 0.6  # a block whose words are at least this share link text (wit
 
 
 GONE = (404, 410)  # the page no longer exists: only an archived copy can help
+MAX_BYTES = 10 * 1024 * 1024  # read at most this much of a page
+TEXT_TYPE_RE = re.compile(r"^(text/|application/(xhtml\+xml|xml|json|.*\+xml$))")
+# Extractor versions, pinned: they parse untrusted pages, and a new release may change their output format.
+TRAFILATURA = "trafilatura==2.2.0"
+DEFUDDLE = "defuddle@0.19.4"
 
 
 class HttpError(SkillError):
-    def __init__(self, code: int, url: str):
+    def __init__(self, code: int, url: str, body: str = ""):
         super().__init__(f"HTTP {code} from {url}")
-        self.code = code
+        self.code, self.body = code, body
+
+
+class NotAPage(SkillError):
+    """The URL serves a document (PDF, image, ...): no extractor or fallback can help."""
 
 
 @dataclass
@@ -73,8 +85,9 @@ class Extraction:
 
 
 def plain_text(markdown: str) -> str:
-    """Markdown -> text: link/image targets, code fences, emphasis and heading marks removed."""
-    text = re.sub(r"```.*?```", " ", markdown, flags=re.S)
+    """Markdown -> text: fence lines, images, link targets, emphasis and heading marks removed. Code inside
+    fences stays: a snippet is content (a tutorial may be mostly code)."""
+    text = re.sub(r"^\s*(?:>\s*)*```.*$", " ", markdown, flags=re.M)
     text = re.sub(r"!\[([^\]]*)\]\([^)]*\)", " ", text)
     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"[*_`#>|]+", " ", text)
@@ -95,10 +108,10 @@ def is_boilerplate(block: str) -> bool:
 
 
 def score(markdown: str) -> int:
-    """Content words (code included: a fenced snippet is content) minus the words of boilerplate blocks
-    (counted twice: they also inflated the total). A section under a furniture heading ("More recent
-    articles") is boilerplate as a whole."""
-    total = len(re.findall(r"\w+", plain_text(re.sub(r"^\s*(?:>\s*)*```.*$", "", markdown, flags=re.M))))
+    """Content words (code included) minus the words of boilerplate blocks (counted twice: they also
+    inflated the total). A section under a furniture heading ("More recent articles") is boilerplate as a
+    whole."""
+    total = word_count(markdown)
     boiler, in_furniture = 0, False
     for block in re.split(r"\n\s*\n", markdown):
         heading = re.match(r"#{1,6}\s+(.*)", block.strip())
@@ -135,14 +148,20 @@ def from_trafilatura(output: str) -> Extraction:
     }, "trafilatura")
 
 
+def iso_day(value) -> str | None:
+    """YYYY-MM-DD of an ISO date/time, else None. defuddle passes dates on as the page writes them ("March 5,
+    2024"): those are left to trafilatura, which normalizes them."""
+    m = re.match(r"(\d{4}-\d{2}-\d{2})", str(value or ""))
+    return m.group(1) if m else None
+
+
 def from_defuddle(output: str) -> Extraction:
     data = json.loads(output)
     schema = data.get("schemaOrgData") or []
     schema = schema[0] if isinstance(schema, list) and schema else schema if isinstance(schema, dict) else {}
-    published = data.get("published") or schema.get("datePublished")
     return Extraction((data.get("content") or "").strip(), {
         "title": data.get("title") or schema.get("headline"), "author": data.get("author"),
-        "published": published[:10] if published else None, "site": data.get("site") or data.get("domain"),
+        "published": iso_day(data.get("published")) or iso_day(schema.get("datePublished")), "site": data.get("site") or data.get("domain"),
         "description": data.get("description"), "language": data.get("language"), "image": data.get("image"),
     }, "defuddle")
 
@@ -177,11 +196,12 @@ def pick(candidates: list[Extraction]) -> Extraction | None:
     return Extraction(best.markdown, merge_meta(*(c.meta for c in order)), best.extractor)
 
 
-def strip_data_links(markdown: str) -> str:
-    """`[text](data:...)` -> `text`: an inline file (a "Download" button) is not a link a reader can follow, and its
-    payload may hold spaces and parentheses. The target ends at its balanced `)`, else at the end of the line."""
+def strip_unsafe_links(markdown: str) -> str:
+    """`[text](<scheme>:...)` -> `text` for every scheme but http(s) and mailto: an inline file (a "Download"
+    button's data: URL) is not a link a reader can follow, and javascript: must never reach a page. The target
+    may hold spaces and parentheses: it ends at its balanced `)`, else at the end of the line."""
     out, pos = [], 0
-    for m in re.finditer(r"\[([^\]]*)\]\(data:", markdown):
+    for m in re.finditer(r"!?\[([^\]]*)\]\(\s*(?!(?:https?|mailto):)[a-z][a-z0-9+.-]*:", markdown, re.I):
         if m.start() < pos:
             continue
         depth, end = 1, m.end()
@@ -194,11 +214,11 @@ def strip_data_links(markdown: str) -> str:
 
 
 def normalize(markdown: str) -> str:
-    """Data links reduced to their text, a blank line before every heading (Jina and some extractors glue it to the
+    """Non-web links (data:, javascript:) reduced to their text, a blank line before every heading (Jina and some extractors glue it to the
     line above, which would merge two blocks), at most one blank line in a row; fenced code is left alone."""
     out: list[str] = []
     fence = False
-    for line in strip_data_links(markdown).splitlines():
+    for line in strip_unsafe_links(markdown).splitlines():
         if line.lstrip(" >").startswith("```"):
             fence = not fence
         elif not fence and re.match(r"#{1,6}\s", line) and out and out[-1].strip():
@@ -210,10 +230,10 @@ def normalize(markdown: str) -> str:
 
 
 def absolutize(markdown: str, base: str) -> str:
-    """Relative link and image targets -> absolute URLs."""
+    """Relative link and image targets (and `#section`) -> absolute URLs."""
     def fix(m: re.Match) -> str:
         target = m.group(2)
-        if re.match(r"^([a-z][a-z0-9+.-]*:|#)", target, re.I):
+        if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.I):
             return m.group(0)
         return f"{m.group(1)}({urllib.parse.urljoin(base, target)})"
     return re.sub(r"(!?\[[^\]]*\])\(([^)\s]+)\)", fix, markdown)
@@ -222,17 +242,34 @@ def absolutize(markdown: str, base: str) -> str:
 # ---------------------------------------------------------------- side effects
 
 
+def decode(data: bytes, header_charset: str | None) -> str:
+    """Bytes -> text with the HTTP header's charset, else the page's own <meta charset>, else UTF-8."""
+    charset = header_charset
+    if not charset:
+        m = re.search(rb"<meta[^>]+charset=[\"']?([\w-]+)", data[:4096], re.I)
+        charset = m.group(1).decode("ascii") if m else "utf-8"
+    try:
+        return data.decode(charset, errors="replace")
+    except LookupError:  # an unknown charset name
+        return data.decode("utf-8", errors="replace")
+
+
 def http_get(url: str, timeout: int = TIMEOUT, accept: str = "text/html,*/*",
              headers: dict | None = None) -> tuple[str, str]:
-    """(body, final URL). Raises SkillError with the HTTP status or network error."""
+    """(body, final URL). Raises HttpError with the status (and the error page), NotAPage for a PDF or another
+    non-text document, SkillError for a network error."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept,
                                                "Accept-Language": "en;q=0.9,*;q=0.5"} | (headers or {}))
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            charset = r.headers.get_content_charset() or "utf-8"
-            return r.read().decode(charset, errors="replace"), r.geturl()
+            ctype = r.headers.get_content_type()
+            if not TEXT_TYPE_RE.match(ctype):
+                raise NotAPage(f"{url} is a {ctype} document, not a web page: summarize it as a file "
+                               f"(download it and pass the path)")
+            return decode(r.read(MAX_BYTES), r.headers.get_content_charset()), r.geturl()
     except urllib.error.HTTPError as e:
-        raise HttpError(e.code, url)
+        body = decode(e.read(MAX_BYTES), e.headers.get_content_charset() if e.headers else None)
+        raise HttpError(e.code, url, body)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise SkillError(f"could not fetch {url}: {getattr(e, 'reason', e)}")
 
@@ -249,12 +286,12 @@ def run_tool(name: str, cmd: list[str], stdin: str | None = None) -> str:
 
 
 def trafilatura(html: str) -> Extraction:
-    return from_trafilatura(run_tool("trafilatura", ["uvx", "trafilatura", "--markdown", "--with-metadata",
+    return from_trafilatura(run_tool("trafilatura", ["uvx", TRAFILATURA, "--markdown", "--with-metadata",
                                                      "--formatting", "--links", "--no-comments"], stdin=html))
 
 
 def defuddle(html: str) -> Extraction:
-    return from_defuddle(run_tool("defuddle", ["npx", "-y", "defuddle", "parse", "-", "--markdown", "--json"],
+    return from_defuddle(run_tool("defuddle", ["npx", "-y", DEFUDDLE, "parse", "-", "--markdown", "--json"],
                                   stdin=html))
 
 
@@ -293,7 +330,9 @@ def wayback_snapshot(url: str) -> str | None:
         snap = (json.loads(body).get("archived_snapshots") or {}).get("closest") or {}
     except json.JSONDecodeError:
         raise SkillError("the Wayback Machine answered with something that is not JSON")
-    return re.sub(r"^http:", "https:", snap["url"]) if snap.get("available") and snap.get("url") else None
+    if not (snap.get("available") and snap.get("url") and str(snap.get("status", "200")).startswith("2")):
+        return None  # none, or an archived error page / redirect
+    return re.sub(r"^http:", "https:", snap["url"])
 
 
 def raw_snapshot(snapshot: str) -> str:
@@ -301,23 +340,42 @@ def raw_snapshot(snapshot: str) -> str:
     return re.sub(r"(/web/\d+)(/)", r"\1id_\2", snapshot, count=1)
 
 
-def extract(url: str) -> tuple[Extraction, list[str], str | None]:
-    """(best extraction, attempts log, wayback snapshot URL or None). SkillError when nothing worked."""
+@dataclass
+class Page:
+    best: Extraction
+    attempts: list[str]
+    final_url: str  # after redirects
+    snapshot: str | None = None  # the Wayback copy the text came from
+    gone: int = 0  # 404/410: the live page no longer exists
+
+
+def is_app_shell(html: str) -> bool:
+    """A near-empty page that loads scripts: a single-page app. Such a site may answer 404 for every deep link
+    (GitHub Pages' 404.html fallback) and still render the page in a browser."""
+    text = re.sub(r"<(script|style)\b.*?</\1>|<[^>]+>", " ", html, flags=re.S | re.I)
+    return bool(re.search(r"<script\b", html, re.I)) and len(text.split()) < 50
+
+
+def extract(url: str) -> Page:
+    """The best text of the page, with the attempts log. SkillError when nothing worked."""
     require("uvx", "npx")
     attempts: list[str] = []
     best = None
     final_url = url
-    gone = 0  # the HTTP status when the page no longer exists
+    gone = 0
     try:
         html, final_url = http_get(url)
         log(f"fetched {final_url} ({len(html) // 1024} KB); running trafilatura + defuddle")
         best = extract_html(html, final_url, attempts)
+    except NotAPage:
+        raise
     except SkillError as e:
         attempts.append(f"fetch: {e}")
-        gone = e.code if isinstance(e, HttpError) and e.code in GONE else 0
+        if isinstance(e, HttpError) and e.code in GONE and not is_app_shell(e.body):
+            gone = e.code
     if best and best.words >= MIN_WORDS:
         log(f"{'; '.join(attempts)} -> using {best.extractor}")
-        return best, attempts, None
+        return Page(best, attempts, final_url)
 
     if gone:  # Jina would only render the error page
         attempts.append("jina: skipped (the page is gone)")
@@ -330,7 +388,7 @@ def extract(url: str) -> tuple[Extraction, list[str], str | None]:
             if rendered.words >= MIN_WORDS:
                 rendered.meta = merge_meta(best.meta if best else {}, rendered.meta)
                 log(f"{attempts[-1]} -> using jina")
-                return rendered, attempts, None
+                return Page(rendered, attempts, final_url)
             best = best if best and best.words >= rendered.words else rendered
         except SkillError as e:
             attempts.append(f"jina: failed ({e})")
@@ -349,23 +407,26 @@ def extract(url: str) -> tuple[Extraction, list[str], str | None]:
     except SkillError as e:
         attempts.append(f"wayback: failed ({e})")
     log("; ".join(attempts))
-    if gone and not (best and best.extractor.startswith("wayback+")):
+    archived = bool(best and best.extractor.startswith("wayback+"))
+    if gone and not archived:
         raise SkillError(f"{url} is gone (HTTP {gone}) and the Wayback Machine has no usable copy. Tried: "
                          + "; ".join(attempts[1:]))
     if not best or not best.words:
         raise SkillError(f"no text could be extracted from {url}. Tried: " + "; ".join(attempts))
     if best.words < MIN_WORDS:
         log(f"only {best.words} words: paywall, login wall or a mostly-visual page")
-    return best, attempts, snapshot if best.extractor.startswith("wayback+") else None
+    return Page(best, attempts, final_url, snapshot if archived else None, gone)
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url")
     args = ap.parse_args(argv)
-    best, attempts, snapshot = extract(args.url)
+    page = extract(args.url)
+    best = page.best
     print(json.dumps({"markdown": best.markdown, "meta": best.meta, "extractor": best.extractor, "words": best.words,
-                      "attempts": attempts, "snapshot": snapshot}, indent=2, ensure_ascii=False))
+                      "attempts": page.attempts, "final_url": page.final_url, "snapshot": page.snapshot,
+                      "gone": page.gone or None}, indent=2, ensure_ascii=False))
     return 0
 
 

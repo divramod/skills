@@ -26,6 +26,13 @@ class TestInline(unittest.TestCase):
         self.assertEqual(inline("[a](https://x.io/p_q)"), '<a href="https://x.io/p_q" target="_blank" rel="noopener">a</a>')
         self.assertIn('<a href="https://typesafe.ai" target="_blank" rel="noopener">https://typesafe.ai</a>.', inline("see https://typesafe.ai."))
 
+    def test_script_urls_are_neutralized(self):
+        for url in ("javascript:alert(1)", "JavaScript:x", "vbscript:x", "data:text/html,<script>x</script>"):
+            with self.subTest(url):
+                self.assertIn('href="#"', inline(f"[x]({url.replace(' ', '')})"))
+        self.assertIn('src="data:image/png;base64,AAA"', inline("![i](data:image/png;base64,AAA)"))
+        self.assertIn('href="https://ok.dev"', inline("[x](https://ok.dev)"))
+
     def test_link_with_parentheses(self):
         self.assertIn('href="https://en.wikipedia.org/wiki/LoRA_(machine_learning)" target="_blank" rel="noopener">LoRA</a>)',
                       inline("[LoRA](https://en.wikipedia.org/wiki/LoRA_(machine_learning)))"))

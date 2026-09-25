@@ -45,7 +45,14 @@ def split_frontmatter(text: str) -> tuple[dict, str]:
     return meta, text[m.end():]
 
 
+_UNSAFE_URL_RE = re.compile(r"^(javascript|vbscript|data(?!:image/(png|jpe?g|gif|webp|avif)[;,])):", re.I)
+
+
 def _url_attr(url: str, base: str) -> str:
+    """href/src value: relative targets resolved against base; script URLs (javascript:, vbscript:, non-image
+    data:) from untrusted page content become a dead "#"."""
+    if _UNSAFE_URL_RE.match(re.sub(r"[\x00-\x20]+", "", url)):
+        return "#"
     if base and not re.match(r"^([a-z][a-z0-9+.-]*:|/|#)", url, re.I):
         url = base + url
     return html.escape(url, quote=True)

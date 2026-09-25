@@ -75,19 +75,34 @@ def host_matches(host: str, path: str, patterns) -> bool:
 
 
 def is_route_fragment(fragment: str) -> bool:
-    """`#/page` or `#!/page`: a single-page app's route (docsify, old Angular), part of the page's identity."""
-    return bool(re.match(r"!?/", fragment))
+    """`#/page` or `#!/page`: a single-page app's route (docsify, old Angular), part of the page's identity.
+    A bare `#/` or `#!/` is the app's home: the same page as no fragment."""
+    return bool(re.match(r"!?/.", fragment))
+
+
+def clean_query(query: str) -> str:
+    """A query string without tracking params (utm_*, fbclid, ...)."""
+    pairs = [(k, v) for k, vs in parse_qs(query, keep_blank_values=True).items() if not TRACKING_PARAMS.match(k)
+             for v in vs]
+    return urlencode(pairs)
+
+
+def route_fragment(fragment: str) -> str:
+    """An app route with its own query cleaned (`#/page?utm_source=x` -> `#/page`), else ""."""
+    if not is_route_fragment(fragment):
+        return ""
+    path, sep, query = fragment.partition("?")
+    query = clean_query(query)
+    return path + ("?" + query if query else "")
 
 
 def clean_url(url: str) -> str:
     """Canonical form for dedupe: https, lowercase host without www., no tracking params, no fragment unless it
     is a route (`#/page`)."""
     parts = urlsplit(url)
-    query = [(k, v) for k, v in parse_qs(parts.query, keep_blank_values=True).items() if not TRACKING_PARAMS.match(k)]
-    q = urlencode([(k, x) for k, vs in query for x in vs])
     path = parts.path if parts.path not in ("", "/") else "/"
     return urlunsplit(("https" if parts.scheme in ("http", "https") else parts.scheme, host_of(url) + (
-        f":{parts.port}" if parts.port else ""), path, q, parts.fragment if is_route_fragment(parts.fragment) else ""))
+        f":{parts.port}" if parts.port else ""), path, clean_query(parts.query), route_fragment(parts.fragment)))
 
 
 # ---------------------------------------------------------------- per source

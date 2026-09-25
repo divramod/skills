@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for web/extract.py (offline: recorded fixtures, network and tools mocked)."""
+import email.message
+import json
 import subprocess
 import sys
 import unittest
@@ -52,6 +54,12 @@ class TestParsers(unittest.TestCase):
         self.assertIsNone(ex.meta["published"], "empty published stays empty")
         self.assertIn("```", ex.markdown)
 
+    def test_defuddle_date_as_written_is_left_to_trafilatura(self):
+        ex = from_defuddle('{"content": "x", "published": "March 5, 2024"}')
+        self.assertIsNone(ex.meta["published"])
+        merged = pick([ex, from_trafilatura('---\ndate: 2024-03-05\n---\nx')])
+        self.assertEqual(merged.meta["published"], "2024-03-05")
+
     def test_defuddle_schema_org_date_is_cut_to_day(self):
         ex = from_defuddle('{"content": "x", "schemaOrgData": {"datePublished": "2025-01-02T10:00:00Z", '
                            '"headline": "H"}}')
@@ -69,15 +77,18 @@ class TestParsers(unittest.TestCase):
 
 class TestScoring(unittest.TestCase):
     def test_defuddle_wins_on_the_recorded_post(self):
-        # trafilatura has more prose words, but flattens code into prose and keeps "More recent articles"
+        # trafilatura flattens code into prose and keeps the "More recent articles" link list
         t, d = traf(), defu()
-        self.assertGreater(t.words, d.words)
+        self.assertIn("## More recent articles", t.markdown)
         self.assertGreater(score(d.markdown), score(t.markdown))
         self.assertEqual(pick([t, d]).extractor, "defuddle")
 
     def test_code_counts_as_content(self):
         prose = "one two three"
         self.assertGreater(score(prose + "\n\n```\nfour five six\n```"), score(prose))
+        # a mostly-code tutorial is not "under MIN_WORDS": words and score count the same text
+        tutorial = Extraction("Intro.\n\n```python\n" + "x = compute(value)\n" * 100 + "```")
+        self.assertEqual(tutorial.words, 301)
 
     def test_link_list_is_boilerplate(self):
         self.assertTrue(is_boilerplate("- [First post title](https://a/1)\n- [Second post title](https://a/2)"))
@@ -108,13 +119,17 @@ class TestAbsolutize(unittest.TestCase):
     def test_relative_targets(self):
         md = "[a](/x) ![i](img.png) [b](https://o/y) [c](#frag) [d](mailto:m@x)"
         self.assertEqual(absolutize(md, "https://h.com/blog/post"),
-                         "[a](https://h.com/x) ![i](https://h.com/blog/img.png) [b](https://o/y) [c](#frag) "
-                         "[d](mailto:m@x)")
+                         "[a](https://h.com/x) ![i](https://h.com/blog/img.png) [b](https://o/y) "
+                         "[c](https://h.com/blog/post#frag) [d](mailto:m@x)")
 
 
 class TestNormalize(unittest.TestCase):
     def test_heading_gets_its_own_block(self):
         self.assertEqual(normalize("`cmd`\n## Next\ntext\n\n\n\nmore  "), "`cmd`\n\n## Next\ntext\n\nmore")
+
+    def test_script_links_become_text(self):
+        self.assertEqual(normalize("[click](javascript:alert(document.cookie)) ![i](vbscript:x) [m](mailto:a@b.c)"),
+                         "click i [m](mailto:a@b.c)")
 
     def test_data_links_become_text(self):
         self.assertEqual(normalize("[Download](data:text/plain,<a href=x>(1)</a> more) and [b](https://b)"),
@@ -198,53 +213,72 @@ class TestFallbackOrder(unittest.TestCase):
                             ("trafilatura", self.spa): Extraction("App", extractor="trafilatura"),
                             ("defuddle", self.spa): SkillError("no content")}
 
-    def run_extract(self, pages):
+    def run_extract(self, pages) -> tuple[FakeWeb, extract.Page]:
         web = FakeWeb(pages, self.extractions)
         with web.patch(), mock.patch.object(extract, "log"):
-            result = extract.extract(URL)
-        return web, result
+            return web, extract.extract(URL)
 
-    def test_normal_post_uses_the_best_extractor_only(self):
-        web, (best, attempts, snapshot) = self.run_extract({URL: self.post})
-        self.assertEqual(best.extractor, "defuddle")
-        self.assertEqual(web.calls, [URL])
-        self.assertEqual([a.split(":")[0] for a in attempts], ["trafilatura", "defuddle"])
-        self.assertIsNone(snapshot)
-        self.assertEqual(best.html, self.post)
-
-    def test_js_page_falls_back_to_jina(self):
-        web, (best, attempts, snapshot) = self.run_extract({URL: self.spa, JINA: fixture("post.jina.txt")})
-        self.assertEqual(best.extractor, "jina")
-        self.assertEqual(web.headers[JINA]["User-Agent"], "tell-me")  # Jina answers 403 to browser agents
-        self.assertEqual(web.calls, [URL, JINA])
-        self.assertEqual(attempts, ["trafilatura: 1 words", "defuddle: failed (no content)", "jina: 846 words"])
-        self.assertEqual(best.meta["title"], TITLE)
-
-    def archived(self):
+    def archived(self, status="200"):
         self.extractions[("trafilatura", "archived")] = traf()
         self.extractions[("defuddle", "archived")] = SkillError("timeout")
         # the API answers http://; the raw copy (id_) has no Wayback toolbar
-        return {WAYBACK_API: '{"archived_snapshots": {"closest": {"available": true, "url": "%s"}}}'
-                             % SNAPSHOT.replace("https://web", "http://web"), SNAPSHOT_RAW: "archived"}
+        snap = {"available": True, "url": SNAPSHOT.replace("https://web", "http://web"), "status": status}
+        return {WAYBACK_API: json.dumps({"archived_snapshots": {"closest": snap}}), SNAPSHOT_RAW: "archived"}
+
+    def test_normal_post_uses_the_best_extractor_only(self):
+        web, page = self.run_extract({URL: self.post})
+        self.assertEqual(page.best.extractor, "defuddle")
+        self.assertEqual(web.calls, [URL])
+        self.assertEqual([a.split(":")[0] for a in page.attempts], ["trafilatura", "defuddle"])
+        self.assertEqual((page.snapshot, page.gone, page.final_url), (None, 0, URL))
+        self.assertEqual(page.best.html, self.post)
+
+    def test_js_page_falls_back_to_jina(self):
+        web, page = self.run_extract({URL: self.spa, JINA: fixture("post.jina.txt")})
+        self.assertEqual(page.best.extractor, "jina")
+        self.assertEqual(web.headers[JINA]["User-Agent"], "tell-me")  # Jina answers 403 to browser agents
+        self.assertEqual(web.calls, [URL, JINA])
+        self.assertEqual(page.attempts, ["trafilatura: 1 words", "defuddle: failed (no content)", "jina: 846 words"])
+        self.assertEqual(page.best.meta["title"], TITLE)
 
     def test_gone_page_skips_jina_and_uses_wayback(self):
-        web, (best, attempts, snapshot) = self.run_extract({URL: HttpError(404, URL), **self.archived()})
+        web, page = self.run_extract({URL: HttpError(404, URL, "<h1>Not found</h1>"), **self.archived()})
         self.assertEqual(web.calls, [URL, WAYBACK_API, SNAPSHOT_RAW])
-        self.assertEqual(best.extractor, "wayback+trafilatura")
-        self.assertEqual(snapshot, SNAPSHOT)
-        self.assertEqual([a.split(":")[0] for a in attempts],
+        self.assertEqual(page.best.extractor, "wayback+trafilatura")
+        self.assertEqual((page.snapshot, page.gone), (SNAPSHOT, 404))
+        self.assertEqual([a.split(":")[0] for a in page.attempts],
                          ["fetch", "jina", "wayback+trafilatura", "wayback+defuddle"])
-        self.assertEqual(attempts[1], "jina: skipped (the page is gone)")
+        self.assertEqual(page.attempts[1], "jina: skipped (the page is gone)")
+
+    def test_app_shell_404_still_tries_jina(self):
+        # a single-page app on GitHub Pages answers 404 (its 404.html) for every deep link
+        web, page = self.run_extract({URL: HttpError(404, URL, self.spa), JINA: fixture("post.jina.txt")})
+        self.assertEqual(web.calls, [URL, JINA])
+        self.assertEqual((page.best.extractor, page.gone), ("jina", 0))
+
+    def test_cut_off_live_page_uses_the_archive_but_is_not_gone(self):
+        short = Extraction("only a teaser", extractor="jina")
+        with mock.patch.object(extract, "from_jina", return_value=short):
+            _, page = self.run_extract({URL: self.spa, JINA: "x", **self.archived()})
+        self.assertEqual((page.best.extractor, page.snapshot, page.gone), ("wayback+trafilatura", SNAPSHOT, 0))
 
     def test_unreachable_page_tries_jina_then_wayback(self):
-        web, (best, _, _) = self.run_extract({URL: SkillError("could not fetch"),
-                                              JINA: HttpError(451, JINA), **self.archived()})
+        web, page = self.run_extract({URL: SkillError("could not fetch"), JINA: HttpError(451, JINA),
+                                      **self.archived()})
         self.assertEqual(web.calls, [URL, JINA, WAYBACK_API, SNAPSHOT_RAW])
-        self.assertEqual(best.extractor, "wayback+trafilatura")
+        self.assertEqual(page.best.extractor, "wayback+trafilatura")
+
+    def test_archived_error_page_is_not_a_copy(self):
+        with self.assertRaisesRegex(SkillError, "is gone .HTTP 404.*wayback: no snapshot"):
+            self.run_extract({URL: HttpError(404, URL), **self.archived(status="404")})
 
     def test_gone_page_without_archive_fails_instead_of_saving_the_error_page(self):
         with self.assertRaisesRegex(SkillError, "is gone .HTTP 410.*wayback: no snapshot"):
             self.run_extract({URL: HttpError(410, URL), WAYBACK_API: '{"archived_snapshots": {}}'})
+
+    def test_document_url_is_refused_at_once(self):
+        with self.assertRaisesRegex(extract.NotAPage, "application/pdf"):
+            self.run_extract({URL: extract.NotAPage(f"{URL} is a application/pdf document")})
 
     def test_nothing_works_lists_every_attempt(self):
         with self.assertRaises(SkillError) as cm:
@@ -256,9 +290,31 @@ class TestFallbackOrder(unittest.TestCase):
     def test_short_page_keeps_the_longest_result(self):
         short = Extraction("only a few words here", extractor="jina")
         with mock.patch.object(extract, "from_jina", return_value=short):
-            _, (best, attempts, _) = self.run_extract({URL: self.spa, JINA: "x", WAYBACK_API: "{}"})
-        self.assertEqual(best.extractor, "jina")
-        self.assertEqual(attempts[-1], "wayback: no snapshot")
+            _, page = self.run_extract({URL: self.spa, JINA: "x", WAYBACK_API: "{}"})
+        self.assertEqual(page.best.extractor, "jina")
+        self.assertEqual(page.attempts[-1], "wayback: no snapshot")
+
+
+class TestHttpGet(unittest.TestCase):
+    def response(self, body: bytes, ctype: str):
+        r = mock.MagicMock()
+        r.__enter__.return_value = r
+        r.headers = email.message.Message()
+        r.headers["Content-Type"] = ctype
+        r.read.side_effect = lambda n=-1: body[:n] if n >= 0 else body
+        r.geturl.return_value = URL
+        return r
+
+    def test_charset_from_meta_when_the_header_has_none(self):
+        page = '<meta charset="iso-8859-1"><p>Café</p>'.encode("latin-1")
+        with mock.patch.object(extract.urllib.request, "urlopen", return_value=self.response(page, "text/html")):
+            self.assertIn("Café", extract.http_get(URL)[0])
+
+    def test_pdf_is_not_a_page(self):
+        with mock.patch.object(extract.urllib.request, "urlopen",
+                               return_value=self.response(b"%PDF-1.7", "application/pdf")):
+            with self.assertRaisesRegex(extract.NotAPage, "application/pdf document"):
+                extract.http_get(URL)
 
 
 if __name__ == "__main__":

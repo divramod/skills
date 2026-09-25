@@ -16,7 +16,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _comm
 
 import prepare
 from _common import CONTRACT_KEYS, ENVELOPE_KEYS, SkillError, read_json
-from extract import Extraction, from_defuddle
+from extract import Extraction, Page, from_defuddle
 from prepare import anchor, block_words, blocks, fragment, heading_ids, kind, page_url
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -71,13 +71,32 @@ class TestAnchor(unittest.TestCase):
         out = anchor("## Setup\n\nsome text", "https://docsify.js.org/#/quickstart", {"setup": "setup"})
         self.assertEqual(out, "## Setup\n\n[¶1](https://docsify.js.org/#/quickstart:~:text=some%20text) some text")
 
-    def test_fragment_grows_until_unique(self):
+    def test_fragment_grows_until_its_first_match_is_its_own_paragraph(self):
         same = "one two three four five six seven"
         out = anchor(f"{same} A\n\n{same} B\n\nother text", URL)
         links = [line.split(")", 1)[0] for line in out.split("\n\n")]
-        self.assertEqual(fragment_text(links[0]), same + " A")
+        self.assertEqual(fragment_text(links[0]), "one two three four five")  # its first match is itself
         self.assertEqual(fragment_text(links[1]), same + " B")
         self.assertEqual(fragment_text(links[2]), "other text")
+
+    def test_fragment_uniqueness_is_page_wide_and_case_insensitive(self):
+        # browsers take the first match anywhere, ignoring case: here, inside paragraph 1
+        out = anchor("We said that in this post we will cover a lot.\n\nIn this post we will cover X today.", URL)
+        self.assertEqual(fragment_text(re.findall(r"\[¶2\]\(([^)]+)\)", out)[0]),
+                         "In this post we will cover X")
+        # ... or in the title above the article
+        out = anchor("Why Rust is fast and safe for us", URL, preamble="Why Rust is fast and safe")
+        self.assertEqual(fragment_text(out.split(")")[0]), "Why Rust is fast and safe for")
+
+    def test_backslash_escapes_are_the_characters_the_page_shows(self):
+        # defuddle (turndown) escapes markdown characters: snake\_case, \*x\*, 1\.
+        self.assertEqual(block_words("Use the snake\\_case helper \\*carefully\\* in step 1\\. and \\[x\\]"),
+                         ["Use", "the", "snake_case", "helper", "*carefully*", "in", "step", "1.", "and", "[x]"])
+        self.assertEqual(block_words("*real* _emphasis_"), ["real", "emphasis"])
+
+    def test_heading_ids_are_encoded(self):
+        out = anchor("## Evil", URL, {"evil": "a b) [x](javascript:alert(1)"})
+        self.assertEqual(out, f"## Evil [#]({URL}#a%20b%29%20%5Bx%5D%28javascript:alert%281%29)")
 
     def test_url_fragment_and_ids(self):
         out = anchor("## Custom *instructions*\n\n## No id\n\ntext", URL + "#old",
@@ -102,7 +121,14 @@ class TestHeadingIds(unittest.TestCase):
     def test_id_on_heading_or_inner_anchor(self):
         page = ('<h2 id="a">Alpha &amp; Beta</h2><h3><a name="b"></a>Gamma</h3><h4>No id</h4>'
                 '<p id="p">not a heading</p>')
-        self.assertEqual(heading_ids(page), {"alpha & beta": "a", "gamma": "b"})
+        self.assertEqual(heading_ids(page), {"alpha beta": "a", "gamma": "b"})
+
+    def test_docs_generator_permalinks_ignored(self):
+        # Sphinx/MkDocs put a ¶ permalink in the heading, Docusaurus a zero-width space
+        page = '<h2 id="setup">Setup<a class="headerlink" href="#setup">¶</a></h2><h2 id="run">Run\u200b</h2>'
+        ids = heading_ids(page)
+        self.assertEqual(anchor("## Setup\n\n## Run", URL, ids),
+                         f"## Setup [#]({URL}#setup)\n\n## Run [#]({URL}#run)")
 
 
 class TestPageUrl(unittest.TestCase):
@@ -123,11 +149,16 @@ class TestMain(unittest.TestCase):
         post = from_defuddle((FIXTURES / "post.defuddle.json").read_text())
         post.meta |= {"published": "2024-12-19"}
         post.html = (FIXTURES / "post.html").read_text()
-        self.result = (post, ["trafilatura: 852 words", "defuddle: 744 words"], None)
+        self.post = post
+        self.attempts = ["trafilatura: 852 words", "defuddle: 843 words"]
 
-    def run_main(self, *args, result=None):
+    def page(self, best=None, **kw):
+        """extract() as a mock: the fetched URL is the final URL unless given."""
+        return lambda url: Page(best or self.post, self.attempts, kw.pop("final_url", url), **kw)
+
+    def run_main(self, *args, page=None):
         out = io.StringIO()
-        with mock.patch.object(prepare, "extract", return_value=result or self.result) as ex, \
+        with mock.patch.object(prepare, "extract", side_effect=page or self.page()) as ex, \
                 mock.patch.object(prepare, "log"), redirect_stdout(out):
             self.assertEqual(prepare.main(list(args)), 0)
         return json.loads(out.getvalue()), ex
@@ -147,7 +178,7 @@ class TestMain(unittest.TestCase):
         self.assertEqual(meta["extras"]["language"], "en-gb")
         content = (folder / "content.md").read_text()
         self.assertTrue(content.startswith("# Building Python tools"))
-        self.assertIn("- extractor: defuddle (744 words)", content)
+        self.assertIn("- extractor: defuddle (843 words)", content)
         self.assertIn(f"[¶1]({URL}#:~:text=", content)
         self.assertNotIn("utm_source", content)
 
@@ -173,16 +204,36 @@ class TestMain(unittest.TestCase):
 
     def test_wayback_text_anchors_to_the_snapshot(self):
         snap = "https://web.archive.org/web/2024/" + URL
-        post, attempts, _ = self.result
-        post.extractor = "wayback+defuddle"
-        env, _ = self.run_main(URL, result=(post, attempts + ["fetch: HTTP 404"], snap))
+        self.post.extractor = "wayback+defuddle"
+        env, _ = self.run_main(URL, page=self.page(snapshot=snap, gone=404))
         content = Path(env["content_file"]).read_text()
         self.assertIn(f"[¶1]({snap}#:~:text=", content)
         self.assertIn(f"- archived copy: {snap}", content)
-        self.assertEqual(env["snapshot"], snap)
+        self.assertEqual((env["snapshot"], env["gone"]), (snap, 404))
+
+    def test_redirect_and_canonical_url_dedupe(self):
+        short = "https://t.co/abc123"
+        self.post.meta["url"] = URL + "?ref=feed"  # the page's canonical/og:url
+        first, _ = self.run_main(short, page=self.page(final_url=URL + "?utm_source=t"))
+        meta = read_json(Path(first["dir"]) / "metadata.json")
+        self.assertEqual((meta["id"], meta["url"]), (URL + "?ref=feed", URL + "?ref=feed"))
+        self.assertEqual(meta["extras"]["aliases"], [short, URL])
+        # the short link again: no fetch; the plain URL: fetched, found as an alias, reused
+        again, ex = self.run_main(short)
+        ex.assert_not_called()
+        plain, _ = self.run_main(URL)
+        self.assertEqual({again["dir"], plain["dir"]}, {first["dir"]})
+        self.assertTrue(plain["reused"])
+
+    def test_off_site_or_homepage_canonical_is_ignored(self):
+        self.assertEqual(prepare.canonical_url(URL, URL, "https://other.site/p"), URL)
+        self.assertEqual(prepare.canonical_url(URL, URL, "https://simonwillison.net/"), URL)
+        self.assertEqual(prepare.canonical_url(URL, URL + "?utm_source=x", None), URL)
+        self.assertEqual(prepare.canonical_url("https://d.io/#/start", "https://d.io/", "https://d.io/"),
+                         "https://d.io/#/start")
 
     def test_untitled_page_falls_back_to_the_path(self):
-        env, _ = self.run_main("https://example.com/notes/my-page", result=(Extraction("word " * 300), [], None))
+        env, _ = self.run_main("https://example.com/notes/my-page", page=self.page(Extraction("word " * 300)))
         self.assertEqual((env["title"], Path(env["dir"]).parent.name), ("my-page", "example-com"))
 
     def test_other_source_is_refused(self):

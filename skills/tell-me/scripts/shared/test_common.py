@@ -98,8 +98,10 @@ class TestFindById(unittest.TestCase):
             root = Path(tmp)
             post = root / "articles" / "site" / "old-title"
             post.mkdir(parents=True)
-            (post / "metadata.json").write_text(json.dumps({"source": "web", "id": "https://a.b/p"}))
+            (post / "metadata.json").write_text(json.dumps({"source": "web", "id": "https://a.b/p",
+                                                            "extras": {"aliases": ["https://t.co/x"]}}))
             self.assertEqual(find_by_id("web", "https://a.b/p", root), post)
+            self.assertEqual(find_by_id("web", "https://t.co/x", root), post)  # an alias (short link)
             self.assertIsNone(find_by_id("web", "https://a.b/q", root))
             self.assertIsNone(find_by_id("hn", "https://a.b/p", root))
             self.assertIsNone(find_by_id("web", None, root))

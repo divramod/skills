@@ -37,7 +37,7 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, 
 BLOCKED = {401, 403, 405, 429, 503, 999}
 # Markdown link targets may hold one level of balanced parentheses: wiki/Fine-tuning_(deep_learning)
 _LINK_RE = re.compile(r"\]\((https?://(?:[^()\s]|\([^()\s]*\))+)\)|<(https?://[^>\s]+)>|(?<![(<\[])(https?://[^\s)\]>]+[^\s)\]>.,;:!?])")
-_VIDEO_LINK_RE = re.compile(r"[?&#]t=\d+s?$|:~:text=")
+_VIDEO_LINK_RE = re.compile(r"[?&#]t=\d+s?$")
 # Anchor links into the source itself (copied from its content file): [¶3](url#:~:text=...), [#](url#heading).
 _ANCHOR_LINK_RE = re.compile(r"\[(?:¶\d+|#)\]\([^)\s]*\)")
 
