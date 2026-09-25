@@ -27,7 +27,8 @@ python3 $S/shared/prepare.py "<url-or-path>" ["<url-or-path>" …] [source flags
 
 It routes the input to exactly one source, runs `scripts/<source>/prepare.py`, and prints the envelope:
 `source`, `kind`, `dir` (the library folder), `content_file`, `summary_exists`, `subskill`, `template`, plus the
-source's own fields. Flags after the input go to the source script; the subskill lists them.
+source's own fields. Give all inputs first, then the flags: flags after the inputs go to the source script; the
+subskill lists them.
 
 | Source | Input | Subskill |
 |---|---|---|
@@ -51,9 +52,11 @@ source's own fields. Flags after the input go to the source script; the subskill
   `summary_exists` is false (parallel subagents when there are more than 3), then write the digest (step 7).
 - **Several inputs** in one call print `kind: inputs` with one envelope per input in `items` (or `{input, error,
   exit_code}` for one that failed: tell the user, the others go on) and a `digest_dir` when at least two worked.
-  Each source gets only the flags it knows. Summarize every item through steps 2-6 as if it came alone (parallel
+  An item with `exit_code: 2` is a missing tool: run that source's `install-prerequisites.sh` (the error names
+  it), then prepare that input again on its own. Each source gets only the flags it knows. Summarize every item through steps 2-6 as if it came alone (parallel
   subagents when there are more than 3, each with its envelope), then write the digest (step 7). Ask the user
-  first only if they asked for single summaries and no digest.
+  first only if they asked for single summaries and no digest. An item that is a playlist or channel gets its own
+  videos and its own digest first (as above); the combined digest then uses that digest as the item.
 
 ## 2. Read the subskill
 
