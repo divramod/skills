@@ -25,10 +25,10 @@ Skills keep deterministic work (fetching, parsing, file layout, downloads, forma
 When a skill's scripts call external command-line tools (yt-dlp, ffmpeg, uvx, jq, ...):
 
 1. **Every script checks each tool before using it** and exits non-zero with a clear message that names the missing
-   tool and how to install it. Python scripts: `shutil.which()` (see `skills/tell-me/scripts/shared/_common.py`
+   tool and how to install it. Python scripts: `shutil.which()` (see `skills/tell/scripts/shared/_common.py`
    `require()`). Bash scripts: `command -v <tool>`.
 2. **Every scripts folder that calls tools ships `check-prerequisites.sh`**: `scripts/` for a flat skill, and each
-   per-source `scripts/<folder>/` for a split one (e.g. `skills/tell-me/scripts/video/`). It checks every required
+   per-source `scripts/<folder>/` for a split one (e.g. `skills/tell/scripts/video/`). It checks every required
    and optional tool of that folder, prints `ok` or `MISSING <tool> -> <install command>`, and exits 1 when a
    required tool is missing.
 3. **… and `install-prerequisites.sh`**: it installs only that folder's missing tools (Homebrew first, then

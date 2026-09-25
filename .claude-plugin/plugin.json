@@ -11,6 +11,6 @@
   "license": "MIT",
   "keywords": ["skills", "summarize", "video", "youtube", "article", "github", "twitter", "x", "hacker-news", "reddit", "pdf", "digest"],
   "skills": [
-    "./skills/tell-me"
+    "./skills/tell"
   ]
 }
