@@ -36,6 +36,20 @@ class TestQuotes(unittest.TestCase):
                                         "finding users who actually care", "three ideas before one stuck"])
         self.assertEqual(len(check(body, CONTENT)["missing"]), 1)  # "founders" is not quoted in the source
 
+    def test_an_inch_mark_does_not_hide_the_next_quote(self):
+        body = 'A 12" record and "the hardest part of a startup" said pg; also "an invented quote here".'
+        self.assertEqual(quotes(body), ["the hardest part of a startup", "an invented quote here"])
+        self.assertEqual(check(body, CONTENT)["missing"], ["an invented quote here"])
+
+    def test_a_quote_wrapped_over_two_lines_is_checked(self):
+        body = 'He wrote "most founders know their\nusers; they just ship fast" (**tptacek**)\n\n- "next item here"'
+        self.assertEqual(quotes(body), ["most founders know their users; they just ship fast", "next item here"])
+        self.assertEqual(len(check(body, CONTENT)["missing"]), 2)
+
+    def test_markdown_escapes_are_ignored(self):
+        content = "Use snake\\_case names and 2\\*3 math in *every* file."
+        self.assertEqual(check('"use snake_case names and 2*3 math"', content)["missing"], [])
+
     def test_two_quotes_on_one_line(self):
         body = '- "4D dynamical worlds": jargon? One side: > "sounds overhyped / scammy" (**etwigg**, [→](x))'
         self.assertEqual(quotes(body), ["sounds overhyped / scammy", "4D dynamical worlds"])

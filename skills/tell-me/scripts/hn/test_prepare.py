@@ -88,7 +88,18 @@ class TestDiscussion(unittest.TestCase):
             {"id": 4, "author": None, "text": None, "created_at_i": 3, "children": []}]}
         md, comments, threads = prepare.discussion(tree, [])
         self.assertEqual((comments, threads), (1, 1))
-        self.assertIn("- **bob** [→](https://news.ycombinator.com/item?id=3) (depth 1): still here", md)
+        self.assertIn("- **bob** [→](https://news.ycombinator.com/item?id=3) (depth 1, reply to [deleted]): still here",
+                      md)
+
+    def test_comment_starting_with_code_puts_the_fence_on_its_own_line(self):
+        tree = {"id": 1, "children": [{"id": 2, "author": "a", "text": "<pre><code>x = 1\n</code></pre>ok",
+                                       "children": []}]}
+        md, _, _ = prepare.discussion(tree, [])
+        self.assertTrue(md.endswith("(depth 0):\n  ```\n  x = 1\n  ```\n\n  ok"), md)
+
+    def test_link_text_brackets_are_escaped(self):
+        self.assertEqual(prepare.comment_text('<a href="https://e.com/p">see [1] here</a>'),
+                         "[see \\[1\\] here](https://e.com/p)")
 
     def test_multi_paragraph_comment_stays_in_its_list_item(self):
         tree = {"id": 1, "children": [{"id": 2, "author": "a", "text": "one<p>two", "children": []}]}
@@ -117,9 +128,11 @@ class TestFirebase(unittest.TestCase):
         get = api({7: SkillError("algolia down")}, fb)
         attempts = []
         with mock.patch.object(prepare, "get_json", get), mock.patch.object(prepare, "log"):
-            tree, source, focus = prepare.load_story(7, attempts)
-        self.assertEqual((source, focus, attempts), ("firebase", None, ["algolia: failed (algolia down)"]))
-        md, comments, threads = prepare.discussion(tree, prepare.ranking(7, source, tree))
+            story, tree, source, focus = prepare.find_story(7, attempts)
+            tree, source, ranks = prepare.load_tree(story, tree, source, attempts)
+        self.assertEqual((story, source, focus, attempts), (7, "firebase", None, ["algolia: failed (algolia down)"]))
+        self.assertEqual(ranks, [9, 8])
+        md, comments, threads = prepare.discussion(tree, ranks)
         self.assertEqual((comments, threads), (2, 1))
         self.assertIn("(depth 1, reply to a): yo", md)
 
@@ -127,8 +140,39 @@ class TestFirebase(unittest.TestCase):
         fb = {8: {"id": 8, "type": "comment", "by": "a", "text": "x", "parent": 7},
               7: {"id": 7, "type": "story", "title": "T", "kids": [8]}}
         with mock.patch.object(prepare, "get_json", api({}, fb)), mock.patch.object(prepare, "log"):
-            tree, source, focus = prepare.load_story(8, [])
-        self.assertEqual((tree["id"], source, focus), (7, "firebase", 8))
+            story, tree, source, focus = prepare.find_story(8, [])
+        self.assertEqual((story, tree, source, focus), (7, None, "firebase", 8))
+
+    def test_poll_option_resolves_to_its_poll(self):
+        fb = {8: {"id": 8, "type": "pollopt", "poll": 7}, 7: {"id": 7, "type": "poll", "title": "T"}}
+        with mock.patch.object(prepare, "get_json", api({}, fb)), mock.patch.object(prepare, "log"):
+            self.assertEqual(prepare.find_story(8, [])[0], 7)
+
+    def test_missing_parent_is_an_error_not_a_crash(self):
+        fb = {8: {"id": 8, "type": "comment", "by": "a", "text": "x", "parent": 7}, 7: None}
+        with mock.patch.object(prepare, "get_json", lambda url: fb.get(int(re.search(r"(\d+)\.json", url)[1]))):
+            with self.assertRaisesRegex(SkillError, "could not find the story of item 8"):
+                prepare.story_of(prepare.from_firebase(fb[8]))
+
+    def test_a_failing_comment_is_left_out_not_fatal(self):
+        fb = {7: {"id": 7, "type": "story", "kids": [8, 9]}, 8: SkillError("HTTP 500"),
+              9: {"id": 9, "type": "comment", "by": "b", "text": "yo", "parent": 7}}
+        attempts = []
+        with mock.patch.object(prepare, "get_json", api({}, fb)), mock.patch.object(prepare, "log"):
+            tree = prepare.firebase_tree(7, attempts)
+        self.assertEqual([c["id"] for c in tree["children"]], [9])
+        self.assertIn("firebase: 1 comments could not be fetched", attempts[0])
+
+    def test_lagging_algolia_falls_back_to_firebase(self):
+        algolia = {"id": 7, "type": "story", "children": [{"id": 8, "author": "a", "text": "hi", "children": []}]}
+        fb = {7: {"id": 7, "type": "story", "kids": [8, 9], "descendants": 40},
+              8: {"id": 8, "type": "comment", "by": "a", "text": "hi", "parent": 7},
+              9: {"id": 9, "type": "comment", "by": "b", "text": "new", "parent": 7}}
+        attempts = []
+        with mock.patch.object(prepare, "get_json", api({7: algolia}, fb)), mock.patch.object(prepare, "log"):
+            tree, source, ranks = prepare.load_tree(7, algolia, "algolia", attempts)
+        self.assertEqual((source, len(tree["children"]), ranks), ("firebase", 2, [8, 9]))
+        self.assertEqual(attempts, ["algolia: lags behind (1 of 40 comments)"])
 
 
 class TestMain(unittest.TestCase):
@@ -178,13 +222,33 @@ class TestMain(unittest.TestCase):
         self.assertEqual((env["id"], env["focus_comment"]), (str(STORY), 42460143))
         again, ex = self.run_main(f"https://news.ycombinator.com/item?id={STORY}")
         ex.assert_not_called()
-        self.assertEqual((again["dir"], again["reused"]), (env["dir"], True))
+        self.assertEqual((again["dir"], again["reused"], again["focus_comment"]), (env["dir"], True, None))
+        focus, _ = self.run_main("42460143")
+        self.assertEqual((focus["reused"], focus["focus_comment"]), (True, 42460143))
+        self.assertNotIn("focus_comment", read_json(Path(env["dir"]) / "metadata.json")["extras"])
 
     def test_refresh_refetches(self):
         first, _ = self.run_main(str(STORY))
         second, ex = self.run_main(str(STORY), "--refresh")
         ex.assert_called_once()
         self.assertEqual((second["dir"], second["reused"]), (first["dir"], True))
+
+    def test_refresh_keeps_a_good_article_when_extraction_fails(self):
+        first, _ = self.run_main(str(STORY))
+        second, _ = self.run_main(str(STORY), "--refresh", page=SkillError("blocked"))
+        content = Path(second["content_file"]).read_text()
+        self.assertIn("## Article\n\n### Genesis World\n", content)
+        self.assertNotIn("could not be extracted", content)
+        self.assertEqual(read_json(Path(second["dir"]) / "metadata.json")["extras"]["article_extractor"],
+                         "trafilatura")
+
+    def test_show_hn_keeps_the_post_text_before_the_article(self):
+        show = copy.deepcopy(SMALL) | {"text": "I built this over a year."}
+        self.get = api({STORY: show}, {STORY: {"id": STORY, "kids": KIDS}})
+        env, ex = self.run_main(str(STORY))
+        ex.assert_called_once()
+        self.assertRegex(Path(env["content_file"]).read_text(),
+                         r"## Article\n\n\*\*tomp\*\* \[→\]\(\S+\): I built this over a year\.\n\n### Genesis World")
 
     def test_ask_hn_uses_the_post_text(self):
         env, ex = self.run_main(str(ASK["id"]))
