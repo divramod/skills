@@ -4,7 +4,7 @@
 Reads the body (stdin, --file, or the folder's summary.md with --summary) and the folder's content file, finds the
 quoted passages ("..." or “...”, three words or more; shorter ones are terms, not quotes) and looks each one up.
 Whitespace, case, HTML entities, curly vs straight quotes and dashes, markdown emphasis and escapes and the source's own
-anchor links ([¶n], [#], [→]) are ignored. An ellipsis (... or … or [...]) may skip text: the parts must appear
+anchor links ([¶n], [#], [→], [L<n>]) are ignored. An ellipsis (... or … or [...]) may skip text: the parts must appear
 in order. Prints one JSON object: {"checked": n, "found": [...], "missing": [...]}. Exit code 1 when a quote is
 missing: fix it (copy it from the content file) or paraphrase it without quote marks, then check again.
 
@@ -30,7 +30,7 @@ _ESCAPE_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!<>|~\"'])")
 # the end of an attributed quote: `..." (**author**`
 _ATTRIBUTION_RE = re.compile(r"[\"”]\s*\(\*\*")
 _ELLIPSIS_RE = re.compile(r"\s*(?:\[\s*(?:\.\.\.|…)\s*\]|\.\.\.|…)\s*")
-_ANCHOR_RE = re.compile(r"\[(?:¶\d+|#|→)\]\([^)\s]*\)")
+_ANCHOR_RE = re.compile(r"\[(?:¶\d+|#|→|L\d+)\]\([^)\s]*\)")
 _LINK_RE = re.compile(r"!?\[([^\[\]]*)\]\([^)\s]*\)")
 _CODE_RE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
 

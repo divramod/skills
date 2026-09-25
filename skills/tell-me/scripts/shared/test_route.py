@@ -65,6 +65,12 @@ class TestRoute(unittest.TestCase):
                     self.assertEqual(r["id"], rid)
                 self.assertTrue(r.get("url") or r.get("path"))
 
+    def test_github_folder_link_keeps_its_path(self):
+        r = route("https://github.com/yt-dlp/yt-dlp/tree/master/yt_dlp/extractor")
+        self.assertEqual((r["url"], r["ref"], r["path"]),
+                         ("https://github.com/yt-dlp/yt-dlp/tree/master/yt_dlp/extractor", "master", "yt_dlp/extractor"))
+        self.assertEqual(route(r["url"])["path"], "yt_dlp/extractor")  # shared/prepare.py passes the url on
+
     def test_web_url_is_kept_as_given(self):
         r = route("http://localhost:8000/doc#/route?utm_source=x")
         self.assertEqual(r["url"], "http://localhost:8000/doc#/route?utm_source=x")

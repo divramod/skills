@@ -25,6 +25,12 @@ class TestCheckLinks(unittest.TestCase):
         self.assertEqual(extract_links(body), ["https://docs.dev/#setup", "https://other.dev/a#:~:text=foo",
                                                "https://news.ycombinator.com/item?id=1"])
 
+    def test_extract_skips_repo_line_anchors_and_code(self):
+        body = ("It parses pages ([L10](https://github.com/o/r/blob/abc/README.md?plain=1#L10)).\n\n"
+                "```bash\nnpx defuddle parse https://example.com/article\n```\n"
+                "Run `curl https://example.com/x` or read [the docs](https://docs.dev/a).")
+        self.assertEqual(extract_links(body), ["https://docs.dev/a"])
+
     def test_extract_skips_video_timestamps_and_dedupes(self):
         self.assertEqual(extract_links(BODY), [
             "https://www.amazon.com/dp/0374533555",

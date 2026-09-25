@@ -1,0 +1,878 @@
+{
+ "sha": "49d14ecc4089696565c2479b2f57db72be199adc",
+ "url": "https://api.github.com/repos/kepano/defuddle/git/trees/49d14ecc4089696565c2479b2f57db72be199adc",
+ "tree": [
+  {
+   "path": ".editorconfig",
+   "type": "blob",
+   "size": 1122
+  },
+  {
+   "path": ".eslintrc.json",
+   "type": "blob",
+   "size": 226
+  },
+  {
+   "path": ".github",
+   "type": "tree"
+  },
+  {
+   "path": ".github/workflows",
+   "type": "tree"
+  },
+  {
+   "path": ".github/workflows/ci.yml",
+   "type": "blob",
+   "size": 2075
+  },
+  {
+   "path": ".github/workflows/release.yml",
+   "type": "blob",
+   "size": 1995
+  },
+  {
+   "path": ".gitignore",
+   "type": "blob",
+   "size": 97
+  },
+  {
+   "path": ".nvmrc",
+   "type": "blob",
+   "size": 3
+  },
+  {
+   "path": "AGENTS.md",
+   "type": "blob",
+   "size": 2874
+  },
+  {
+   "path": "CHANGELOG.md",
+   "type": "blob",
+   "size": 870
+  },
+  {
+   "path": "LICENSE",
+   "type": "blob",
+   "size": 1076
+  },
+  {
+   "path": "README.md",
+   "type": "blob",
+   "size": 13792
+  },
+  {
+   "path": "package-lock.json",
+   "type": "blob",
+   "size": 135499
+  },
+  {
+   "path": "package.json",
+   "type": "blob",
+   "size": 2656
+  },
+  {
+   "path": "scripts",
+   "type": "tree"
+  },
+  {
+   "path": "scripts/check-bundle-size.mjs",
+   "type": "blob",
+   "size": 984
+  },
+  {
+   "path": "scripts/check-no-innerhtml.mjs",
+   "type": "blob",
+   "size": 1419
+  },
+  {
+   "path": "src",
+   "type": "tree"
+  },
+  {
+   "path": "src/cli.ts",
+   "type": "blob",
+   "size": 6570
+  },
+  {
+   "path": "src/constants.ts",
+   "type": "blob",
+   "size": 28448
+  },
+  {
+   "path": "src/content-boundary.ts",
+   "type": "blob",
+   "size": 5402
+  },
+  {
+   "path": "src/defuddle.ts",
+   "type": "blob",
+   "size": 65080
+  },
+  {
+   "path": "src/elements",
+   "type": "tree"
+  },
+  {
+   "path": "src/elements/callouts.ts",
+   "type": "blob",
+   "size": 5382
+  },
+  {
+   "path": "src/elements/code.ts",
+   "type": "blob",
+   "size": 17046
+  },
+  {
+   "path": "src/elements/footnotes.ts",
+   "type": "blob",
+   "size": 51258
+  },
+  {
+   "path": "src/elements/headings.ts",
+   "type": "blob",
+   "size": 3790
+  },
+  {
+   "path": "src/elements/images.ts",
+   "type": "blob",
+   "size": 30021
+  },
+  {
+   "path": "src/elements/math.base.ts",
+   "type": "blob",
+   "size": 22500
+  },
+  {
+   "path": "src/elements/math.core.ts",
+   "type": "blob",
+   "size": 2150
+  },
+  {
+   "path": "src/elements/math.full.ts",
+   "type": "blob",
+   "size": 3097
+  },
+  {
+   "path": "src/elements/math.ts",
+   "type": "blob",
+   "size": 417
+  },
+  {
+   "path": "src/extractor-registry.ts",
+   "type": "blob",
+   "size": 6790
+  },
+  {
+   "path": "src/extractors",
+   "type": "tree"
+  },
+  {
+   "path": "src/extractors/_base.ts",
+   "type": "blob",
+   "size": 1454
+  },
+  {
+   "path": "src/extractors/_conversation.ts",
+   "type": "blob",
+   "size": 4246
+  },
+  {
+   "path": "src/extractors/bbcode-data.ts",
+   "type": "blob",
+   "size": 1448
+  },
+  {
+   "path": "src/extractors/bilibili.ts",
+   "type": "blob",
+   "size": 15113
+  },
+  {
+   "path": "src/extractors/bluesky.ts",
+   "type": "blob",
+   "size": 10747
+  },
+  {
+   "path": "src/extractors/c2-wiki.ts",
+   "type": "blob",
+   "size": 4872
+  },
+  {
+   "path": "src/extractors/chatgpt.ts",
+   "type": "blob",
+   "size": 6634
+  },
+  {
+   "path": "src/extractors/claude.ts",
+   "type": "blob",
+   "size": 3044
+  },
+  {
+   "path": "src/extractors/discourse.ts",
+   "type": "blob",
+   "size": 5322
+  },
+  {
+   "path": "src/extractors/gemini.ts",
+   "type": "blob",
+   "size": 4096
+  },
+  {
+   "path": "src/extractors/github.ts",
+   "type": "blob",
+   "size": 9899
+  },
+  {
+   "path": "src/extractors/gmail.ts",
+   "type": "blob",
+   "size": 8731
+  },
+  {
+   "path": "src/extractors/grok.ts",
+   "type": "blob",
+   "size": 6216
+  },
+  {
+   "path": "src/extractors/hackernews.ts",
+   "type": "blob",
+   "size": 9588
+  },
+  {
+   "path": "src/extractors/leetcode.ts",
+   "type": "blob",
+   "size": 663
+  },
+  {
+   "path": "src/extractors/linkedin.ts",
+   "type": "blob",
+   "size": 8780
+  },
+  {
+   "path": "src/extractors/lwn.ts",
+   "type": "blob",
+   "size": 4900
+  },
+  {
+   "path": "src/extractors/mastodon.ts",
+   "type": "blob",
+   "size": 8677
+  },
+  {
+   "path": "src/extractors/medium.ts",
+   "type": "blob",
+   "size": 5058
+  },
+  {
+   "path": "src/extractors/nytimes.ts",
+   "type": "blob",
+   "size": 7086
+  },
+  {
+   "path": "src/extractors/reddit.ts",
+   "type": "blob",
+   "size": 15937
+  },
+  {
+   "path": "src/extractors/substack.ts",
+   "type": "blob",
+   "size": 7187
+  },
+  {
+   "path": "src/extractors/threads.ts",
+   "type": "blob",
+   "size": 16268
+  },
+  {
+   "path": "src/extractors/twitter.ts",
+   "type": "blob",
+   "size": 12102
+  },
+  {
+   "path": "src/extractors/wikipedia.ts",
+   "type": "blob",
+   "size": 645
+  },
+  {
+   "path": "src/extractors/x-article.ts",
+   "type": "blob",
+   "size": 11359
+  },
+  {
+   "path": "src/extractors/x-oembed.ts",
+   "type": "blob",
+   "size": 18176
+  },
+  {
+   "path": "src/extractors/youtube.ts",
+   "type": "blob",
+   "size": 46300
+  },
+  {
+   "path": "src/fetch.ts",
+   "type": "blob",
+   "size": 12555
+  },
+  {
+   "path": "src/frontmatter.ts",
+   "type": "blob",
+   "size": 2217
+  },
+  {
+   "path": "src/index.full.ts",
+   "type": "blob",
+   "size": 1227
+  },
+  {
+   "path": "src/index.ts",
+   "type": "blob",
+   "size": 204
+  },
+  {
+   "path": "src/markdown.ts",
+   "type": "blob",
+   "size": 36467
+  },
+  {
+   "path": "src/metadata.ts",
+   "type": "blob",
+   "size": 30803
+  },
+  {
+   "path": "src/node.ts",
+   "type": "blob",
+   "size": 1717
+  },
+  {
+   "path": "src/removals",
+   "type": "tree"
+  },
+  {
+   "path": "src/removals/content-patterns.ts",
+   "type": "blob",
+   "size": 54936
+  },
+  {
+   "path": "src/removals/hidden.ts",
+   "type": "blob",
+   "size": 3268
+  },
+  {
+   "path": "src/removals/metadata-block.ts",
+   "type": "blob",
+   "size": 1634
+  },
+  {
+   "path": "src/removals/scoring.ts",
+   "type": "blob",
+   "size": 17806
+  },
+  {
+   "path": "src/removals/selectors.ts",
+   "type": "blob",
+   "size": 7525
+  },
+  {
+   "path": "src/removals/small-images.ts",
+   "type": "blob",
+   "size": 6194
+  },
+  {
+   "path": "src/standardize.ts",
+   "type": "blob",
+   "size": 64506
+  },
+  {
+   "path": "src/types.ts",
+   "type": "blob",
+   "size": 3588
+  },
+  {
+   "path": "src/types",
+   "type": "tree"
+  },
+  {
+   "path": "src/types/extractors.ts",
+   "type": "blob",
+   "size": 785
+  },
+  {
+   "path": "src/utils.ts",
+   "type": "blob",
+   "size": 3571
+  },
+  {
+   "path": "src/utils",
+   "type": "tree"
+  },
+  {
+   "path": "src/utils/bbcode.ts",
+   "type": "blob",
+   "size": 2484
+  },
+  {
+   "path": "src/utils/comments.ts",
+   "type": "blob",
+   "size": 6277
+  },
+  {
+   "path": "src/utils/dom.ts",
+   "type": "blob",
+   "size": 4766
+  },
+  {
+   "path": "src/utils/linkedom-compat.ts",
+   "type": "blob",
+   "size": 717
+  },
+  {
+   "path": "src/utils/transcript.ts",
+   "type": "blob",
+   "size": 2752
+  },
+  {
+   "path": "tests",
+   "type": "tree"
+  },
+  {
+   "path": "tests/bilibili-transcript.test.ts",
+   "type": "blob",
+   "size": 12489
+  },
+  {
+   "path": "tests/cli-exit.test.ts",
+   "type": "blob",
+   "size": 2779
+  },
+  {
+   "path": "tests/cli.test.ts",
+   "type": "blob",
+   "size": 4135
+  },
+  {
+   "path": "tests/conversation-linkedom.test.ts",
+   "type": "blob",
+   "size": 1953
+  },
+  {
+   "path": "tests/debug.test.ts",
+   "type": "blob",
+   "size": 5817
+  },
+  {
+   "path": "tests/declarative-shadow-dom.test.ts",
+   "type": "blob",
+   "size": 3368
+  },
+  {
+   "path": "tests/dom-compat.test.ts",
+   "type": "blob",
+   "size": 3012
+  },
+  {
+   "path": "tests/expected",
+   "type": "tree"
+  },
+  {
+   "path": "tests/expected/author-contact-block.md",
+   "type": "blob",
+   "size": 1839
+  },
+  {
+   "path": "tests/expected/author-share-widget.md",
+   "type": "blob",
+   "size": 1638
+  },
+  {
+   "path": "tests/expected/callouts--obsidian-publish-callouts.md",
+   "type": "blob",
+   "size": 905
+  },
+  {
+   "path": "tests/expected/code-blocks--chroma-linenums.md",
+   "type": "blob",
+   "size": 698
+  },
+  {
+   "path": "tsconfig.declarations.json",
+   "type": "blob",
+   "size": 424
+  },
+  {
+   "path": "tsconfig.json",
+   "type": "blob",
+   "size": 344
+  },
+  {
+   "path": "tsconfig.node.json",
+   "type": "blob",
+   "size": 440
+  },
+  {
+   "path": "vitest.config.ts",
+   "type": "blob",
+   "size": 249
+  },
+  {
+   "path": "webpack.config.js",
+   "type": "blob",
+   "size": 2099
+  },
+  {
+   "path": "website",
+   "type": "tree"
+  },
+  {
+   "path": "website/README.md",
+   "type": "blob",
+   "size": 664
+  },
+  {
+   "path": "website/package-lock.json",
+   "type": "blob",
+   "size": 72336
+  },
+  {
+   "path": "website/package.json",
+   "type": "blob",
+   "size": 827
+  },
+  {
+   "path": "website/scripts",
+   "type": "tree"
+  },
+  {
+   "path": "website/scripts/build.mjs",
+   "type": "blob",
+   "size": 701
+  },
+  {
+   "path": "website/src",
+   "type": "tree"
+  },
+  {
+   "path": "website/src/client",
+   "type": "tree"
+  },
+  {
+   "path": "website/src/client/columns.ts",
+   "type": "blob",
+   "size": 4457
+  },
+  {
+   "path": "website/src/client/copy.ts",
+   "type": "blob",
+   "size": 2114
+  },
+  {
+   "path": "website/src/client/docs.ts",
+   "type": "blob",
+   "size": 2805
+  },
+  {
+   "path": "website/src/client/editor-highlighting.ts",
+   "type": "blob",
+   "size": 2641
+  },
+  {
+   "path": "website/src/client/editor.ts",
+   "type": "blob",
+   "size": 3501
+  },
+  {
+   "path": "website/src/client/example.ts",
+   "type": "blob",
+   "size": 927
+  },
+  {
+   "path": "website/src/client/format-html.ts",
+   "type": "blob",
+   "size": 2369
+  },
+  {
+   "path": "website/src/client/highlight.ts",
+   "type": "blob",
+   "size": 12465
+  },
+  {
+   "path": "website/src/client/home.ts",
+   "type": "blob",
+   "size": 58
+  },
+  {
+   "path": "website/src/client/html-highlighting.ts",
+   "type": "blob",
+   "size": 1015
+  },
+  {
+   "path": "website/src/client/limits.ts",
+   "type": "blob",
+   "size": 45
+  },
+  {
+   "path": "website/src/client/markdown-punctuation.ts",
+   "type": "blob",
+   "size": 1171
+  },
+  {
+   "path": "website/src/client/mobile-header.ts",
+   "type": "blob",
+   "size": 4016
+  },
+  {
+   "path": "website/src/client/outline.ts",
+   "type": "blob",
+   "size": 3474
+  },
+  {
+   "path": "website/src/client/page-markdown.ts",
+   "type": "blob",
+   "size": 2745
+  },
+  {
+   "path": "website/src/client/parser.ts",
+   "type": "blob",
+   "size": 1885
+  },
+  {
+   "path": "website/src/client/playground.ts",
+   "type": "blob",
+   "size": 6086
+  },
+  {
+   "path": "website/src/client/search-model.ts",
+   "type": "blob",
+   "size": 1176
+  },
+  {
+   "path": "website/src/client/search.ts",
+   "type": "blob",
+   "size": 6093
+  },
+  {
+   "path": "website/src/client/settings.ts",
+   "type": "blob",
+   "size": 2097
+  },
+  {
+   "path": "website/src/client/tabs.ts",
+   "type": "blob",
+   "size": 1465
+  },
+  {
+   "path": "website/src/convert.ts",
+   "type": "blob",
+   "size": 7671
+  },
+  {
+   "path": "website/src/docs-content.ts",
+   "type": "blob",
+   "size": 15879
+  },
+  {
+   "path": "website/src/docs-data.ts",
+   "type": "blob",
+   "size": 997
+  },
+  {
+   "path": "website/src/docs-layout.ts",
+   "type": "blob",
+   "size": 5118
+  },
+  {
+   "path": "website/src/docs-styles",
+   "type": "tree"
+  },
+  {
+   "path": "website/src/docs-styles/actions.scss",
+   "type": "blob",
+   "size": 728
+  },
+  {
+   "path": "website/src/docs-styles/code.scss",
+   "type": "blob",
+   "size": 4092
+  },
+  {
+   "path": "website/src/docs-styles/command-palette.scss",
+   "type": "blob",
+   "size": 3469
+  },
+  {
+   "path": "website/src/docs-styles/docs.scss",
+   "type": "blob",
+   "size": 6956
+  },
+  {
+   "path": "website/src/docs-styles/header.scss",
+   "type": "blob",
+   "size": 2063
+  },
+  {
+   "path": "website/src/docs-styles/index.scss",
+   "type": "blob",
+   "size": 957
+  },
+  {
+   "path": "website/src/docs-styles/links.scss",
+   "type": "blob",
+   "size": 1432
+  },
+  {
+   "path": "website/src/docs-styles/mobile-docs-menu.scss",
+   "type": "blob",
+   "size": 1904
+  },
+  {
+   "path": "website/src/docs-styles/tables.scss",
+   "type": "blob",
+   "size": 2014
+  },
+  {
+   "path": "website/src/docs.ts",
+   "type": "blob",
+   "size": 441
+  },
+  {
+   "path": "website/src/footer.ts",
+   "type": "blob",
+   "size": 4449
+  },
+  {
+   "path": "website/src/home-styles",
+   "type": "tree"
+  },
+  {
+   "path": "website/src/home-styles/index.scss",
+   "type": "blob",
+   "size": 2110
+  },
+  {
+   "path": "website/src/index.ts",
+   "type": "blob",
+   "size": 25991
+  },
+  {
+   "path": "website/src/landing.ts",
+   "type": "blob",
+   "size": 8630
+  },
+  {
+   "path": "website/src/page-markdown.ts",
+   "type": "blob",
+   "size": 2975
+  },
+  {
+   "path": "website/src/playground-styles",
+   "type": "tree"
+  },
+  {
+   "path": "website/src/playground-styles/controls.scss",
+   "type": "blob",
+   "size": 2094
+  },
+  {
+   "path": "website/src/playground-styles/index.scss",
+   "type": "blob",
+   "size": 1527
+  },
+  {
+   "path": "website/src/playground-styles/menu.scss",
+   "type": "blob",
+   "size": 1957
+  },
+  {
+   "path": "website/src/playground-styles/panels.scss",
+   "type": "blob",
+   "size": 8630
+  },
+  {
+   "path": "website/src/playground-styles/segmented-control.scss",
+   "type": "blob",
+   "size": 2036
+  },
+  {
+   "path": "website/src/playground.ts",
+   "type": "blob",
+   "size": 6188
+  },
+  {
+   "path": "website/src/polyfill.ts",
+   "type": "blob",
+   "size": 806
+  },
+  {
+   "path": "website/src/pricing.ts",
+   "type": "blob",
+   "size": 4359
+  },
+  {
+   "path": "website/src/privacy.ts",
+   "type": "blob",
+   "size": 2469
+  },
+  {
+   "path": "website/src/render-docs.ts",
+   "type": "blob",
+   "size": 3988
+  },
+  {
+   "path": "website/src/search-index.ts",
+   "type": "blob",
+   "size": 1627
+  },
+  {
+   "path": "website/src/search.ts",
+   "type": "blob",
+   "size": 2022
+  },
+  {
+   "path": "website/src/styles.ts",
+   "type": "blob",
+   "size": 5596
+  },
+  {
+   "path": "website/src/success.ts",
+   "type": "blob",
+   "size": 4932
+  },
+  {
+   "path": "website/src/terms.ts",
+   "type": "blob",
+   "size": 2534
+  },
+  {
+   "path": "website/tests",
+   "type": "tree"
+  },
+  {
+   "path": "website/tests/format-html.test.ts",
+   "type": "blob",
+   "size": 1366
+  },
+  {
+   "path": "website/tests/syntax-highlighting.test.ts",
+   "type": "blob",
+   "size": 1921
+  },
+  {
+   "path": "website/tsconfig.json",
+   "type": "blob",
+   "size": 341
+  },
+  {
+   "path": "website/tsconfig.playground.json",
+   "type": "blob",
+   "size": 365
+  },
+  {
+   "path": "website/worker-configuration.d.ts",
+   "type": "blob",
+   "size": 425365
+  },
+  {
+   "path": "website/wrangler.toml",
+   "type": "blob",
+   "size": 579
+  }
+ ],
+ "truncated": false
+}

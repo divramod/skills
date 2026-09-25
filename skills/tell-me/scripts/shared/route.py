@@ -141,9 +141,9 @@ def github(host: str, segs: list[str]) -> dict | None:
                 "repo": f"{owner}/{repo}", "number": int(rest[1])}
     out = {"kind": "repo", "id": f"{owner}/{repo}", "url": base, "repo": f"{owner}/{repo}"}
     if len(rest) >= 2 and rest[0] in ("tree", "blob"):
-        out |= {"ref": rest[1], "path": "/".join(rest[2:])}
+        out |= {"ref": rest[1], "path": "/".join(rest[2:]), "url": f"{base}/{rest[0]}/{'/'.join(rest[1:])}"}
         if rest[0] == "blob":
-            out |= {"kind": "blob", "url": f"{base}/blob/{'/'.join(rest[1:])}"}
+            out["kind"] = "blob"
     return out
 
 

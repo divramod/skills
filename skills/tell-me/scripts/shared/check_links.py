@@ -39,15 +39,17 @@ BLOCKED = {401, 403, 405, 429, 503, 999}
 _LINK_RE = re.compile(r"\]\((https?://(?:[^()\s]|\([^()\s]*\))+)\)|<(https?://[^>\s]+)>|(?<![(<\[])(https?://[^\s)\]>]+[^\s)\]>.,;:!?])")
 _VIDEO_LINK_RE = re.compile(r"[?&#]t=\d+s?$")
 # Anchor links into the source itself (copied from its content file): [¶3](url#:~:text=...), [#](url#heading),
-# [→](comment permalink).
-_ANCHOR_LINK_RE = re.compile(r"\[(?:¶\d+|#|→)\]\([^)\s]*\)")
+# [→](comment permalink), [L12](repo file line).
+_ANCHOR_LINK_RE = re.compile(r"\[(?:¶\d+|#|→|L\d+)\]\([^)\s]*\)")
+# code: example URLs in commands are not links
+_CODE_RE = re.compile(r"```.*?```|~~~.*?~~~|`[^`\n]*`", re.S)
 
 
 def extract_links(text: str) -> list[str]:
     """External links in document order, deduplicated; the source's own anchor links (video timestamps,
-    article paragraphs and headings) are skipped."""
+    article paragraphs and headings, repo lines) and URLs in code are skipped."""
     seen: dict[str, None] = {}
-    for m in _LINK_RE.finditer(_ANCHOR_LINK_RE.sub("", text)):
+    for m in _LINK_RE.finditer(_ANCHOR_LINK_RE.sub("", _CODE_RE.sub(" ", text))):
         url = next(g for g in m.groups() if g)
         if not _VIDEO_LINK_RE.search(url):
             seen.setdefault(url, None)
