@@ -11,5 +11,7 @@
 ## Open questions / claims to verify
 - <claims made without evidence, or things worth fact-checking>
 
-## Notable quotes / numbers / resources mentioned
+## Notable quotes / numbers
 - <...>
+
+<links section: templates/links.md>

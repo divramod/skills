@@ -5,5 +5,7 @@
 ### <chapter title> (<timestamp link>)
 - <2-4 bullets: what this chapter says>
 
-## Notable quotes / numbers / resources mentioned
+## Notable quotes / numbers
 - <...>
+
+<links section: templates/links.md>

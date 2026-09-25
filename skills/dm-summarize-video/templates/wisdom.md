@@ -19,5 +19,4 @@
 ## Recommendations
 - <actionable recommendations>
 
-## Resources
-- <books, tools, papers, people, links mentioned>
+<links section: templates/links.md>
