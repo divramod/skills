@@ -21,7 +21,12 @@ Folder: <root>/videos/<platform>/<user>/<title>/ (root: $TELL_ME_ROOT or ~/me/su
 As a part of another source's item (an x post's video): --dir <folder> --content-part <name> writes into that
 folder instead, keeps the transcript as <name>-transcript.md, stores the video's facts under metadata.json's
 <name> key (the other source owns the contract fields; the download still records video_file/video_quality) and
-prints {part, transcript, transcript_source, ...} instead of an envelope. No videos/… library entry is made.
+prints {part, transcript, transcript_source, ...} instead of an envelope. No videos/… library entry is made. The
+folder must already hold the owner's metadata.json (source and title). The part's transcript is reused unless
+--refresh or the part now comes from another URL / playlist item.
+
+A post with several videos is a playlist to yt-dlp even with --no-playlist (its top level has no duration or
+captions): the video is entry --playlist-item N (default 1), and every later yt-dlp call gets --playlist-items N.
 Requires: yt-dlp, ffmpeg; uvx only for the Whisper fallback.
 """
 from __future__ import annotations
@@ -180,6 +185,25 @@ def download_plan(skip_download: bool, visual: bool, have_quality: str | None, h
     return "background", wanted
 
 
+def pick_entry(info: dict, item: int) -> tuple[dict, int | None, int]:
+    """(the video's info, the yt-dlp playlist item or None, how many videos the URL holds). A single-item URL that
+    yt-dlp answers as a playlist (an x post with several videos) gives entry `item` (1-based; the first when out of
+    range), with the post's facts it lacks."""
+    if info.get("_type") != "playlist":
+        return info, None, 1
+    entries = [e for e in info.get("entries") or [] if isinstance(e, dict)]
+    if not entries:
+        raise SkillError(f"yt-dlp found no video in {info.get('webpage_url') or info.get('original_url')}")
+    n = item if 1 <= item <= len(entries) else 1
+    if n != item:
+        log(f"there is no video {item} (the URL has {len(entries)}); taking video 1")
+    entry = dict(entries[n - 1])
+    for k in ("webpage_url", "original_url", "uploader", "uploader_id", "channel", "upload_date", "description"):
+        if not entry.get(k) and info.get(k):
+            entry[k] = info[k]
+    return entry, n, len(entries)
+
+
 def render_transcript(info: dict, source: str, body: str) -> str:
     rows = [
         f"# {info.get('title', 'Untitled')}",
@@ -187,7 +211,7 @@ def render_transcript(info: dict, source: str, body: str) -> str:
         f"- url: {info.get('webpage_url') or info.get('original_url') or ''}",
         f"- channel: {info.get('channel') or info.get('uploader') or '?'}",
         f"- published: {info.get('upload_date') or '?'}",
-        f"- duration: {fmt_ts(info.get('duration') or 0)}",
+        f"- duration: {fmt_ts(info['duration']) if info.get('duration') else '?'}",
         f"- platform: {platform_of(info)}",
         f"- transcript source: {source}",
     ]
@@ -225,6 +249,12 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
+def ytdlp(args) -> list[str]:
+    """yt-dlp with the cookies and, for one video of a playlist-shaped URL, --playlist-items."""
+    item = getattr(args, "item", None)
+    return ytdlp_base(args.cookies_from_browser) + (["--playlist-items", str(item)] if item else [])
+
+
 def fetch_info(args) -> dict:
     p = run(ytdlp_base(args.cookies_from_browser) + ["--dump-single-json", "--skip-download", args.url])
     if p.returncode != 0:
@@ -242,7 +272,7 @@ def fetch_captions(args, info: dict, folder: Path) -> tuple[list, str] | None:
     log(f"downloading {'auto' if is_auto else 'manual'} captions [{lang}]")
     for f in folder.glob("subs*.vtt"):
         f.unlink()
-    p = run(ytdlp_base(args.cookies_from_browser) + [
+    p = run(ytdlp(args) + [
         "--skip-download", "--write-auto-subs" if is_auto else "--write-subs",
         "--sub-langs", lang, "--sub-format", "vtt/best", "--convert-subs", "vtt",
         "-o", str(folder / "subs.%(ext)s"), args.url])
@@ -285,7 +315,7 @@ def fetch_whisper(args, folder: Path, use_video: bool = True) -> tuple[list, str
     temp_audio = None
     if not media:
         log("downloading audio for Whisper transcription")
-        p = run(ytdlp_base(args.cookies_from_browser) + ["-f", "bestaudio/best", "-o", str(folder / "audio.%(ext)s"), args.url])
+        p = run(ytdlp(args) + ["-f", "bestaudio/best", "-o", str(folder / "audio.%(ext)s"), args.url])
         media = temp_audio = find_file(folder, "audio")
         if not media:
             err = p.stderr.strip()
@@ -331,6 +361,8 @@ def main(argv=None) -> int:
     ap.add_argument("--dir", type=Path, help="with --content-part: the other source's folder to write into")
     ap.add_argument("--content-part", metavar="NAME",
                     help="prepare the video as part NAME of another item (needs --dir; see above)")
+    ap.add_argument("--playlist-item", type=int, default=1, metavar="N",
+                    help="a URL with several videos (an x post): take video N (default 1)")
     args = ap.parse_args(argv)
     if bool(args.dir) != bool(args.content_part):
         raise SkillError("--dir and --content-part go together")
@@ -343,9 +375,16 @@ def main(argv=None) -> int:
         return list_videos.main([args.url] + (["--limit", str(args.limit)] if args.limit else []) + (
             ["--cookies-from-browser", args.cookies_from_browser] if args.cookies_from_browser else []))
 
-    require("yt-dlp", "ffmpeg")
-    info = fetch_info(args)
     part = args.content_part
+    if part:  # the owner's fields come first: the download and the page refresh read them
+        owner = read_json(args.dir / "metadata.json")
+        if not (owner.get("source") and owner.get("title")):
+            raise SkillError(f"--content-part needs --dir to be a prepared item's folder (metadata.json with "
+                             f"source and title): {args.dir}")
+    require("yt-dlp", "ffmpeg")
+    info, args.item, videos = pick_entry(fetch_info(args), args.playlist_item)
+    if videos > 1:
+        log(f"{args.url} has {videos} videos; taking video {args.item}")
     if part:
         existing, folder = None, args.dir
     else:
@@ -362,7 +401,7 @@ def main(argv=None) -> int:
     have_quality = old_meta.get("video_quality")
     transcript = folder / (f"{part}-transcript.md" if part else "content.md")
     source = (old_meta.get(part) or {}).get("transcript_source") if part else old_meta.get("transcript_source")
-    need_transcript = args.refresh or not (transcript.exists() and source)
+    need_transcript = args.refresh or not (transcript.exists() and source) or (part and moved(old_meta.get(part), args))
     if not need_transcript:
         log("using existing transcript (pass --refresh to refetch)")
 
@@ -375,9 +414,10 @@ def main(argv=None) -> int:
     background = video_future = None
     pool = ThreadPoolExecutor(max_workers=1)
     if how == "wait":
-        video_future = pool.submit(download, folder, args.url, wanted, have_quality, args.cookies_from_browser)
+        video_future = pool.submit(download, folder, args.url, wanted, have_quality, args.cookies_from_browser,
+                                   None, args.item)
     elif how == "background":
-        background = start_background(folder, args.url, wanted, have_quality, args.cookies_from_browser)
+        background = start_background(folder, args.url, wanted, have_quality, args.cookies_from_browser, args.item)
 
     try:
         if need_transcript:
@@ -390,7 +430,7 @@ def main(argv=None) -> int:
         pool.shutdown(wait=True)
 
     if part:
-        return print_part(folder, part, info, transcript, source, video_future, args)
+        return print_part(folder, part, info, transcript, source, video_future, args, videos)
 
     # Merge, don't overwrite: a background download may add video_file/video_quality at any time.
     prepared_at = old_meta.get("prepared_at") or datetime.now().isoformat(timespec="seconds")
@@ -434,10 +474,19 @@ def main(argv=None) -> int:
     return 0
 
 
+def moved(old_part: dict | None, args) -> bool:
+    """True when the stored part came from another URL or playlist item (its transcript is not this video's)."""
+    if not old_part:
+        return False
+    was = old_part.get("source_url") or old_part.get("webpage_url")
+    return bool(was and was != args.url) or (old_part.get("playlist_item") or 1) != (args.item or 1)
+
+
 def print_part(folder: Path, part: str, info: dict, transcript: Path, source: str | None, video_future,
-               args) -> int:
+               args, videos: int = 1) -> int:
     """--content-part: the video's facts under metadata.json's <part> key, then the part JSON on stdout."""
     facts = {k: info.get(k) for k in ("id", "title", "duration", "webpage_url", "upload_date", "extractor_key")}
+    facts |= {"source_url": args.url, "playlist_item": args.item, "videos": videos}
     meta = update_json(folder / "metadata.json", {part: facts | {"transcript_source": source,
                                                                  "transcript_file": transcript.name}})
     video = folder / meta["video_file"] if meta.get("video_file") else None
@@ -449,7 +498,9 @@ def print_part(folder: Path, part: str, info: dict, transcript: Path, source: st
         from extract_frames import extract
         frames_index = extract(folder, max_frames=args.max_frames)
     out = {"part": part, "dir": str(folder), "title": info.get("title"), "url": info.get("webpage_url"),
-           "duration": fmt_ts(info.get("duration") or 0), "transcript": str(transcript),
+           "duration": fmt_ts(info["duration"]) if info.get("duration") else None,
+           "duration_seconds": info.get("duration"), "videos": videos, "playlist_item": args.item,
+           "transcript": str(transcript),
            "transcript_source": source, "transcript_words": len(transcript.read_text(encoding="utf-8").split()),
            "video_file": str(video) if video else None, "video_download": download_status(folder),
            "frames_index": str(frames_index) if frames_index else None}

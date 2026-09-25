@@ -4,8 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from _common import SkillError
-from client import FX, FxTwitter
+from client import FX, FxTwitter, HTTPStatus
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ROOT = "2102861892549279922"  # simonw: a two-post thread with replies
@@ -26,6 +25,8 @@ def answers() -> dict:
         f"{FX}thread/{ROOT}": thread,
         # FxTwitter's thread of a post inside a self-thread starts at that post
         f"{FX}thread/{SECOND}": thread | {"status": thread["thread"][1], "thread": thread["thread"][1:]},
+        f"{FX}status/{ROOT}": {"code": 200, "status": thread["thread"][0]},
+        f"{FX}status/{SECOND}": {"code": 200, "status": thread["thread"][1]},
         f"{FX}conversation/{ROOT}?ranking_mode=likes": load("conversation.likes.json"),
         f"{FX}conversation/{ROOT}?ranking_mode=recency": load("conversation.recency.json"),
         f"{FX}thread/{VIDEO}": video | {"thread": [video["status"]]},
@@ -35,7 +36,8 @@ def answers() -> dict:
 
 
 class FakeGet:
-    """url -> recorded answer; unknown URLs answer FxTwitter's 404 (or raise, for the embed endpoint).
+    """url -> recorded answer; unknown URLs answer FxTwitter's 404 (or, for the embed endpoint, HTTP 404 with an
+    empty body: both are what a deleted post gets, 2026-09).
     `calls` records every URL."""
 
     def __init__(self, extra: dict | None = None):
@@ -51,7 +53,7 @@ class FakeGet:
             raise answer
         if answer is None:
             if "syndication" in url:
-                raise SkillError(f"{url} answered HTTP 404")
+                raise HTTPStatus(url, 404)
             return dict(NOT_FOUND)
         return answer() if callable(answer) else answer
 

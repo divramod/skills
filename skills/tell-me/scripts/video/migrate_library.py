@@ -69,6 +69,8 @@ def migrate_folder(folder: Path, root: Path | None = None, apply: bool = True) -
     meta = load(meta_path)
     if meta is None:
         return {"dir": str(folder), "skipped": "metadata.json can't be read; fix or delete it by hand"}
+    if meta.get("source") not in (None, "video"):  # another source's folder (an x post with a video part)
+        return None
     actions, new = plan_folder(folder, meta)
     note = folder / ("digest.md" if new.get("kind") == "digest" else "summary.md")
     page = note.with_suffix(".html")

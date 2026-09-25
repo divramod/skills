@@ -136,6 +136,42 @@ class TestRenderTranscript(unittest.TestCase):
         self.assertIn("- [00:42](https://www.youtube.com/watch?v=abc&t=42s) Main", md)
         self.assertIn("[[00:44](https://www.youtube.com/watch?v=abc&t=44s)] x", md)
 
+    def test_unknown_duration_is_not_zero(self):
+        from prepare import render_transcript
+        self.assertIn("- duration: ?", render_transcript({"title": "T"}, "whisper", "x"))
+
+
+class TestPickEntry(unittest.TestCase):
+    """A post with several videos: yt-dlp answers a playlist even with --no-playlist (no duration, no captions)."""
+    POST = {"_type": "playlist", "id": "1578401165338976258", "webpage_url": "https://x.com/p/status/1578401165338976258",
+            "uploader": "Prime", "upload_date": "20221007",
+            "entries": [{"id": "a", "duration": 6.006, "title": "T"}, {"id": "b", "duration": 7.5, "title": "T #2"}]}
+
+    def test_a_single_video_passes_through(self):
+        from prepare import pick_entry
+        info = {"id": "v", "duration": 3}
+        self.assertEqual(pick_entry(info, 1), (info, None, 1))
+
+    def test_the_chosen_entry_with_the_posts_facts(self):
+        from prepare import pick_entry
+        entry, item, videos = pick_entry(self.POST, 2)
+        self.assertEqual((entry["id"], entry["duration"], item, videos), ("b", 7.5, 2, 2))
+        self.assertEqual((entry["webpage_url"], entry["uploader"]), (self.POST["webpage_url"], "Prime"))
+        self.assertEqual(pick_entry(self.POST, 9)[:2], (self.POST["entries"][0] | {
+            k: self.POST[k] for k in ("webpage_url", "uploader", "upload_date")}, 1))
+
+    def test_an_empty_playlist_fails(self):
+        from _common import SkillError
+        from prepare import pick_entry
+        with self.assertRaises(SkillError):
+            pick_entry({"_type": "playlist", "entries": []}, 1)
+
+    def test_every_later_ytdlp_call_takes_the_item(self):
+        import argparse
+        from prepare import ytdlp
+        self.assertEqual(ytdlp(argparse.Namespace(cookies_from_browser=None, item=2))[-2:], ["--playlist-items", "2"])
+        self.assertNotIn("--playlist-items", ytdlp(argparse.Namespace(cookies_from_browser=None, item=None)))
+
 
 class TestContractFields(unittest.TestCase):
     def test_video_contract_fields(self):
@@ -159,15 +195,16 @@ class TestContractFields(unittest.TestCase):
 class TestContentPart(unittest.TestCase):
     """--dir/--content-part: the video of another item (an x post) goes into that item's folder."""
 
-    def run_part(self, folder: Path, *extra: str) -> tuple[dict, str]:
+    def run_part(self, folder: Path, *extra: str, info: dict | None = None,
+                 url: str = "https://x.com/u/status/99") -> tuple[dict, str]:
         import contextlib
         import io
         import json
         from unittest import mock
 
         import prepare
-        info = {"id": "99", "title": "Clip", "duration": 92, "webpage_url": "https://x.com/u/status/99",
-                "extractor_key": "Twitter", "uploader": "u"}
+        info = info or {"id": "99", "title": "Clip", "duration": 92, "webpage_url": "https://x.com/u/status/99",
+                        "extractor_key": "Twitter", "uploader": "u"}
         out = io.StringIO()
         with mock.patch.object(prepare, "require"), \
                 mock.patch.object(prepare, "fetch_info", return_value=info), \
@@ -175,8 +212,10 @@ class TestContentPart(unittest.TestCase):
                 mock.patch.object(prepare, "start_background", return_value={"status": "running"}) as bg, \
                 mock.patch.object(prepare, "find_existing", side_effect=AssertionError("no library lookup")), \
                 contextlib.redirect_stdout(out):
-            prepare.main(["https://x.com/u/status/99", "--dir", str(folder), "--content-part", "video", *extra])
+            prepare.main([url, "--dir", str(folder), "--content-part", "video", *extra])
         self.calls = (ft.call_count, bg.call_count)
+        self.bg_args = bg.call_args
+        self.ft_args = ft.call_args
         return json.loads(out.getvalue()), (folder / "video-transcript.md").read_text()
 
     def test_writes_into_the_given_folder_without_touching_the_owner_fields(self):
@@ -200,6 +239,54 @@ class TestContentPart(unittest.TestCase):
             # a second run reuses the transcript; --skip-download starts no download
             out, _ = self.run_part(folder, "--skip-download")
             self.assertEqual(self.calls, (0, 0))
+
+    def folder(self, tmp: str, meta: dict | None = None) -> Path:
+        import json
+        folder = Path(tmp) / "posts" / "x" / "u" / "clip-99"
+        folder.mkdir(parents=True)
+        (folder / "metadata.json").write_text(json.dumps({"source": "x", "id": "99", "title": "A post"}
+                                                         if meta is None else meta))
+        return folder
+
+    def test_one_video_of_a_post_with_several(self):
+        import json
+        import tempfile
+        info = TestPickEntry.POST
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = self.folder(tmp)
+            out, text = self.run_part(folder, "--playlist-item", "2", info=info, url=info["webpage_url"])
+            self.assertEqual((out["videos"], out["playlist_item"], out["duration"], out["duration_seconds"]),
+                             (2, 2, "00:07", 7.5))
+            self.assertIn("- duration: 00:07", text)
+            self.assertEqual(self.bg_args.args[-1], 2)  # the download takes video 2 only
+            self.assertEqual(self.ft_args.args[0].item, 2)  # and so do captions / Whisper
+            meta = json.loads((folder / "metadata.json").read_text())
+            self.assertEqual((meta["video"]["playlist_item"], meta["video"]["videos"]), (2, 2))
+            # the same video again: the transcript is reused; another one is transcribed
+            self.run_part(folder, "--skip-download", "--playlist-item", "2", info=info, url=info["webpage_url"])
+            self.assertEqual(self.calls, (0, 0))
+            self.run_part(folder, "--skip-download", info=info, url=info["webpage_url"])
+            self.assertEqual(self.calls, (1, 0))
+
+    def test_another_url_is_transcribed_anew(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = self.folder(tmp)
+            self.run_part(folder, "--skip-download")
+            self.run_part(folder, "--skip-download", url="https://x.com/u/status/100")
+            self.assertEqual(self.calls, (1, 0))
+
+    def test_part_needs_the_owners_folder(self):
+        import tempfile
+        from _common import SkillError
+        with tempfile.TemporaryDirectory() as tmp:
+            for meta in ({}, {"source": "x"}, {"title": "T"}):
+                folder = Path(tmp) / str(len(list(Path(tmp).iterdir())))
+                folder.mkdir()
+                if meta:
+                    (folder / "metadata.json").write_text(__import__("json").dumps(meta))
+                with self.assertRaisesRegex(SkillError, "prepared item's folder"):
+                    self.run_part(folder)
 
     def test_dir_needs_content_part(self):
         from _common import SkillError

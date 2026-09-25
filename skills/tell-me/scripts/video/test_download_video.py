@@ -92,6 +92,31 @@ class TestStatus(unittest.TestCase):
         meta = json.loads((self.dir / "metadata.json").read_text())
         self.assertEqual(meta, {"id": "abc", "transcript_source": "x", "video_file": "video.mkv", "video_quality": "best"})
 
+    def test_refresh_never_migrates_another_sources_folder(self):
+        from unittest import mock
+        import download_video
+        (self.dir / "metadata.json").write_text(json.dumps({"source": "x", "title": "A post", "video": {}}))
+        with mock.patch("migrate_library.migrate_folder") as migrate, \
+                mock.patch("save_summary.refresh", return_value=[]):
+            download_video.refresh(self.dir)
+        migrate.assert_not_called()
+        self.assertEqual(json.loads((self.dir / "metadata.json").read_text())["source"], "x")
+
+    def test_one_video_of_several_is_passed_on(self):
+        from unittest import mock
+        import download_video
+        with mock.patch.object(download_video.subprocess, "Popen") as popen:
+            popen.return_value.pid = 1
+            download_video.start_background(self.dir, "https://x.com/p/status/1", "best", None, None, 2)
+        self.assertEqual(popen.call_args.args[0][-2:], ["--playlist-item", "2"])
+        (self.dir / STATUS_FILE).unlink()
+        with mock.patch.object(download_video.subprocess, "Popen") as popen:
+            popen.return_value.stdout = []
+            with self.assertRaises(SkillError):  # no file appears: the fake yt-dlp downloads nothing
+                download_video.download(self.dir, "https://x.com/p/status/1", "best", None, None, item=2)
+        cmd = popen.call_args.args[0]
+        self.assertEqual(cmd[cmd.index("--playlist-items") + 1], "2")
+
 
 if __name__ == "__main__":
     unittest.main()

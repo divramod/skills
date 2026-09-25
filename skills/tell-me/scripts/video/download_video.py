@@ -9,6 +9,7 @@ re-encoding; players like VLC show the title instead of "video.mkv"), merges vid
 into metadata.json and, if the summary was already saved, refreshes summary.md + summary.html.
 
 Usage: download_video.py <folder> <url> [--quality best|1080p] [--have-quality Q] [--cookies-from-browser B]
+                          [--playlist-item N]   (N: one video of a URL with several, e.g. an x post)
        download_video.py <folder> --tag      (write the metadata into an existing video.<ext>)
        download_video.py <folder> --delete   (delete video.<ext> and refresh the note)
        download_video.py <folder> --status   (JSON status of a background download, or null)
@@ -81,7 +82,7 @@ def parse_progress(line: str) -> float | None:
 
 
 def download(folder: Path, url: str, quality: str, have_quality: str | None, cookies: str | None,
-             on_progress=None) -> Path:
+             on_progress=None, item: int | None = None) -> Path:
     """Download video.<ext>; an existing lower-quality file is replaced when `best` is wanted.
 
     `on_progress(stream, percent)` is called for each yt-dlp progress line; stream counts the
@@ -96,7 +97,7 @@ def download(folder: Path, url: str, quality: str, have_quality: str | None, coo
         log(f"replacing {existing.name} ({have_quality or 'unknown quality'}) with the best available quality")
         existing.unlink()
     log(f"downloading video ({'highest available quality' if quality == 'best' else '<=1080p'})")
-    proc = subprocess.Popen(ytdlp_base(cookies) + [
+    proc = subprocess.Popen(ytdlp_base(cookies) + (["--playlist-items", str(item)] if item else []) + [
         "--newline", "-f", DOWNLOAD_FORMATS[quality], "--merge-output-format", "mp4/mkv",
         "-o", str(folder / "video.%(ext)s"), url], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     tail: list[str] = []
@@ -188,7 +189,8 @@ def record(folder: Path, video: Path, quality: str) -> None:
     update_json(folder / "metadata.json", {"video_file": video.name, "video_quality": quality})
 
 
-def start_background(folder: Path, url: str, quality: str, have_quality: str | None, cookies: str | None) -> dict:
+def start_background(folder: Path, url: str, quality: str, have_quality: str | None, cookies: str | None,
+                     item: int | None = None) -> dict:
     """Start this script detached from the caller; returns the status record."""
     status = download_status(folder)
     if status and status.get("status") == "running":
@@ -199,6 +201,8 @@ def start_background(folder: Path, url: str, quality: str, have_quality: str | N
         cmd += ["--have-quality", have_quality]
     if cookies:
         cmd += ["--cookies-from-browser", cookies]
+    if item:
+        cmd += ["--playlist-item", str(item)]
     log_path = folder / ".video-download.log"
     with open(log_path, "w") as logf:
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=logf, stderr=logf, start_new_session=True)
@@ -210,11 +214,12 @@ def start_background(folder: Path, url: str, quality: str, have_quality: str | N
 
 
 def refresh(folder: Path) -> list[Path]:
-    """Re-render the folder's note after the video changed (a folder from before the multi-source layout is
-    migrated first, so the page keeps its transcript)."""
+    """Re-render the folder's note after the video changed (a video folder from before the multi-source layout is
+    migrated first, so the page keeps its transcript; another source's folder is never migrated)."""
     from migrate_library import migrate_folder
     from save_summary import refresh as refresh_note
-    migrate_folder(folder)
+    if read_json(folder / "metadata.json").get("source") in (None, "video"):
+        migrate_folder(folder)
     return refresh_note(folder)
 
 
@@ -229,6 +234,7 @@ def main(argv=None) -> int:
     ap.add_argument("--quality", choices=list(DOWNLOAD_FORMATS), default="best")
     ap.add_argument("--have-quality", help="quality of an existing video.<ext> (from metadata.json)")
     ap.add_argument("--cookies-from-browser")
+    ap.add_argument("--playlist-item", type=int, help="one video of a URL with several (an x post): video N")
     args = ap.parse_args(argv)
 
     if args.status:
@@ -249,7 +255,7 @@ def main(argv=None) -> int:
         ap.error("url is required unless --tag, --delete or --status is given")
     if args.background:
         print(json.dumps(start_background(args.folder, args.url, args.quality, args.have_quality,
-                                          args.cookies_from_browser)))
+                                          args.cookies_from_browser, args.playlist_item)))
         return 0
     require("yt-dlp", "ffmpeg")
     status_path = args.folder / STATUS_FILE
@@ -266,7 +272,8 @@ def main(argv=None) -> int:
             last_write = time.monotonic()
 
     try:
-        video = download(args.folder, args.url, args.quality, args.have_quality, args.cookies_from_browser, progress)
+        video = download(args.folder, args.url, args.quality, args.have_quality, args.cookies_from_browser, progress,
+                         args.playlist_item)
     except SkillError as e:
         write_json(status_path, {"status": "failed", "quality": args.quality, "error": str(e)[-800:]})
         raise

@@ -13,26 +13,34 @@ reply:
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<x.com/…/status/<id>>" [--refresh] [--max-replies N] [--skip-download] [--no-video]
+python3 $S/shared/prepare.py "<x.com/…/status/<id>>" [--refresh] [--max-replies N] [--skip-download] [--no-video] \
+  [--refresh-video]
 ```
 
 - A link to any post of a thread prepares the whole thread from its first post; the envelope's `focus_post` names
-  the linked post (marked `(the linked post)` in `## Thread`). When it is set, say what that post adds first.
+  the linked post (the `### n/N [→](…/status/<focus_post>)` post in `## Thread`; `content.md` does not mark it,
+  since the same folder serves every link into the thread). When it is set, say what that post adds first.
 - A post that replies to someone else's post gets that post under `## In reply to`, as context: summarize the
   linked post, not the one it answers.
-- A thread that was prepared before is reused (by any of its post ids). `--refresh` refetches it into the same
-  folder: use it when the post is young (hours old) or the user says the replies have grown.
+- A thread that was prepared before is reused (by any of its post ids; each new link is kept as an alias).
+  `--refresh` refetches it into the same folder: use it when the post is young (hours old) or the user says the
+  replies have grown. It keeps the video's transcript when the video is the same; `--refresh-video` makes it anew.
 - Replies: up to `--max-replies` (default 200), top-level replies by likes, answers right below the reply they
   answer. FxTwitter often returns only its first page (about 40–70 replies, most-liked and newest merged; the
   envelope's `attempts` says `next page answered code 404`): for a post with thousands of replies the list is a
   sample of the most-liked, and the summary says so in one line. `--max-replies 0` skips them.
 - The data comes from FxTwitter (unofficial). When it fails, X's embed endpoint gives the post alone (`api:
-  syndication`: no thread, no replies): say so. A deleted, suspended or protected post exits 1 with the reason.
+  syndication`: no thread, no replies): say so. A deleted, suspended or protected post exits 1 with the reason. A
+  thread longer than 25 posts above the linked one is cut at the top (`attempts` says so): say so.
+- Post and reply text in `content.md` is escaped where a line would start markdown structure (`\## …`, `\>`,
+  `` \``` ``): drop the backslash when quoting; `check_quotes.py` ignores it.
 - **Video**: the thread's first video (not a GIF) goes through the video source: its transcript is `## Video` (the
   whole file is `video-transcript.md`), and the video downloads in the background in the best quality into the
   same folder, as for videos ([subskills/video/SUBSKILL.md](../video/SUBSKILL.md)). `--skip-download` only when the
-  user says not to keep the video; `--no-video` skips the video part. Without yt-dlp the part is skipped and
-  `attempts` says to run `scripts/video/install-prerequisites.sh`: run it and `--refresh` if the video matters.
+  user says not to keep the video; `--no-video` skips the video part. Further videos (a post with several, or
+  later posts) are listed under `## Video` as not transcribed and noted in `attempts`: say so when they matter.
+  Without yt-dlp the part is skipped and `attempts` says to run `scripts/video/install-prerequisites.sh`: run it
+  and `--refresh-video` if the video matters. Any other video failure is `video: the video source failed (…)`.
 
 ## Reading
 
@@ -67,13 +75,13 @@ repliers posted. Nothing linked: no section.
 
 The page header shows the author, the date and the post link; the full `content.md` is in the collapsed "Posts"
 section. The folder `posts/x/<user>/<first-words>-<id>/` holds `summary.md`, `summary.html`, `content.md`,
-`metadata.json` (`extras`: user, name, views, likes, reposts, replies, quotes, bookmarks, replies_fetched,
-posts, community_note, api, aliases; `video`: the video part's facts) and, with a video, `video-transcript.md`
-and `video.<ext>`.
+`metadata.json` (`duration`: the video's; `extras`: user, name, views, likes, reposts, replies, quotes, bookmarks,
+replies_fetched, posts, community_note, api, attempts, aliases; `video`: the video part's facts, only while a video
+part ran) and, with a video, `video-transcript.md` and `video.<ext>`.
 
 ## Scripts (`scripts/x/`)
 
 | Script | Does |
 |---|---|
-| `prepare.py` | post id → thread (walked up to its first post) + replies via `client.py` → the video part via `video/prepare.py --content-part video` → `content.md` + `metadata.json` |
+| `prepare.py` | post id → thread (walked up to its first post) + replies via `client.py` → the video part via `video/prepare.py --content-part video --playlist-item N` → `content.md` + `metadata.json` |
 | `client.py` | FxTwitter v2 (thread, status, conversation by likes and by recency), X's embed endpoint as the fallback |

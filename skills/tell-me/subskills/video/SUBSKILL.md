@@ -54,7 +54,7 @@ before that, run `python3 $S/video/download_video.py "<dir>" --tag`. The folder 
 
 | Script | Does |
 |---|---|
-| `prepare.py` | metadata → folder → [video in background] → transcript (captions, else Whisper) → [frames]; reuses folders by video id; playlists/channels via `list_videos.py`; `--dir <folder> --content-part video` makes the video a part of another item (an x post: `video-transcript.md`, no `videos/…` entry) |
+| `prepare.py` | metadata → folder → [video in background] → transcript (captions, else Whisper) → [frames]; reuses folders by video id; playlists/channels via `list_videos.py`; `--dir <folder> --content-part video` makes the video a part of another item (an x post: `video-transcript.md`, no `videos/…` entry); a URL with several videos (an x post) takes `--playlist-item N` |
 | `download_video.py` | video download (detached by default, status in `.video-download.json`), then metadata + chapters into the file; `--tag`, `--delete`, `--status` |
 | `related.py` | YouTube search for your queries → similar videos (deduped, marks already-summarized ones) |
 | `list_videos.py` | playlist/channel → video list + digest folder |

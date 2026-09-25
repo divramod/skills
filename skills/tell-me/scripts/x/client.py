@@ -2,19 +2,22 @@
 """X (Twitter) access for the x source, without login: the FxTwitter API v2 (api.fxtwitter.com, unofficial) and
 X's embed endpoint (cdn.syndication.twimg.com) as the fallback for a single post.
 
-- post(id): the post and its author chain (the thread: the author's own replies above and below it) from
+- post(id): the post and its author chain from it on (FxTwitter's thread of a post starts at that post) from
   /2/thread/<id>; when FxTwitter fails, /2/status/<id>; when that fails too, the syndication endpoint
   (the post only, no thread, no replies). Every fallback is logged and noted in `attempts`.
+- thread(id): post(id), plus the author's posts above it, walked up one light /2/status/<id> call each (at most
+  MAX_UP; a longer chain is cut and noted).
 - replies(id): the replies from /2/conversation/<id>, ranked by likes, then by recency for more (the two
   rankings overlap), following the cursor up to `limit`. FxTwitter sometimes answers an empty page or 404s a
   cursor: an empty first page is asked once more, a failed cursor ends that ranking (noted in `attempts`).
-A deleted, suspended or protected post raises SkillError with the reason.
+A deleted, suspended or protected post raises Unavailable (a SkillError) with the reason.
 
 Usage: client.py <post id> [--replies N]   (prints {status, thread, replies, api, attempts} as JSON)
 """
 from __future__ import annotations
 
 import argparse
+import html
 import http.client
 import json
 import math
@@ -33,12 +36,20 @@ FX = "https://api.fxtwitter.com/2/"
 SYNDICATION = "https://cdn.syndication.twimg.com/tweet-result?id={id}&token={token}&lang=en"
 TIMEOUT = 30
 MAX_PAGES = 10  # per ranking
-MAX_UP = 25  # thread posts above the linked one, fetched one call each
+MAX_UP = 25  # thread posts above the linked one, fetched one /2/status call each
 RANKINGS = ("likes", "recency")
 
 
 class Unavailable(SkillError):
     """The post exists no more or cannot be read without login (deleted, suspended, protected)."""
+
+
+class HTTPStatus(SkillError):
+    """An HTTP error answer without a JSON body; `code` is the HTTP status."""
+
+    def __init__(self, url: str, code: int):
+        super().__init__(f"{url} answered HTTP {code}")
+        self.code = code
 
 
 def get_json(url: str) -> dict:
@@ -55,7 +66,7 @@ def get_json(url: str) -> dict:
             body = None
         if isinstance(body, dict):
             return body | {"code": body.get("code") or e.code}
-        raise SkillError(f"{url} answered HTTP {e.code}")
+        raise HTTPStatus(url, e.code)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise SkillError(f"could not fetch {url}: {getattr(e, 'reason', e)}")
     except (http.client.HTTPException, ValueError):  # a cut-off answer, bad UTF-8 or JSON
@@ -105,7 +116,7 @@ def tombstone(status: dict | None) -> str | None:
 def from_syndication(d: dict) -> dict:
     """A syndication answer in FxTwitter's v2 status shape (the fields prepare.py reads)."""
     user = d.get("user") or {}
-    text = d.get("text") or ""
+    text = html.unescape(d.get("text") or "")  # the embed endpoint answers &amp; &lt; &gt;
     for u in (d.get("entities") or {}).get("urls") or []:  # t.co links -> the real URLs
         if u.get("url") and u.get("expanded_url"):
             text = text.replace(u["url"], u["expanded_url"])
@@ -147,27 +158,53 @@ class FxTwitter:
 
     def thread(self, post_id: str) -> list[dict]:
         """The author's whole chain around a post, in order. FxTwitter's thread starts at the linked post when it
-        sits inside a self-thread, so the chain is walked up (one call per step, at most MAX_UP) and joined."""
+        sits inside a self-thread, so the posts above it are walked up, one /2/status call each (at most MAX_UP;
+        a cut is noted), and put in front: exactly the path to the linked post, never another branch."""
         chain = self.post(post_id)[1]
-        for _ in range(MAX_UP):
-            first = chain[0]
-            up = first.get("replying_to") or {}
-            author = (first.get("author") or {}).get("screen_name") or ""
-            if self.api == "syndication" or not up.get("status") or (up.get("screen_name") or "").lower() \
-                    != author.lower():
+        if self.api == "syndication":
+            return chain
+        seen = {str(s.get("id")) for s in chain}
+        above: list[dict] = []
+        while parent := self.parent_in_chain(above[0] if above else chain[0]):
+            if parent in seen:  # a loop in the answers: stop
+                break
+            if len(above) >= MAX_UP:
+                self.note(f"thread: cut at {MAX_UP} posts above the linked one; the thread starts earlier "
+                          f"(post {parent})")
                 break
             try:
-                above = self.post(str(up["status"]), fallback=False)[1]
+                status = self.status(parent)
             except SkillError as e:
-                self.note(f"thread: the post above {first.get('id')} could not be fetched ({e})")
+                self.note(f"thread: the post above {(above[0] if above else chain[0]).get('id')} could not be "
+                          f"fetched ({e})")
                 break
-            ids = {s.get("id") for s in above}  # the parent's chain, usually down to and past ours
-            chain = above + [s for s in chain if s.get("id") not in ids]
-        return chain
+            seen.add(parent)
+            above.insert(0, status)
+        return above + chain
+
+    @staticmethod
+    def parent_in_chain(status: dict) -> str | None:
+        """The id of the post this one answers when that is the author's own (the chain goes on above)."""
+        up = status.get("replying_to") or {}
+        author = (status.get("author") or {}).get("screen_name") or ""
+        if up.get("status") and (up.get("screen_name") or "").lower() == author.lower():
+            return str(up["status"])
+        return None
+
+    def status(self, post_id: str) -> dict:
+        """One post from /2/status (no chain, no fallback); raises SkillError when FxTwitter has none."""
+        d = self.get(f"{FX}status/{post_id}")
+        status = d.get("status")
+        if reason := tombstone(status):
+            raise Unavailable(f"x.com post {post_id} is unavailable: {reason}")
+        if not (isinstance(status, dict) and status.get("id")):
+            raise SkillError(f"FxTwitter has no post {post_id} (code {d.get('code')})")
+        return status
 
     def post(self, post_id: str, fallback: bool = True) -> tuple[dict, list[dict]]:
         """(the post, its thread: the author chain from the post on, the post included). Without `fallback`
-        a failure raises instead of trying the embed endpoint."""
+        a failure raises instead of trying the embed endpoint (and `api` stays as it is)."""
+        not_found = 0  # FxTwitter endpoints that answered "no such post" (not a failure to reach them)
         for endpoint in ("thread", "status"):
             try:
                 d = self.get(f"{FX}{endpoint}/{post_id}")
@@ -180,18 +217,25 @@ class FxTwitter:
             if isinstance(status, dict) and status.get("id"):
                 thread = [s for s in d.get("thread") or [] if isinstance(s, dict) and s.get("id")]
                 return status, thread or [status]
+            not_found += d.get("code") == 404
             self.note(f"fxtwitter {endpoint}: no post (code {d.get('code')})")
         if not fallback:
             raise SkillError(f"FxTwitter has no post {post_id}")
         self.note("-> falling back to X's embed endpoint (the post only: no thread, no replies)")
-        self.api = "syndication"
         try:
             d = self.get(SYNDICATION.format(id=post_id, token=syndication_token(post_id)))
+        except HTTPStatus as e:
+            if e.code == 404 and not_found == 2:  # a deleted post: 404 everywhere, no tombstone
+                raise Unavailable(f"x.com post {post_id} is deleted or does not exist (FxTwitter: code 404, "
+                                  f"X's embed endpoint: HTTP 404)")
+            raise SkillError(f"x.com post {post_id} could not be fetched: FxTwitter and the embed endpoint "
+                             f"failed ({e})")
         except SkillError as e:
             raise SkillError(f"x.com post {post_id} could not be fetched: FxTwitter and the embed endpoint "
                              f"failed ({e})")
         if d.get("__typename") == "TweetTombstone" or not d.get("id_str"):
             raise Unavailable(f"x.com post {post_id} is deleted, protected or does not exist")
+        self.api = "syndication"
         status = from_syndication(d)
         return status, [status]
 

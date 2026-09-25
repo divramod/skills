@@ -34,12 +34,13 @@ class TestGetJson(unittest.TestCase):
         with mock.patch.object(client.urllib.request, "urlopen", side_effect=err):
             self.assertEqual(client.get_json("https://x.test/u"), {"status": None, "code": 404})
 
-    def test_an_error_without_json_raises(self):
-        err = urllib.error.HTTPError("u", 502, "bad", Message(), io.BytesIO(b"<html>"))
+    def test_an_error_without_json_raises_with_its_status(self):
+        err = urllib.error.HTTPError("u", 404, "nf", Message(), io.BytesIO(b""))  # the embed endpoint's 404
         self.addCleanup(err.close)
         with mock.patch.object(client.urllib.request, "urlopen", side_effect=err):
-            with self.assertRaisesRegex(SkillError, "HTTP 502"):
+            with self.assertRaisesRegex(client.HTTPStatus, "HTTP 404") as ctx:
                 client.get_json("https://x.test/u")
+        self.assertEqual(ctx.exception.code, 404)
 
     def test_ok(self):
         with mock.patch.object(client.urllib.request, "urlopen", return_value=FakeResponse(b'{"code":200}')):
@@ -72,6 +73,10 @@ class TestSyndication(unittest.TestCase):
         self.assertEqual(s["media"]["videos"][0]["duration"], 30.5)
         self.assertEqual((s["quote"]["id"], s["quote"]["author"]["screen_name"]), ("5", "q"))
 
+    def test_entities_are_decoded(self):
+        s = client.from_syndication(load("syndication.json") | {"text": "a &amp; b &lt;3 &gt; c", "entities": {}})
+        self.assertEqual(s["text"], "a & b <3 > c")
+
 
 class TestPost(unittest.TestCase):
     def test_thread(self):
@@ -84,7 +89,45 @@ class TestPost(unittest.TestCase):
     def test_thread_walks_up_to_the_first_post(self):
         fx = fake()
         self.assertEqual([s["id"] for s in fx.thread(SECOND)], [ROOT, SECOND])
+        # one light status call per post above; no chain is downloaded twice
+        self.assertEqual(fx.get.calls, [f"{FX}thread/{SECOND}", f"{FX}status/{ROOT}"])
         self.assertEqual([s["id"] for s in fx.thread(ROOT)], [ROOT, SECOND])
+        self.assertEqual(fx.attempts, [])
+
+    def chain(self, n: int, extra: dict | None = None) -> dict:
+        """Answers for a self-thread p1 <- p2 <- ... <- pn by @a (FxTwitter's thread of pn is [pn])."""
+        posts = [{"id": f"p{i}", "author": {"screen_name": "a"},
+                  "replying_to": {"screen_name": "A", "status": f"p{i - 1}"} if i > 1 else None}
+                 for i in range(1, n + 1)]
+        answers = {f"{FX}status/{p['id']}": {"code": 200, "status": p} for p in posts}
+        return answers | {f"{FX}thread/p{n}": {"code": 200, "status": posts[-1], "thread": [posts[-1]]}} | (extra or {})
+
+    def test_a_long_walk_is_cut_and_noted(self):
+        fx = fake(self.chain(6))
+        with mock.patch.object(client, "MAX_UP", 3):
+            thread = fx.thread("p6")
+        self.assertEqual([s["id"] for s in thread], ["p3", "p4", "p5", "p6"])
+        self.assertIn("cut at 3 posts", fx.attempts[-1])
+        self.assertIn("(post p2)", fx.attempts[-1])
+
+    def test_the_walk_takes_only_the_path_and_stops_on_a_loop(self):
+        # p1's own thread is another branch (p1 -> b2); it is never fetched or spliced in
+        branch = {f"{FX}thread/p1": {"code": 200, "status": {"id": "p1"}, "thread": [{"id": "p1"}, {"id": "b2"}]}}
+        fx = fake(self.chain(3, branch))
+        self.assertEqual([s["id"] for s in fx.thread("p3")], ["p1", "p2", "p3"])
+        self.assertNotIn(f"{FX}thread/p1", fx.get.calls)
+        loop = self.chain(2)
+        loop[f"{FX}status/p1"]["status"] = loop[f"{FX}status/p1"]["status"] | {
+            "replying_to": {"screen_name": "a", "status": "p2"}}
+        fx = fake(loop)
+        self.assertEqual([s["id"] for s in fx.thread("p2")], ["p1", "p2"])
+
+    def test_a_missing_post_above_is_noted(self):
+        answers = self.chain(3)
+        del answers[f"{FX}status/p1"]
+        fx = fake(answers)
+        self.assertEqual([s["id"] for s in fx.thread("p3")], ["p2", "p3"])
+        self.assertIn("the post above p2 could not be fetched", fx.attempts[-1])
 
     def test_thread_stops_at_a_reply_to_someone_else(self):
         reply = load("conversation.likes.json")["replies"][1]  # @dr_nikhilshah's reply to simonw
@@ -100,23 +143,41 @@ class TestPost(unittest.TestCase):
 
     def test_embed_fallback_when_fxtwitter_has_nothing(self):
         synd = load("syndication.json")
-        fx = fake({f"{FX}thread/{ROOT}": None,
+        fx = fake({f"{FX}thread/{ROOT}": None, f"{FX}status/{ROOT}": None,
                    client.SYNDICATION.format(id=ROOT, token=client.syndication_token(ROOT)): synd})
         status, thread = fx.post(ROOT)
         self.assertEqual((status["id"], fx.api), (ROOT, "syndication"))
         self.assertIn("embed endpoint", fx.attempts[-1])
         self.assertEqual(fx.replies(ROOT, 50), [])  # the embed endpoint has no replies
 
-    def test_tombstone_and_missing_posts(self):
+    def test_tombstone(self):
         tomb = {"code": 200, "status": {"type": "tombstone", "reason": "private", "message": "protected account"}}
         with self.assertRaisesRegex(client.Unavailable, "protected account"):
             fake({f"{FX}thread/1": tomb}).post("1")
-        with self.assertRaisesRegex(SkillError, "could not be fetched"):
-            fake().post("12345")
-        gone = {client.SYNDICATION.format(id="777", token=client.syndication_token("777")):
-                {"__typename": "TweetTombstone"}}
-        with self.assertRaisesRegex(client.Unavailable, "deleted, protected"):
-            fake(gone).post("777")
+
+    def test_a_deleted_post(self):
+        # FxTwitter answers {"status": null, "code": 404} on both endpoints, the embed endpoint HTTP 404 with an
+        # empty body (no tombstone) -- recorded 2026-09-25
+        fx = fake()
+        with self.assertRaisesRegex(client.Unavailable, "deleted or does not exist"):
+            fx.post("2102861892549279999")
+        self.assertEqual(fx.api, "fxtwitter")  # the fallback did not answer: not switched
+
+    def test_unreachable_is_not_called_deleted(self):
+        down = SkillError("timeout")
+        fx = fake({f"{FX}thread/5": down, f"{FX}status/5": down,
+                   client.SYNDICATION.format(id="5", token=client.syndication_token("5")): down})
+        with self.assertRaises(SkillError) as ctx:
+            fx.post("5")
+        self.assertNotIsInstance(ctx.exception, client.Unavailable)
+        self.assertIn("could not be fetched", str(ctx.exception))
+
+    def test_without_fallback_the_api_stays(self):
+        fx = fake()
+        with self.assertRaisesRegex(SkillError, "FxTwitter has no post"):
+            fx.post("404", fallback=False)
+        self.assertEqual(fx.api, "fxtwitter")
+        self.assertFalse(any("syndication" in u for u in fx.get.calls))
 
 
 class TestReplies(unittest.TestCase):

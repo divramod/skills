@@ -98,6 +98,15 @@ class TestMigrate(unittest.TestCase):
         self.assertTrue((self.folder / "content.md").exists())
         self.assertIsNone(migrate_folder(self.folder))
 
+    def test_another_sources_folder_is_left_alone(self):
+        from migrate_library import migrate_folder
+        post = self.root / "posts" / "x" / "u" / "p-1"
+        post.mkdir(parents=True)
+        meta = {"source": "x", "id": "1", "title": "A post", "video": {"transcript_file": "video-transcript.md"}}
+        (post / "metadata.json").write_text(json.dumps(meta))
+        self.assertIsNone(migrate_folder(post))
+        self.assertEqual(json.loads((post / "metadata.json").read_text()), meta)
+
     def test_empty_library(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(migrate(Path(tmp), apply=True)["folders"], [])
