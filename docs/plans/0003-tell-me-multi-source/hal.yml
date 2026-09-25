@@ -6,7 +6,7 @@ retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: 'phase 002 shipped (eeb0476); phase 003 hn: T201/T202 built, tests next'
+last_action: 'phase 003 hn: T201-T205 built+tested (2086f9a); review running'
 active: true
 targets:
 - skills/tell-me

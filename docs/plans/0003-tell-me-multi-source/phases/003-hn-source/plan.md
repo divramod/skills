@@ -1,7 +1,7 @@
 ---
 name: hn-source
 description: Hacker News: Algolia comment tree, linked article via the web extractor, discussion as themes with attributed quotes, check_quotes.py, past discussions.
-status: approved
+status: in_progress
 phase_id: "003"
 depends_on: ["001", "002"]
 wave: "03"
@@ -30,8 +30,8 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **Files**: skills/tell-me/scripts/hn/
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -41,8 +41,8 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **Files**: skills/tell-me/scripts/shared/check_quotes.py, test_check_quotes.py
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -52,8 +52,8 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **Files**: skills/tell-me/scripts/hn/related.py
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -63,8 +63,8 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **Files**: skills/tell-me/subskills/, skills/tell-me/templates/hn/
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -74,8 +74,8 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **Files**: skills/tell-me/scripts/hn/*.sh
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
