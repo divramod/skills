@@ -48,10 +48,11 @@ Decide what kind of page it is first; it changes what the summary should do:
   Summarize what is there and say in one line that the article is cut off. Don't fill the gap from memory.
 - **Garbled or noisy text** (menus, cookie banners, "related posts" in the middle, repeated lines): skip the
   noise; if it makes the content unreliable, say so in one line at the end.
-- **Redirected to a consent or login page** (`attempts[0]` says so): the text came from Jina or the archive.
+- **Redirected to a consent or login page** (an `attempts` entry says so): the text came from Jina or the archive.
   Check that its title matches the page asked for; if it is a site's home page instead, say the page is gone.
-- **A private address** (localhost, an intranet host): Jina and the Wayback Machine are skipped, so a
-  JavaScript-only page there stays short. Say so instead of guessing the rest.
+- **A private address** (localhost, a LAN IP, a single-label or `.local`/`.internal` host): Jina and the
+  Wayback Machine are skipped, so a JavaScript-only page there stays short. Say so instead of guessing the rest.
+  An intranet host with a public-looking name is not detected: don't pass such URLs if they must stay private.
 - **The script exits 1 with "answered HTTP 403"** (a bot challenge or an error page): tell the user and
   show the attempts; the page may still open in a browser.
 - **Comments** are not extracted. If the user wants the discussion, look for an HN thread (a `hn` input) instead.

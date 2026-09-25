@@ -58,10 +58,13 @@ def _url_attr(url: str, base: str) -> str:
     return html.escape(url, quote=True)
 
 
-def inline(text: str, base: str = "") -> str:
-    """Inline Markdown -> HTML. Code spans are protected from the other rules."""
-    slots: list[str] = []
-    text = text.replace("\x00", "")  # the slot marker; a stray one in page text would never be resolved
+def inline(text: str, base: str = "", _slots: list[str] | None = None) -> str:
+    """Inline Markdown -> HTML. Code spans are protected from the other rules. A link label is rendered with the
+    outer call's `_slots` (it may hold their markers, e.g. a code span), and the outer call resolves them."""
+    nested = _slots is not None
+    slots: list[str] = _slots if nested else []
+    if not nested:
+        text = text.replace("\x00", "")  # the slot marker; a stray one in page text would never be resolved
 
     def keep(fragment: str) -> str:
         slots.append(fragment)
@@ -78,7 +81,7 @@ def inline(text: str, base: str = "") -> str:
         cls = ' class="ts"' if ts else ""
         # Every link opens in a new tab so the summary stays open. Timestamp links too: with a player on the
         # page, the script seeks it instead; without one they open the video at that moment in a new tab.
-        return keep(f'<a href="{_url_attr(url, base)}"{cls}{data} target="_blank" rel="noopener">{inline(label, base)}</a>')
+        return keep(f'<a href="{_url_attr(url, base)}"{cls}{data} target="_blank" rel="noopener">{inline(label, base, slots)}</a>')
 
     text = re.sub(r"\[((?:[^\[\]]|\[[^\]]*\])+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)", link, text)
     text = re.sub(r"(?<![\"'=])\bhttps?://[^\s<>)\]]+[^\s<>)\].,;:!?]",
@@ -88,7 +91,7 @@ def inline(text: str, base: str = "") -> str:
     text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: f"<strong>{m.group(1) or m.group(2)}</strong>", text)
     text = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])|(?<![\w])_(?!\s)(.+?)(?<!\s)_(?![\w])",
                   lambda m: f"<em>{m.group(1) or m.group(2)}</em>", text)
-    while re.search(r"\x00\d+\x00", text):  # slots nest: a link label holds a code span
+    while not nested and re.search(r"\x00\d+\x00", text):  # slots nest: a link label holds a code span
         text = re.sub(r"\x00(\d+)\x00", lambda m: slots[int(m.group(1))], text)
     return text
 

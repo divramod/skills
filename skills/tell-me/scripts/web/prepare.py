@@ -50,16 +50,21 @@ def page_url(url: str) -> str:
                                                   fragment=route_fragment(parts.fragment)))
 
 
+PERMALINK_CLASS_RE = re.compile(r"\b(headerlink|anchor|permalink|heading-link)\b", re.I)
+
+
 class HeadingIds(HTMLParser):
     """Collects {normalized heading text: id} for h1-h6. The id comes from the heading itself, else from an element
-    inside it (id, or `<a name>`), else from its permalink (`<a href="#id">`, Sphinx), else from the `<section id>`
-    that the heading opens (Sphinx without permalinks)."""
+    inside it (id, or `<a name>`), else from its permalink (`<a href="#id">` whose text is ¶/#/§/empty or whose
+    class says so: Sphinx; not a link to the table of contents or a footnote), else from the `<section id>` that
+    the heading opens (Sphinx without permalinks)."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.ids: dict[str, str] = {}
         self._level = 0
-        self._id = self._href = self._section = None
+        self._id = self._href = self._section = self._link = None
+        self._link_text = ""
         self._text: list[str] = []
 
     def handle_starttag(self, tag, attrs):
@@ -70,11 +75,17 @@ class HeadingIds(HTMLParser):
             self._id = self._id or a.get("id") or (a.get("name") if tag == "a" else None)
             href = a.get("href") or ""
             if tag == "a" and href.startswith("#") and len(href) > 1:
-                self._href = self._href or urllib.parse.unquote(href[1:])
+                self._link = urllib.parse.unquote(href[1:])  # a permalink only if its text is ¶/#/§/empty
+                if PERMALINK_CLASS_RE.search(a.get("class") or ""):
+                    self._href = self._href or self._link
         else:
             self._section = a.get("id") if tag == "section" else None
 
     def handle_endtag(self, tag):
+        if tag == "a" and self._link:
+            if self._level and re.fullmatch(r"\s*[¶#§🔗]?\s*", self._link_text):
+                self._href = self._href or self._link
+            self._link, self._link_text = None, ""
         if re.fullmatch(r"h[1-6]", tag) and self._level:
             hid = self._id or self._href or self._section
             if hid:
@@ -82,6 +93,8 @@ class HeadingIds(HTMLParser):
             self._level, self._section = 0, None
 
     def handle_data(self, data):
+        if self._link:
+            self._link_text += data
         if self._level:
             self._text.append(data)
         elif data.strip():

@@ -33,6 +33,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
 from _common import SkillError, log, require, run_main
+from route import host_of
 
 MIN_WORDS = 200
 TIMEOUT = 60  # seconds per extractor / request
@@ -262,11 +263,17 @@ def absolutize(markdown: str, base: str) -> str:
 
 
 def decode(data: bytes, header_charset: str | None) -> str:
-    """Bytes -> text with the HTTP header's charset, else the page's own <meta charset>, else UTF-8."""
+    """Bytes -> text with the HTTP header's charset, else the page's own <meta charset>, else UTF-8, else
+    Windows-1252 (old pages that declare nothing)."""
     charset = header_charset
     if not charset:
         m = re.search(rb"<meta[^>]+charset=[\"']?([\w-]+)", data[:4096], re.I)
-        charset = m.group(1).decode("ascii") if m else "utf-8"
+        if not m:
+            try:
+                return data.decode("utf-8")
+            except UnicodeDecodeError:
+                return data.decode("cp1252", errors="replace")
+        charset = m.group(1).decode("ascii")
     try:
         return data.decode(charset, errors="replace")
     except LookupError:  # an unknown charset name
@@ -396,13 +403,25 @@ def is_app_shell(html: str) -> bool:
 
 
 def is_soft_404(url: str, final_url: str) -> bool:
-    """A deep link that redirects to a site's home page: the page is gone (dead GeoCities pages land on Yahoo,
-    removed posts on the blog's front page)."""
+    """An article's link that redirects to a site's home page: the page is gone (dead GeoCities pages land on
+    Yahoo, removed posts on the blog's front page). Only article-shaped paths count (two segments or more, or a
+    file name): a short link (t.co/abc) or a locale (/en) may rightly lead to a home page."""
     def path(u: str) -> str:
-        return re.sub(r"/(index|default)\.\w+$", "/", urllib.parse.urlsplit(u).path).rstrip("/")
-    a, b = urllib.parse.urlsplit(url), urllib.parse.urlsplit(final_url)
+        return re.sub(r"/(index|default)\.\w+$", "/", urllib.parse.urlsplit(u).path).strip("/")
+    source = path(url)
+    article = source.count("/") >= 1 or bool(re.search(r"\.\w{2,5}$", source))
+    same_site = host_of(url) == host_of(final_url)
     # on the same site, a query may still select the page (/?p=123)
-    return bool(path(url)) and not path(final_url) and (a.hostname != b.hostname or not b.query)
+    return article and not path(final_url) and (not same_site or not urllib.parse.urlsplit(final_url).query)
+
+
+CHALLENGE_RE = re.compile(r"just a moment|checking your browser|verify (that )?you are (a )?human|attention required|"
+                          r"access denied|forbidden|page not found|not found|enable javascript|captcha", re.I)
+
+
+def is_error_page(ex: Extraction) -> bool:
+    """A short text that is a bot challenge or an error page, not a short article."""
+    return ex.words < MIN_WORDS and (ex.words < 50 or bool(CHALLENGE_RE.search(ex.markdown[:600])))
 
 
 def is_private(url: str) -> bool:
@@ -415,8 +434,9 @@ def is_private(url: str) -> bool:
         return "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa", ".localhost"))
 
 
-WALL_RE = re.compile(r"^(consent|login|signin|accounts?|auth)\.|/(consent|collectconsent|login|signin|sign-in)\b",
-                     re.I)
+# a consent/login host, or one of those as a whole path segment (not /login-flows-explained/)
+WALL_RE = re.compile(r"^(consent|login|signin|accounts?|auth)\.[^/]+\.|"
+                     r"/(consent|collectconsent|login|signin|sign-in|sso|auth)(/|$)", re.I)
 
 
 def is_wall(url: str, final_url: str) -> bool:
@@ -438,12 +458,12 @@ def extract(url: str) -> Page:
         if is_soft_404(url, final_url):
             attempts.append(f"fetch: redirected to the home page {final_url} (the page is gone)")
             gone, final_url = 404, url
-        elif is_wall(url, final_url):
-            attempts.append(f"fetch: redirected to a consent or login page {final_url}")
-            wall, final_url = 1, url
         else:
             log(f"fetched {final_url} ({len(html) // 1024} KB); running trafilatura + defuddle")
             best = extract_html(html, final_url, attempts)
+            if is_wall(url, final_url) and (not best or best.words < MIN_WORDS):  # the wall's text is no article
+                attempts.append(f"fetch: redirected to a consent or login page {final_url}")
+                wall, final_url, best = 1, url, None
     except NotAPage:
         raise
     except SkillError as e:
@@ -501,7 +521,7 @@ def extract(url: str) -> Page:
                          + "; ".join(attempts[1:]))
     if not best or not best.words:
         raise SkillError(f"no text could be extracted from {url}. Tried: " + "; ".join(attempts))
-    if (status or wall) and not archived and best.words < MIN_WORDS:  # the rescue only rendered a challenge page
+    if (status or wall) and not archived and is_error_page(best):  # the rescue only rendered a challenge page
         raise SkillError(f"{url} answered {f'HTTP {status}' if status else 'with a consent or login page'} and "
                          f"no fallback got the article (only {best.words} words). Tried: " + "; ".join(attempts))
     if best.words < MIN_WORDS:

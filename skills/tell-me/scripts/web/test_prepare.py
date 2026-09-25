@@ -138,6 +138,11 @@ class TestHeadingIds(unittest.TestCase):
                 '<h2>Linked <a href="https://x.test/#y">y</a></h2>')
         self.assertEqual(heading_ids(page), {"intro": "intro", "use it": "use-it"})
 
+    def test_other_in_heading_links_are_no_permalink(self):
+        page = ('<h2><a href="#toc">Install</a></h2><h2>Run<sup><a href="#fn1">1</a></sup></h2>'
+                '<h2><a class="anchor" href="#usage">Usage</a></h2>')
+        self.assertEqual(heading_ids(page), {"usage": "usage"})
+
     def test_extracted_permalinks_replaced(self):
         # trafilatura keeps Sphinx's ¶ link but drops the path from its URL
         md = "# Intro[¶](https://docs.python.org#intro)\n\n## Use it [](#use-it)\n\n## See [docs](https://d.test)"

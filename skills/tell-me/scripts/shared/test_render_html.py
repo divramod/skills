@@ -48,6 +48,10 @@ class TestUntrustedText(unittest.TestCase):
     def test_stray_nul_does_not_hang(self):
         self.assertEqual(inline("a\x00b \x001\x00 `c`"), "ab 1 <code>c</code>")
 
+    def test_code_span_inside_a_link_label(self):
+        out = inline("[`uv run` *now*](https://x.dev/api) and `x`")
+        self.assertIn('rel="noopener"><code>uv run</code> <em>now</em></a> and <code>x</code>', out)
+
 
 class TestBlocks(unittest.TestCase):
     def test_nested_lists(self):

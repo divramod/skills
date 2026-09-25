@@ -292,22 +292,28 @@ class TestFallbackOrder(unittest.TestCase):
 
     def test_consent_wall_is_not_the_article(self):
         wall = "https://consent.yahoo.com/v2/collectConsent?sessionId=1"
-        web, page = self.run_extract({URL: (self.post, wall), JINA: fixture("post.jina.txt"),
+        web, page = self.run_extract({URL: (self.spa, wall), JINA: fixture("post.jina.txt"),
                                       WAYBACK_API: '{"archived_snapshots": {}}'})
         self.assertEqual(web.calls, [URL, WAYBACK_API, JINA])  # Jina would follow the same redirect
         self.assertEqual((page.best.extractor, page.gone, page.final_url), ("jina", 0, URL))
-        self.assertIn("consent or login page", page.attempts[0])
+        self.assertIn(f"fetch: redirected to a consent or login page {wall}", page.attempts)
 
     def test_consent_wall_prefers_the_archive(self):
         wall = "https://a.test/login?next=/post"
-        web, page = self.run_extract({URL: (self.post, wall), **self.archived()})
+        web, page = self.run_extract({URL: (self.spa, wall), **self.archived()})
         self.assertEqual(web.calls, [URL, WAYBACK_API, SNAPSHOT_RAW])
         self.assertEqual((page.best.extractor, page.snapshot, page.gone), ("wayback+trafilatura", SNAPSHOT, 0))
+
+    def test_full_article_after_a_wall_like_redirect_is_kept(self):
+        _, page = self.run_extract({URL: (self.post, "https://a.test/sso/post")})
+        self.assertEqual((page.best.extractor, page.final_url), ("defuddle", "https://a.test/sso/post"))
 
     def test_wall(self):
         for final, wall in [("https://consent.yahoo.com/v2/collectConsent?s=1", True),
                             ("https://a.test/login?next=/post/1", True), ("https://accounts.b.test/x", True),
-                            ("https://a.test/post/1", False), ("https://a.test/blog/logins-explained", False)]:
+                            ("https://a.test/post/1", False), ("https://a.test/blog/logins-explained", False),
+                            ("https://a.test/login-flows-explained/", False), ("https://a.test/consent-management", False),
+                            ("https://login.gov/help/", False), ("https://a.test/auth/", True)]:
             self.assertEqual(extract.is_wall("https://a.test/post/1", final), wall, final)
 
     def test_temporary_redirect_is_not_permanent(self):
@@ -327,6 +333,12 @@ class TestFallbackOrder(unittest.TestCase):
                              ("http://[::1]/", True), ("https://8.8.8.8/", False), ("https://a.test/", False)]:
             self.assertEqual(extract.is_private(url), private, url)
 
+    def test_short_real_page_behind_an_error_is_kept(self):
+        short = Extraction("A short note " + "with real words " * 20, extractor="jina")
+        with mock.patch.object(extract, "from_jina", return_value=short):
+            _, page = self.run_extract({URL: HttpError(403, URL, "<p>x</p>"), JINA: "x", WAYBACK_API: "{}"})
+        self.assertEqual(page.best.extractor, "jina")
+
     def test_challenge_page_is_not_saved_as_the_article(self):
         short = Extraction("Just a moment... checking your browser", extractor="jina")
         with mock.patch.object(extract, "from_jina", return_value=short):
@@ -335,6 +347,10 @@ class TestFallbackOrder(unittest.TestCase):
 
     def test_soft_404(self):
         for url, final, soft in [("https://a.test/post/1", "https://b.test/", True),
+                                 ("https://t.co/abc123", "https://b.test/", False),
+                                 ("https://a.test/en", "https://a.test/", False),
+                                 ("https://a.test/old.html", "https://a.test/", True),
+                                 ("https://www.a.test/2024/post", "https://a.test/?p=12", False),
                                  ("https://a.test/post/1", "https://a.test", True),
                                  ("https://a.test/index.html", "https://a.test/", False),
                                  ("https://a.test/", "https://a.test/", False),
@@ -401,6 +417,11 @@ class TestHttpGet(unittest.TestCase):
         page = '<meta charset="iso-8859-1"><p>Café</p>'.encode("latin-1")
         with mock.patch.object(extract, "open_url", return_value=self.response(page, "text/html")):
             self.assertIn("Café", extract.http_get(URL)[0])
+
+    def test_undeclared_legacy_charset(self):
+        page = "<title>XTM’s HOMEPAGE</title>".encode("cp1252")
+        with mock.patch.object(extract, "open_url", return_value=self.response(page, "text/html")):
+            self.assertIn("XTM’s", extract.http_get(URL)[0])
 
     def test_pdf_is_not_a_page(self):
         with mock.patch.object(extract, "open_url", return_value=self.response(b"%PDF-1.7", "application/pdf")):
