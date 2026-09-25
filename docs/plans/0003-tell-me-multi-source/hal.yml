@@ -6,7 +6,7 @@ retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: 'phase 003 hn: T201-T205 built+tested (2086f9a); review running'
+last_action: 'handoff: phase 003 built+tested (2086f9a), review to re-run; phase 004 github WIP uncommitted'
 active: true
 targets:
 - skills/tell-me
