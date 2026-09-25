@@ -12,7 +12,7 @@ Steps (all deterministic; the agent only writes the summary afterwards):
      (mlx-whisper on Apple Silicon, openai-whisper elsewhere, via uvx; uses a finished
      video.<ext> if present, else a small audio-only download)
   4. [--visual] scene keyframes -> frames/ (extract_frames.py)
-Writes transcript.md (with timestamp links) + metadata.json (the shared contract fields plus the
+Writes content.md (the transcript, with timestamp links) + metadata.json (the shared contract fields plus the
 yt-dlp keys) and prints the source envelope on stdout. A playlist or channel URL is handed to
 list_videos.py (--limit N) and prints its video list instead.
 
@@ -342,7 +342,7 @@ def main(argv=None) -> int:
 
     old_meta = read_json(folder / "metadata.json")
     have_quality = old_meta.get("video_quality")
-    transcript = folder / "transcript.md"
+    transcript = folder / "content.md"
     source = old_meta.get("transcript_source")
     need_transcript = args.refresh or not (transcript.exists() and source)
     if not need_transcript:

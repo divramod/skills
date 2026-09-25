@@ -25,7 +25,7 @@ def make(root: Path, rel: str, meta: dict, page=True) -> Path:
     folder = root / rel
     folder.mkdir(parents=True)
     (folder / "metadata.json").write_text(json.dumps(meta))
-    (folder / "transcript.md").write_text("x")
+    (folder / "content.md").write_text("x")
     if page:
         (folder / "summary.md").write_text(render(meta, "**TL;DR:** ok", "tldr", "en", "2026-09-25"))
         (folder / "summary.html").write_text("")

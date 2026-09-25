@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Render a video folder's summary.md (or digest.md) as a self-contained summary.html.
+"""Render a library folder's summary.md (or digest.md) as a self-contained summary.html.
 
-The page holds a library sidebar (library.py), the summary, a player, keyframes (when
-extracted) and the full transcript in a collapsed section. The player is the local video when
-downloaded, else the YouTube embed (served over http by serve_library.py; from file:// a
-thumbnail that opens YouTube). Timestamp links seek whichever player is there. Stdlib only:
-a small Markdown renderer covers what the templates, transcript.md and frames/index.md use
-(headings, lists, tables, quotes, code, links, images, emphasis).
+The page holds a library sidebar (library.py), the summary, the source's header panel
+(HEADER_PANELS), keyframes (when extracted) and the full content file in a collapsed section.
+Video's panel is a player: the local video when downloaded, else the YouTube embed (served over
+http by serve_library.py; from file:// a thumbnail that opens YouTube). Timestamp links seek
+whichever player is there. Stdlib only: a small Markdown renderer covers what the templates,
+content.md and frames/index.md use (headings, lists, tables, quotes, code, links, images, emphasis).
 
 Usage: render_html.py <folder> [--open]   (save_summary.py calls this automatically;
        --open serves the library via serve_library.py and opens the page in the browser)
@@ -21,7 +21,7 @@ import os
 import webbrowser
 from pathlib import Path
 
-from _common import SkillError, read_json, run_main
+from _common import SkillError, contract, read_json, run_main
 from library import INDEX_FILE, SIDEBAR_CSS, SIDEBAR_JS, root_of, sidebar_html, write_index
 
 # ---------------------------------------------------------------- markdown
@@ -233,7 +233,7 @@ td img{max-width:220px;border-radius:6px}
 img{max-width:100%}
 details{margin-top:2.5rem;border-top:1px solid var(--line);padding-top:1rem}
 summary{cursor:pointer;font-weight:600}
-details.transcript article{font-size:.95rem}
+details.content article{font-size:.95rem}
 footer{margin-top:3rem;color:var(--muted);font-size:.8rem}
 """
 
@@ -327,6 +327,13 @@ def player_html(folder: Path, meta: dict, url: str | None) -> str:
             f'<p>Timestamps play here; Cmd/Ctrl-click opens them on the site.</p>{hint}{dl}</div>')
 
 
+# Per-source panel under the page header: fn(folder, metadata, url) -> html. Sources without one get none.
+HEADER_PANELS = {"video": player_html}
+# Label of the collapsed content-file section.
+CONTENT_LABELS = {"video": "Transcript", "web": "Article", "github": "Repository", "x": "Posts",
+                  "hn": "Article and discussion", "file": "Document"}
+
+
 def build(folder: Path) -> str:
     meta = read_json(folder / "metadata.json")
     note = folder / ("digest.md" if meta.get("kind") == "digest" else "summary.md")
@@ -335,8 +342,10 @@ def build(folder: Path) -> str:
     front, body = split_frontmatter(note.read_text(encoding="utf-8"))
     title = front.get("title") or meta.get("title") or "Untitled"
     # save_summary.py writes "# title\n\ninfo line\n\n" before the body; the page renders its own header.
-    url = front.get("url") or meta.get("webpage_url")
-    info = [x for x in (front.get("channel"), front.get("duration"), front.get("published")) if x]
+    c = contract(meta)
+    url = front.get("url") or c["url"]
+    # author/site: notes saved before the source contract have channel/platform
+    info = [x for x in (front.get("author") or front.get("channel"), front.get("duration"), front.get("published")) if x]
     header_info = " · ".join(info + ([url] if url else []))
     body = re.sub(r"\A\s*# [^\n]*\n+", "", body, count=1)
     if header_info and body.startswith(header_info + "\n"):
@@ -344,21 +353,23 @@ def build(folder: Path) -> str:
 
     meta_line = " · ".join(html.escape(x) for x in info)
     if url:
-        meta_line += f' · <a href="{html.escape(url, quote=True)}" target="_blank" rel="noopener">{html.escape(front.get("platform") or "source")}</a>'
+        meta_line += f' · <a href="{html.escape(url, quote=True)}" target="_blank" rel="noopener">{html.escape(front.get("site") or front.get("platform") or "source")}</a>'
     chips = [front.get(k) and f"{k.replace('_', ' ')}: {front[k]}" for k in ("mode", "lang", "agent", "model", "created")]
     chips_html = "".join(f"<li>{html.escape(c)}</li>" for c in chips if c)
 
-    video_html = player_html(folder, meta, url)
+    panel = HEADER_PANELS.get(c["source"])
+    panel_html = panel(folder, meta, url) if panel else ""
 
     extras = []
     frames = folder / "frames" / "index.md"
     if frames.exists():
         ftext = re.sub(r"\A# [^\n]*\n", "", frames.read_text(encoding="utf-8"))
         extras.append(f'<details><summary>Keyframes</summary><article>{markdown(ftext, "frames/")}</article></details>')
-    transcript = folder / "transcript.md"
-    if transcript.exists():
-        ttext = re.sub(r"\A# [^\n]*\n", "", transcript.read_text(encoding="utf-8"))
-        extras.append(f'<details class="transcript"><summary>Transcript</summary><article>{markdown(ttext)}</article></details>')
+    content = folder / c["content_file"] if c["content_file"] else None
+    if content and content.exists():
+        ctext = re.sub(r"\A# [^\n]*\n", "", content.read_text(encoding="utf-8"))
+        label = CONTENT_LABELS.get(c["source"], "Content")
+        extras.append(f'<details class="content"><summary>{label}</summary><article>{markdown(ctext)}</article></details>')
 
     root = root_of(folder)
     sidebar = sidebar_js = body_attrs = ""
@@ -386,7 +397,7 @@ def build(folder: Path) -> str:
 <p class="meta">{meta_line}</p>
 <ul class="chips">{chips_html}</ul>
 </header>
-{video_html}
+{panel_html}
 <article>
 {markdown(body)}
 </article>

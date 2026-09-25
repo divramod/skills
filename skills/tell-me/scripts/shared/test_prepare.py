@@ -61,7 +61,7 @@ class TestContract(unittest.TestCase):
         self.assertEqual(contract(meta), {
             "source": "video", "id": "abc", "url": "https://youtu.be/abc", "title": "T", "author": "Chan",
             "published": "2026-09-24", "fetched": "2026-09-25T10:00:00", "site": "youtube", "word_count": None,
-            "duration": 61, "extractor": "captions", "content_file": "transcript.md", "extras": {}})
+            "duration": 61, "extractor": "captions", "content_file": "content.md", "extras": {}})
 
     def test_contract_fields_win_over_legacy_keys(self):
         c = contract({"source": "web", "url": "https://a.b/", "webpage_url": "https://old/", "content_file": "content.md"})

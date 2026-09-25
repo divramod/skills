@@ -87,10 +87,19 @@ class TestPage(unittest.TestCase):
         (self.dir / ".video-download.json").unlink()
         self.assertIn('<video controls preload="metadata" src="video.mkv">', build(self.dir))
 
-    def test_transcript_section(self):
+    def test_content_section(self):
         self.write(META)
-        (self.dir / "transcript.md").write_text("# T\n\n## Transcript\n\n[[00:44](https://www.youtube.com/watch?v=abc&t=44s)] x")
-        self.assertIn('<details class="transcript">', build(self.dir))
+        (self.dir / "content.md").write_text("# T\n\n## Transcript\n\n[[00:44](https://www.youtube.com/watch?v=abc&t=44s)] x")
+        self.assertIn('<details class="content"><summary>Transcript</summary>', build(self.dir))
+
+    def test_other_sources_have_no_player(self):
+        self.write({"source": "web", "id": "u", "title": "Post", "url": "https://a.b/post", "author": "Ann",
+                    "content_file": "content.md"})
+        (self.dir / "content.md").write_text("# Post\n\n[¶1](https://a.b/post#:~:text=Hello) Hello")
+        page = build(self.dir)
+        self.assertNotIn('class="player"', page)
+        self.assertIn('<details class="content"><summary>Article</summary>', page)
+        self.assertIn('href="https://a.b/post"', page)
 
     def test_body_starting_like_info_line_is_kept_without_header_info(self):
         meta = {"id": "abc", "title": "T"}

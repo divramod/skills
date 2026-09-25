@@ -208,7 +208,7 @@ def contract(meta: dict) -> dict:
         "site": meta.get("platform"),
         "duration": meta.get("duration"),
         "extractor": meta.get("transcript_source"),
-        "content_file": None if digest else "transcript.md",
+        "content_file": None if digest else "content.md",
         "extras": {},
     }
     return {k: meta[k] if meta.get(k) not in (None, "") else legacy.get(k) for k in CONTRACT_KEYS}

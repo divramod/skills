@@ -9,7 +9,7 @@ every link and writes its date after it (check_links.py: publish date, release +
 
 Usage: save_summary.py <folder> [--mode summary] [--summary-lang en] [--agent NAME] [--model M]
                        [--body-file F] [--open] < body.md
-<folder> is a video folder from prepare.py or a digest folder from list_videos.py.
+<folder> is a library folder from prepare.py or a digest folder.
 Prints the written file paths (markdown, then html).
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from _common import SkillError, detect_agent, fmt_date, fmt_ts, log, read_json, run_main, update_json
+from _common import SkillError, contract, detect_agent, fmt_date, fmt_ts, log, read_json, run_main, update_json
 
 MODES = ("tldr", "summary", "chapters", "detailed", "wisdom", "qa", "digest")
 
@@ -38,26 +38,28 @@ def strip_leading_h1(body: str) -> str:
 def render(meta: dict, body: str, mode: str, lang: str | None, today: str,
            agent: str | None = None, model: str | None = None) -> str:
     digest = meta.get("kind") == "digest"
+    c = contract(meta)
     front = {
-        "title": meta.get("title"),
-        "channel": meta.get("channel") or meta.get("uploader"),
-        "url": meta.get("webpage_url"),
-        "published": fmt_date(meta.get("upload_date")),
-        "duration": fmt_ts(meta["duration"]) if meta.get("duration") else None,
-        "platform": meta.get("platform"),
-        "video_id": meta.get("id") if not digest else None,
-        "videos": len(meta.get("videos") or []) if digest else None,
+        "title": c["title"],
+        "source": c["source"],
+        "author": c["author"],
+        "url": c["url"],
+        "published": fmt_date(c["published"]),
+        "duration": fmt_ts(c["duration"]) if c["duration"] else None,
+        "site": c["site"],
+        "id": c["id"] if not digest else None,
+        "items": len(meta.get("items") or meta.get("videos") or []) if digest else None,
         "mode": mode,
         "lang": lang,
-        "transcript_source": meta.get("transcript_source"),
+        "extractor": c["extractor"],
         "video_file": meta.get("video_file"),
         "agent": agent,
         "model": model,
         "created": today,
     }
     lines = ["---"] + [f"{k}: {yaml_scalar(v)}" for k, v in front.items() if v not in (None, "")] + ["---", ""]
-    info = " · ".join(str(x) for x in (front["channel"], front["duration"], front["published"], front["url"]) if x)
-    lines += [f"# {meta.get('title') or 'Untitled'}", "", info, "", strip_leading_h1(body).strip(), ""]
+    info = " · ".join(str(x) for x in (front["author"], front["duration"], front["published"], front["url"]) if x)
+    lines += [f"# {c['title'] or 'Untitled'}", "", info, "", strip_leading_h1(body).strip(), ""]
     return "\n".join(lines)
 
 
@@ -117,7 +119,7 @@ def main(argv=None) -> int:
 
     meta = read_json(args.folder / "metadata.json")
     if not meta:
-        raise SkillError(f"{args.folder}/metadata.json missing: run prepare.py or list_videos.py first")
+        raise SkillError(f"{args.folder}/metadata.json missing: run prepare.py first")
     body = args.body_file.read_text(encoding="utf-8") if args.body_file else sys.stdin.read()
     if not body.strip():
         raise SkillError("empty summary body")

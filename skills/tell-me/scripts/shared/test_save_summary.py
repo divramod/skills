@@ -12,13 +12,22 @@ META = {"id": "abc", "title": 'Say "hi": a test', "channel": "Chan", "webpage_ur
 
 
 class TestSaveSummary(unittest.TestCase):
+    def test_other_source_frontmatter(self):
+        md = render({"source": "hn", "id": "1", "title": "Y", "author": "pg", "url": "https://news.ycombinator.com/item?id=1",
+                     "published": "2007-02-19", "site": "Hacker News", "extractor": "algolia"}, "x", "summary", "en", "2026-09-25")
+        self.assertIn('source: "hn"\nauthor: "pg"\nurl: "https://news.ycombinator.com/item?id=1"\npublished: "2007-02-19"'
+                      '\nsite: "Hacker News"\nid: "1"', md)
+        self.assertIn("# Y\n\npg · 2007-02-19 · https://news.ycombinator.com/item?id=1\n", md)
+
     def test_frontmatter_and_header(self):
         md = render(META, "**TL;DR:** ok", "wisdom", "de", "2026-09-25")
         self.assertTrue(md.startswith("---\n"))
         self.assertIn('title: "Say \\"hi\\": a test"', md)
         self.assertIn('published: "2026-09-24"', md)
         self.assertIn('duration: "12:09"', md)
-        self.assertIn('video_id: "abc"', md)
+        self.assertIn('id: "abc"', md)
+        self.assertIn('source: "video"\nauthor: "Chan"', md)
+        self.assertIn('extractor: "captions (manual, en)"', md)
         self.assertIn('mode: "wisdom"', md)
         self.assertIn('lang: "de"', md)
         self.assertIn('created: "2026-09-25"', md)
@@ -30,8 +39,8 @@ class TestSaveSummary(unittest.TestCase):
 
     def test_digest_frontmatter(self):
         md = render({"kind": "digest", "title": "PL", "videos": [{}, {}]}, "x", "digest", None, "2026-09-25")
-        self.assertIn("videos: 2", md)
-        self.assertNotIn("video_id", md)
+        self.assertIn("items: 2", md)
+        self.assertNotIn("id:", md)
         self.assertNotIn("lang:", md)
 
     def test_agent_and_model_in_frontmatter(self):

@@ -36,7 +36,7 @@ def root_of(folder: Path) -> Path | None:
 
 def downloaded_at(folder: Path, meta: dict) -> str:
     """When the skill started on this video: the folder's creation time (macOS/BSD birth time; the folder is
-    created right at the start and reused by video id), else prepared_at, else prepared date + transcript mtime."""
+    created right at the start and reused by video id), else prepared_at, else prepared date + content file mtime."""
     birth = getattr(folder.stat(), "st_birthtime", None)
     if birth:
         return datetime.fromtimestamp(birth).isoformat(timespec="seconds")
