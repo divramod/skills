@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Unit tests for save_summary.py (offline)."""
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
-from save_summary import fmt_date, render, strip_leading_h1
+from save_summary import fmt_date, refresh, render, set_frontmatter_field, strip_leading_h1
 
 META = {"id": "abc", "title": 'Say "hi": a test', "channel": "Chan", "webpage_url": "https://www.youtube.com/watch?v=abc",
         "upload_date": "20260924", "duration": 729, "platform": "youtube", "transcript_source": "captions (manual, en)"}
@@ -30,6 +33,37 @@ class TestSaveSummary(unittest.TestCase):
         self.assertIn("videos: 2", md)
         self.assertNotIn("video_id", md)
         self.assertNotIn("lang:", md)
+
+    def test_agent_and_model_in_frontmatter(self):
+        md = render(META, "x", "summary", "en", "2026-09-25", "codex", "gpt-x")
+        self.assertIn('agent: "codex"\nmodel: "gpt-x"\ncreated: "2026-09-25"', md)
+        self.assertNotIn("model:", render(META, "x", "summary", "en", "2026-09-25", "grok"))
+
+    def test_set_frontmatter_field(self):
+        md = render(META, "x", "summary", "en", "2026-09-25", "codex")
+        added = set_frontmatter_field(md, "video_file", "video.mkv")
+        self.assertIn('video_file: "video.mkv"\nagent: "codex"', added)
+        self.assertIn('video_file: "video.mp4"', set_frontmatter_field(added, "video_file", "video.mp4"))
+        self.assertEqual(added.count("video_file"), 1)
+        self.assertEqual(set_frontmatter_field("no frontmatter", "k", "v"), "no frontmatter")
+
+    def test_refresh_after_background_download(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self.assertEqual(refresh(folder), [])
+            (folder / "metadata.json").write_text(json.dumps(META))
+            (folder / "summary.md").write_text(render(META, "x", "summary", "en", "2026-09-25"))
+            (folder / "metadata.json").write_text(json.dumps(META | {"video_file": "video.mkv"}))
+            (folder / "video.mkv").write_bytes(b"")
+            written = refresh(folder)
+            self.assertEqual([p.name for p in written], ["summary.md", "summary.html"])
+            self.assertIn('video_file: "video.mkv"', (folder / "summary.md").read_text())
+            self.assertIn("<video", (folder / "summary.html").read_text())
+            (folder / "video.mkv").unlink()  # deleted again
+            (folder / "metadata.json").write_text(json.dumps(META))
+            refresh(folder)
+            self.assertNotIn("video_file", (folder / "summary.md").read_text())
+            self.assertNotIn("<video", (folder / "summary.html").read_text())
 
     def test_fmt_date(self):
         self.assertEqual(fmt_date("20260924"), "2026-09-24")

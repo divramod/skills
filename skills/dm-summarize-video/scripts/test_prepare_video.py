@@ -88,20 +88,36 @@ class TestGroupParagraphs(unittest.TestCase):
         self.assertEqual(out, "[L44] x")
 
 
-class TestDownloadAction(unittest.TestCase):
-    def test_decisions(self):
-        from prepare_video import download_action
-        self.assertEqual(download_action(False, "best", None), "download")
-        self.assertEqual(download_action(True, "best", "best"), "reuse")
-        self.assertEqual(download_action(True, "best", "1080p"), "replace")
-        self.assertEqual(download_action(True, "best", None), "replace")  # pre-quality-tracking file
-        self.assertEqual(download_action(True, "1080p", "best"), "reuse")
-        self.assertEqual(download_action(True, "1080p", "1080p"), "reuse")
+class TestDownloadPlan(unittest.TestCase):
+    def test_downloads_best_in_background_by_default(self):
+        from prepare_video import download_plan
+        self.assertEqual(download_plan(False, False, None, False), ("background", "best"))
+        self.assertEqual(download_plan(False, False, "1080p", True), ("background", "best"))  # upgrade
+        self.assertEqual(download_plan(False, False, "best", True), (None, "best"))
 
-    def test_best_format_has_no_height_cap(self):
-        from prepare_video import DOWNLOAD_FORMATS
-        self.assertNotIn("height", DOWNLOAD_FORMATS["best"])
-        self.assertIn("height<=1080", DOWNLOAD_FORMATS["1080p"])
+    def test_skip_download_and_visual(self):
+        from prepare_video import download_plan
+        self.assertEqual(download_plan(True, False, None, False), (None, "1080p"))
+        self.assertEqual(download_plan(False, True, None, False), ("wait", "best"))
+        self.assertEqual(download_plan(True, True, None, False), ("wait", "1080p"))
+
+
+class TestDescriptionLinks(unittest.TestCase):
+    def test_groups_repos_slides_and_drops_noise(self):
+        from prepare_video import description_links
+        desc = """Code: https://github.com/unslothai/unsloth and https://github.com/unslothai/unsloth.
+Slides (PDF): https://cs229.stanford.edu/lectures/lecture1.pdf
+Deck https://speakerdeck.com/tim/fine-tuning
+Model https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
+Docs: https://docs.unsloth.ai/get-started.
+Follow me https://twitter.com/tim and https://www.youtube.com/@TechWithTim
+Profile https://github.com/techwithtim"""
+        self.assertEqual(description_links(desc), {
+            "repos": ["https://github.com/unslothai/unsloth", "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct"],
+            "slides": ["https://cs229.stanford.edu/lectures/lecture1.pdf", "https://speakerdeck.com/tim/fine-tuning"],
+            "other": ["https://docs.unsloth.ai/get-started", "https://github.com/techwithtim"],
+        })
+        self.assertEqual(description_links(None), {"repos": [], "slides": [], "other": []})
 
 
 class TestRenderTranscript(unittest.TestCase):

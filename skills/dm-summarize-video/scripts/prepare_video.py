@@ -3,10 +3,14 @@
 
 Steps (all deterministic; the agent only writes the summary afterwards):
   1. yt-dlp metadata -> folder <root>/<platform>/<user>/<title-slug>/ (reused by video id)
-  2. [-d] download the video as video.<ext> in the highest available quality (mp4, or mkv when
-     the best streams don't fit mp4); [--visual] alone downloads <=1080p, enough for frames
+  2. download the video as video.<ext> in the highest available quality (mp4, or mkv when the
+     best streams don't fit mp4) in a detached background process (download_video.py), so the
+     transcript and summary don't wait for it; --skip-download keeps no video. [--visual]
+     downloads in parallel with the transcript and waits for it (frames need the file); with
+     --skip-download it fetches only a <=1080p copy for the frames
   3. transcript: captions (manual > auto, exactly one track), else local Whisper
-     (mlx-whisper on Apple Silicon, openai-whisper elsewhere, via uvx; uses video.<ext> if present)
+     (mlx-whisper on Apple Silicon, openai-whisper elsewhere, via uvx; uses a finished
+     video.<ext> if present, else a small audio-only download)
   4. [--visual] scene keyframes -> frames/ (extract_frames.py)
 Writes transcript.md (with timestamp links) + metadata.json and prints one JSON object on stdout.
 
@@ -23,23 +27,20 @@ import platform
 import re
 import subprocess
 import sys
-from datetime import date
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime
 from pathlib import Path
 
 from _common import (BOT_HINT, SkillError, find_existing, find_file, fmt_ts, is_bot_error, log,
-                     parse_ts, platform_of, probe_duration, read_json, require, run_main, ts_link, user_of,
-                     video_dir, write_json, ytdlp_base)
+                     parse_ts, platform_of, probe_duration, read_json, require, run_main, ts_link, update_json,
+                     user_of, video_dir, ytdlp_base)
+from download_video import download, download_status, is_running, record, start_background, tag_video
 
 PARAGRAPH_SECONDS = 30
 MLX_MODEL = "mlx-community/whisper-large-v3-turbo"
 OPENAI_MODEL = "turbo"
-# -d: best video + best audio, no height cap. --visual alone: <=1080p is enough for keyframes.
-DOWNLOAD_FORMATS = {
-    "best": "bv*+ba/b",
-    "1080p": "bv*[height<=1080]+ba/b[height<=1080]/b",
-}
 META_KEYS = ("id", "title", "channel", "uploader", "uploader_id", "upload_date", "duration",
-             "webpage_url", "channel_url", "uploader_url", "extractor_key", "language", "chapters", "view_count", "tags", "description")
+             "webpage_url", "channel_url", "uploader_url", "extractor_key", "language", "chapters", "view_count", "tags", "description", "thumbnail")
 
 # ---------------------------------------------------------------- pure helpers
 
@@ -139,13 +140,35 @@ def group_paragraphs(lines, chapters=None, seconds=PARAGRAPH_SECONDS, link=fmt_t
     return "\n\n".join(parts)
 
 
-def download_action(has_file: bool, wanted: str, have: str | None) -> str:
-    """'download', 'reuse' or 'replace': a -d (best) request upgrades any non-best file."""
-    if not has_file:
-        return "download"
-    if wanted == "best" and have != "best":
-        return "replace"
-    return "reuse"
+_URL_RE = re.compile(r"https?://[^\s<>()\[\]\"']+[^\s<>()\[\]\"'.,;:!?]")
+_SLIDES_RE = re.compile(r"speakerdeck\.com|slideshare\.net|docs\.google\.com/presentation|slides\.com|pitch\.com|"
+                        r"\.(pdf|pptx?|key)(\?|#|$)|/slides?\b", re.I)
+_REPO_RE = re.compile(r"^https?://(www\.)?(github\.com|gitlab\.com|codeberg\.org|huggingface\.co)/[^/\s]+/[^/\s#?]+", re.I)
+_NOISE_RE = re.compile(r"(youtube\.com|youtu\.be|instagram\.com|tiktok\.com|twitter\.com|x\.com|facebook\.com|"
+                       r"linkedin\.com|patreon\.com|discord\.gg|discord\.com|bit\.ly/[a-z0-9]+$)", re.I)
+
+
+def description_links(description: str | None) -> dict[str, list[str]]:
+    """URLs from the video description, grouped: repos, slides, other (social/sponsor noise dropped)."""
+    out: dict[str, list[str]] = {"repos": [], "slides": [], "other": []}
+    for url in dict.fromkeys(_URL_RE.findall(description or "")):
+        if _REPO_RE.match(url):
+            out["repos"].append(url)
+        elif _SLIDES_RE.search(url):
+            out["slides"].append(url)
+        elif not _NOISE_RE.search(url):
+            out["other"].append(url)
+    return out
+
+
+def download_plan(skip_download: bool, visual: bool, have_quality: str | None, has_file: bool) -> tuple[str | None, str]:
+    """(how, quality): how is 'background', 'wait' (frames need the file) or None (nothing to do)."""
+    wanted = "1080p" if skip_download else "best"
+    if visual:
+        return "wait", wanted
+    if skip_download or (has_file and have_quality == "best"):
+        return None, wanted
+    return "background", wanted
 
 
 def render_transcript(info: dict, source: str, body: str) -> str:
@@ -183,27 +206,6 @@ def fetch_info(args) -> dict:
         err = p.stderr.strip()
         raise SkillError(f"yt-dlp could not read metadata:\n{err}" + (f"\n{BOT_HINT}" if is_bot_error(err) else ""))
     return json.loads(p.stdout)
-
-
-def download_video(args, folder: Path, quality: str, have_quality: str | None) -> Path:
-    """Download video.<ext>; an existing lower-quality file is replaced when `best` is wanted."""
-    existing = find_file(folder, "video")
-    action = download_action(existing is not None, quality, have_quality)
-    if action == "reuse":
-        log(f"video already downloaded: {existing.name} ({have_quality or 'unknown quality'})")
-        return existing
-    if action == "replace":
-        log(f"replacing {existing.name} ({have_quality or 'unknown quality'}) with the best available quality")
-        existing.unlink()
-    log(f"downloading video ({'highest available quality' if quality == 'best' else '<=1080p'})")
-    p = run(ytdlp_base(args.cookies_from_browser) + [
-        "-f", DOWNLOAD_FORMATS[quality], "--merge-output-format", "mp4/mkv",
-        "-o", str(folder / "video.%(ext)s"), args.url])
-    video = find_file(folder, "video")
-    if not video:
-        err = p.stderr.strip()
-        raise SkillError(f"video download failed:\n{err[-800:]}" + (f"\n{BOT_HINT}" if is_bot_error(err) else ""))
-    return video
 
 
 def fetch_captions(args, info: dict, folder: Path) -> tuple[list, str] | None:
@@ -251,9 +253,10 @@ def whisper_cmd(media: Path, out_dir: Path, lang: str | None) -> tuple[list[str]
     return cmd, result, engine
 
 
-def fetch_whisper(args, folder: Path) -> tuple[list, str]:
+def fetch_whisper(args, folder: Path, use_video: bool = True) -> tuple[list, str]:
+    """Transcribe locally. `use_video=False` while video.<ext> is still downloading."""
     require("uvx")
-    media = find_file(folder, "video")
+    media = find_file(folder, "video") if use_video else None
     temp_audio = None
     if not media:
         log("downloading audio for Whisper transcription")
@@ -275,11 +278,22 @@ def fetch_whisper(args, folder: Path) -> tuple[list, str]:
     return lines, f"whisper ({engine}, language={data.get('language', '?')})"
 
 
+def fetch_transcript(args, info: dict, folder: Path, video_pending: bool) -> tuple[list, str]:
+    result = None
+    if args.source in ("auto", "captions"):
+        result = fetch_captions(args, info, folder)
+    if result is None and args.source == "captions":
+        raise SkillError("no usable captions (try --source whisper)")
+    return result or fetch_whisper(args, folder, use_video=not video_pending)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url")
-    ap.add_argument("-d", "--download", action="store_true", help="download the video in the highest available quality")
-    ap.add_argument("--visual", action="store_true", help="extract keyframes (downloads <=1080p unless -d is also given)")
+    ap.add_argument("--skip-download", action="store_true",
+                    help="don't download the video (default: best quality, in the background)")
+    ap.add_argument("--visual", action="store_true",
+                    help="extract keyframes (waits for the download; <=1080p with --skip-download)")
     ap.add_argument("--max-frames", type=int, default=40)
     ap.add_argument("--lang", help="preferred transcript language (e.g. en, de); default: spoken language")
     ap.add_argument("--source", choices=["auto", "captions", "whisper"], default="auto",
@@ -298,43 +312,50 @@ def main(argv=None) -> int:
     log(f"{'reusing' if existing else 'folder'}: {folder}")
 
     old_meta = read_json(folder / "metadata.json")
-    video_quality = old_meta.get("video_quality")
-    if args.download or args.visual:
-        video_quality_wanted = "best" if args.download else "1080p"
-        video = download_video(args, folder, video_quality_wanted, video_quality)
-        if video_quality != "best":
-            video_quality = video_quality_wanted
-    else:
-        video = find_file(folder, "video")
-    if video and not info.get("duration"):
-        info["duration"] = probe_duration(video)
-
+    have_quality = old_meta.get("video_quality")
     transcript = folder / "transcript.md"
     source = old_meta.get("transcript_source")
-    if transcript.exists() and source and not args.refresh:
+    need_transcript = args.refresh or not (transcript.exists() and source)
+    if not need_transcript:
         log("using existing transcript (pass --refresh to refetch)")
-    else:
-        result = None
-        if args.source in ("auto", "captions"):
-            result = fetch_captions(args, info, folder)
-        if result is None and args.source == "captions":
-            raise SkillError("no usable captions (try --source whisper)")
-        if result is None:
-            result = fetch_whisper(args, folder)
-        lines, source = result
-        body = group_paragraphs(lines, info.get("chapters"), link=lambda s: ts_link(info, s))
-        transcript.write_text(render_transcript(info, source, body), encoding="utf-8")
 
-    meta = {k: info.get(k) for k in META_KEYS} | {
+    # Title, chapters etc. first: the download tags the file from metadata.json when it finishes.
+    update_json(folder / "metadata.json", {k: info.get(k) for k in META_KEYS})
+    # Default: detached background download, nothing here waits for it.
+    # --visual: frames need the file, so download in parallel with the transcript and wait.
+    how, wanted = download_plan(args.skip_download, args.visual, have_quality, find_file(folder, "video") is not None)
+    background = video_future = None
+    pool = ThreadPoolExecutor(max_workers=1)
+    if how == "wait":
+        video_future = pool.submit(download, folder, args.url, wanted, have_quality, args.cookies_from_browser)
+    elif how == "background":
+        background = start_background(folder, args.url, wanted, have_quality, args.cookies_from_browser)
+
+    try:
+        if need_transcript:
+            lines, source = fetch_transcript(args, info, folder, video_pending=bool(background or video_future))
+            body = group_paragraphs(lines, info.get("chapters"), link=lambda s: ts_link(info, s))
+            transcript.write_text(render_transcript(info, source, body), encoding="utf-8")
+        if video_future:
+            record(folder, video_future.result(), "best" if have_quality == "best" else wanted)
+    finally:
+        pool.shutdown(wait=True)
+
+    # Merge, don't overwrite: a background download may add video_file/video_quality at any time.
+    meta = update_json(folder / "metadata.json", {k: info.get(k) for k in META_KEYS} | {
         "platform": platform_of(info),
         "user": user_of(info),
         "transcript_source": source,
         "prepared": old_meta.get("prepared") or date.today().isoformat(),
-    }
-    if video:
-        meta["video_file"] = video.name
-        meta["video_quality"] = video_quality
-    write_json(folder / "metadata.json", meta)
+        "prepared_at": old_meta.get("prepared_at") or datetime.now().isoformat(timespec="seconds"),
+    })
+    video = folder / meta["video_file"] if meta.get("video_file") else None
+    video = video if video and video.exists() and not is_running(folder) else None
+    if video_future and video:
+        tag_video(folder, video)  # after the metadata write: a new folder has no title before it
+    if video and not meta.get("duration"):
+        info["duration"] = probe_duration(video)
+        update_json(folder / "metadata.json", {"duration": info["duration"]})
 
     frames_index = None
     if args.visual:
@@ -357,7 +378,9 @@ def main(argv=None) -> int:
         "transcript_source": source,
         "transcript_words": len(transcript.read_text(encoding="utf-8").split()),
         "video_file": str(video) if video else None,
+        "video_download": download_status(folder),
         "frames_index": str(frames_index) if frames_index else None,
+        "description_links": description_links(info.get("description")),
         "summary": str(summary),
         "summary_exists": summary.exists(),
     }

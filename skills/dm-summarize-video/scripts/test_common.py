@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _common import (MissingTool, find_existing, library_root, platform_of, require, slugify, ts_link,
+from _common import (MissingTool, detect_agent, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
                      ts_url, user_of, video_dir)
 
 
@@ -71,6 +71,25 @@ class TestRequire(unittest.TestCase):
         self.assertIn("definitely-not-a-tool-xyz", str(cm.exception))
         self.assertIn("install-prerequisites.sh", str(cm.exception))
         require("python3")  # present: no error
+
+
+class TestAgentAndFiles(unittest.TestCase):
+    def test_detect_agent(self):
+        self.assertEqual(detect_agent({"AI_AGENT": "claude-code_2-1-282_agent", "CODEX_SANDBOX": "1"}), "claude-code 2.1.282")
+        self.assertEqual(detect_agent({"AI_AGENT": "grok"}), "grok")
+        self.assertEqual(detect_agent({"CLAUDECODE": "1"}), "claude-code")
+        self.assertEqual(detect_agent({"CODEX_THREAD_ID": "t"}), "codex")
+        self.assertEqual(detect_agent({"GROK_CLI": "1"}), "grok")
+        self.assertIsNone(detect_agent({}))
+
+    def test_find_file_skips_ytdlp_work_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            for name in ("video.f137.mp4", "video.f140.m4a.part", "video.temp.mkv", "video.mkv.part", "video.mkv.ytdl"):
+                (d / name).write_bytes(b"")
+            self.assertIsNone(find_file(d, "video"))
+            (d / "video.mkv").write_bytes(b"")
+            self.assertEqual(find_file(d, "video"), d / "video.mkv")
 
 
 if __name__ == "__main__":

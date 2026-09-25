@@ -164,7 +164,17 @@ def read_json(path: Path) -> dict:
 
 
 def write_json(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    """Atomic write: the background video download and the foreground scripts share metadata.json."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def update_json(path: Path, fields: dict) -> dict:
+    """Merge fields into a JSON file (read-modify-write) and return the result."""
+    data = read_json(path) | fields
+    write_json(path, data)
+    return data
 
 
 def probe_duration(media: Path) -> float | None:
@@ -179,9 +189,48 @@ def probe_duration(media: Path) -> float | None:
         return None
 
 
+_PARTIAL_RE = re.compile(r"\.(part|ytdl|temp|tagging)\b|\.f\d+\.")
+
+
 def find_file(folder: Path, stem: str) -> Path | None:
-    """First finished `<stem>.<ext>` in folder (ignores yt-dlp partial files)."""
+    """First finished `<stem>.<ext>` in folder.
+
+    Ignores yt-dlp work files: `.part`/`.ytdl`, the `.temp.<ext>` merge target and the
+    per-format `.f<id>.<ext>` streams that exist until video and audio are merged.
+    """
     for f in sorted(folder.glob(f"{stem}.*")):
-        if f.suffix not in (".part", ".ytdl", ".temp") and ".part" not in f.name:
+        if not _PARTIAL_RE.search(f.name[len(stem):]):
             return f
+    return None
+
+
+# ---------------------------------------------------------------- agent
+
+# (env var, agent name) checked in order; AI_AGENT is the cross-tool convention and wins.
+AGENT_ENV = (
+    ("CLAUDECODE", "claude-code"),
+    ("CODEX_THREAD_ID", "codex"),
+    ("CODEX_SANDBOX", "codex"),
+    ("CODEX_MANAGED_BY_NPM", "codex"),
+    ("GROK_CLI", "grok"),
+    ("GEMINI_CLI", "gemini-cli"),
+    ("OPENCODE", "opencode"),
+    ("CURSOR_AGENT", "cursor"),
+    ("COPILOT_CLI", "copilot"),
+)
+
+
+def detect_agent(env: dict | None = None) -> str | None:
+    """Name (+ version when known) of the agentic CLI running this script, or None.
+
+    `AI_AGENT=claude-code_2-1-282_agent` -> "claude-code 2.1.282".
+    """
+    env = os.environ if env is None else env
+    ai = env.get("AI_AGENT", "").strip()
+    if ai:
+        m = re.fullmatch(r"(.+?)_(\d+(?:-\d+)*)(?:_agent)?", ai)
+        return f"{m.group(1)} {m.group(2).replace('-', '.')}" if m else ai.removesuffix("_agent")
+    for var, name in AGENT_ENV:
+        if env.get(var):
+            return name
     return None
