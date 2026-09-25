@@ -1,0 +1,27 @@
+schema_version: 1
+automode: completed
+cadence: phase
+gap_policy: small_inline_big_to_gaps_plan
+retry_budget: 3
+tier: medium
+tier_source: manual
+auto_downgrade: false
+last_action: shipped 2026-09-25 (all 3 phases, verify-success 5/5)
+active: true
+targets:
+  - skills/dm-summarize-video
+  - scripts/check-plugins.py
+  - AGENTS.md
+targets_rationale: dm-summarize-video v2 + repo-wide skill script rules
+phases: []
+queue_position: 0
+phase_budget_tokens: 250000
+drift_budget_tokens: 40000
+adaptive_clear: false
+clear_mode: context
+notify:
+  channel: none
+token_spent_total: 0
+auto_research: false
+daemon_resume_strategy: c_c
+resume_watchdog_minutes: 30
