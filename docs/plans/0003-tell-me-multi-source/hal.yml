@@ -6,7 +6,7 @@ retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: phase 003 reviewed (13 findings fixed, 4b7604e) + shipped; phase 004 github in progress
+last_action: 'handoff: 003 shipped; 004 github built+tested (50b83ef), review to re-run; 005 x not started'
 active: true
 targets:
 - skills/tell-me
