@@ -30,8 +30,8 @@ Probe `gh api` and `npx repomix --help` first. Put the API JSON fixtures in `fix
   **Files**: skills/tell-me/scripts/github/client.py
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -41,8 +41,8 @@ Probe `gh api` and `npx repomix --help` first. Put the API JSON fixtures in `fix
   **Files**: skills/tell-me/scripts/github/prepare.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -52,8 +52,8 @@ Probe `gh api` and `npx repomix --help` first. Put the API JSON fixtures in `fix
   **Files**: skills/tell-me/scripts/github/prepare.py
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -63,8 +63,8 @@ Probe `gh api` and `npx repomix --help` first. Put the API JSON fixtures in `fix
   **Files**: skills/tell-me/scripts/github/thread.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -74,8 +74,8 @@ Probe `gh api` and `npx repomix --help` first. Put the API JSON fixtures in `fix
   **Files**: skills/tell-me/scripts/github/related.py
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -85,8 +85,8 @@ Probe `gh api` and `npx repomix --help` first. Put the API JSON fixtures in `fix
   **Files**: skills/tell-me/scripts/github/*.sh, subskills/github/, templates/github/
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -96,8 +96,8 @@ Probe `gh api` and `npx repomix --help` first. Put the API JSON fixtures in `fix
   **Files**: –
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
