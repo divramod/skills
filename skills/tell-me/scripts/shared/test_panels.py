@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Unit tests for panels.py (the header panels) and their use in render_html.py (offline)."""
 import json
+import os
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
+from unittest import mock
 
 import panels
 import render_html
@@ -16,6 +17,20 @@ def folder_with(meta: dict, files: dict | None = None) -> Path:
     for name, text in (files or {}).items():
         (tmp / name).write_text(text)
     return tmp
+
+
+# Hermetic: HOME is an empty folder, so no test reads (or trips over) the real library under ~.
+_home = tempfile.TemporaryDirectory()
+_env = mock.patch.dict(os.environ, {"HOME": _home.name})
+
+
+def setUpModule():
+    _env.start()
+
+
+def tearDownModule():
+    _env.stop()
+    _home.cleanup()
 
 
 class TestPanels(unittest.TestCase):

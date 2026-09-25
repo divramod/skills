@@ -2,7 +2,9 @@
 
 Library layout: <root>/<kind>/.../ per source (see dir_for), each folder with summary.md,
 metadata.json and the content file; <root>/library.js indexes them all. Root: $TELL_ME_ROOT, else
-the parent of $DM_SUMMARIZE_VIDEO_ROOT (the old videos-only root), else ~/me/summaries.
+the parent of $DM_SUMMARIZE_VIDEO_ROOT (the old videos-only root), else ~/skills/tell-me (a skill's own data lives
+under ~/skills/<skill-name>/). A library still at an old default (~/me/summaries) stops the scripts with the command
+that moves it.
 """
 from __future__ import annotations
 
@@ -67,7 +69,23 @@ def library_root() -> Path:
                              f"source under one root: set TELL_ME_ROOT to that root and move the videos into "
                              f"<root>/videos (then run scripts/video/migrate_library.py --apply)")
         return videos.parent
-    return Path.home() / "me" / "summaries"
+    root = default_root()
+    if not root.exists():
+        for old in legacy_roots():
+            if (old / "library.js").exists():
+                raise SkillError(f"the tell-me library moved from {old} to {root}. Move it (stop a running video "
+                                 f"download first): python3 {SCRIPTS_DIR / 'serve_library.py'} --stop && mkdir -p "
+                                 f"{root.parent} && mv {old} {root}   (or keep it there: TELL_ME_ROOT={old})")
+    return root
+
+
+def default_root() -> Path:
+    return Path.home() / "skills" / "tell-me"
+
+
+def legacy_roots() -> tuple[Path, ...]:
+    """Default roots of earlier versions: a library found there is moved by the user, never reused silently."""
+    return (Path.home() / "me" / "summaries",)
 
 
 def source_root(source: str, root: Path | None = None) -> Path:

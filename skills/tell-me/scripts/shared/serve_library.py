@@ -269,7 +269,7 @@ def page_url(page: Path, root: Path | None = None) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
-    ap.add_argument("--root", type=Path, help="library root (default: $TELL_ME_ROOT or ~/me/summaries)")
+    ap.add_argument("--root", type=Path, help="library root (default: $TELL_ME_ROOT or ~/skills/tell-me)")
     ap.add_argument("--ensure", action="store_true", help="start in the background if needed and print the base URL")
     ap.add_argument("--stop", action="store_true", help="stop the background server")
     args = ap.parse_args(argv)

@@ -9,6 +9,14 @@ Before finishing any task:
 3. No tests cover your change? → Write one.
 4. No way to test? → State what you couldn't verify.
 
+## Skill data location
+
+A skill that creates data of its own (summaries, downloads, caches, indexes) keeps it under
+`~/skills/<skill-name>/`, one folder per source or kind below it (`~/skills/<skill-name>/<source>/`), never in a
+shared folder such as `~/me/summaries/`. An environment variable may override the root (`<SKILL_NAME>_ROOT`). When
+the default location changes and data is still at the old one, the skill stops with the command that moves it; it
+never moves or silently reuses it.
+
 ## Skill script rules
 
 Skills keep deterministic work (fetching, parsing, file layout, downloads, formatting) in `skills/<name>/scripts/`;

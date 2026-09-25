@@ -32,6 +32,20 @@ def make(root: Path, rel: str, meta: dict, page=True) -> Path:
     return folder
 
 
+# Hermetic: HOME is an empty folder, so no test reads (or trips over) the real library under ~.
+_home = tempfile.TemporaryDirectory()
+_env = mock.patch.dict(os.environ, {"HOME": _home.name})
+
+
+def setUpModule():
+    _env.start()
+
+
+def tearDownModule():
+    _env.stop()
+    _home.cleanup()
+
+
 class TestLibrary(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

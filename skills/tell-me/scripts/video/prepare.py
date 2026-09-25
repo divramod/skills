@@ -16,7 +16,7 @@ Writes content.md (the transcript, with timestamp links) + metadata.json (the sh
 yt-dlp keys) and prints the source envelope on stdout. A playlist or channel URL is handed to
 list_videos.py (--limit N) and prints its video list instead.
 
-Folder: <root>/videos/<platform>/<user>/<title>/ (root: $TELL_ME_ROOT or ~/me/summaries).
+Folder: <root>/videos/<platform>/<user>/<title>/ (root: $TELL_ME_ROOT or ~/skills/tell-me).
 
 As a part of another source's item (an x post's video): --dir <folder> --content-part <name> writes into that
 folder instead, keeps the transcript as <name>-transcript.md, stores the video's facts under metadata.json's

@@ -34,9 +34,9 @@ class TestNaming(unittest.TestCase):
         self.assertEqual(video_dir(info, Path("/r")), Path("/r/youtube/chan/my-video"))
 
     def test_default_root_and_env_override(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(library_root(), Path.home() / "me" / "summaries")
-            self.assertEqual(source_root("video"), Path.home() / "me" / "summaries" / "videos")
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"HOME": home}, clear=True):
+            self.assertEqual(library_root(), Path(home) / "skills" / "tell-me")
+            self.assertEqual(source_root("video"), Path(home) / "skills" / "tell-me" / "videos")
         with mock.patch.dict(os.environ, {"TELL_ME_ROOT": "/tmp/x", "DM_SUMMARIZE_VIDEO_ROOT": "/tmp/y/videos"}):
             self.assertEqual(library_root(), Path("/tmp/x"))
         with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": "/tmp/y/videos"}, clear=True):
@@ -44,6 +44,19 @@ class TestNaming(unittest.TestCase):
         with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": "/tmp/yt-notes"}, clear=True):
             with self.assertRaisesRegex(SkillError, "set TELL_ME_ROOT"):
                 library_root()  # its parent may be ~: never guess
+
+    def test_a_library_at_the_old_default_stops_with_the_move_command(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"HOME": home}, clear=True):
+            old = Path(home) / "me" / "summaries"
+            old.mkdir(parents=True)
+            self.assertEqual(library_root(), Path(home) / "skills" / "tell-me")  # an empty old folder: no library
+            (old / "library.js").write_text("")
+            with self.assertRaisesRegex(SkillError, f"mv {old} {Path(home)}/skills/tell-me"):
+                library_root()
+            with mock.patch.dict(os.environ, {"TELL_ME_ROOT": str(old)}):
+                self.assertEqual(library_root(), old)  # kept there on purpose
+            (Path(home) / "skills" / "tell-me").mkdir(parents=True)
+            self.assertEqual(library_root(), Path(home) / "skills" / "tell-me")  # moved (or a new one started)
 
     def test_browser_cookies_new_name_first_then_the_old_one(self):
         with mock.patch.dict(os.environ, {}, clear=True):

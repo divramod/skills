@@ -329,7 +329,7 @@ renderChips();render();
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--root", type=Path, help="library root (default: $TELL_ME_ROOT or ~/me/summaries)")
+    ap.add_argument("--root", type=Path, help="library root (default: $TELL_ME_ROOT or ~/skills/tell-me)")
     ap.add_argument("--pages", action="store_true", help="also re-render every summary.html / digest.html")
     ap.add_argument("--open-last", action="store_true",
                     help="open the most recently summarized video in the browser (via the library server)")

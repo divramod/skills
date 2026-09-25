@@ -139,7 +139,7 @@ def migrate(root: Path, apply: bool) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--root", type=Path, help="library root (default: $TELL_ME_ROOT or ~/me/summaries)")
+    ap.add_argument("--root", type=Path, help="library root (default: $TELL_ME_ROOT or ~/skills/tell-me)")
     ap.add_argument("--apply", action="store_true", help="make the changes (default: only print them)")
     args = ap.parse_args(argv)
     if args.root:

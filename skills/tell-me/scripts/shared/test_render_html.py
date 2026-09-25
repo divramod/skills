@@ -1,15 +1,31 @@
 #!/usr/bin/env python3
 """Unit tests for render_html.py (offline)."""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from render_html import build, inline, markdown, split_frontmatter
 from save_summary import render
 
 META = {"id": "abc", "title": "T <x>", "channel": "Chan", "webpage_url": "https://www.youtube.com/watch?v=abc",
         "upload_date": "20260924", "duration": 729, "platform": "youtube", "transcript_source": "whisper"}
+
+
+# Hermetic: HOME is an empty folder, so no test reads (or trips over) the real library under ~.
+_home = tempfile.TemporaryDirectory()
+_env = mock.patch.dict(os.environ, {"HOME": _home.name})
+
+
+def setUpModule():
+    _env.start()
+
+
+def tearDownModule():
+    _env.stop()
+    _home.cleanup()
 
 
 class TestInline(unittest.TestCase):

@@ -1,14 +1,30 @@
 #!/usr/bin/env python3
 """Unit tests for save_summary.py (offline)."""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from save_summary import fmt_date, refresh, render, set_frontmatter_field, strip_leading_h1
 
 META = {"id": "abc", "title": 'Say "hi": a test', "channel": "Chan", "webpage_url": "https://www.youtube.com/watch?v=abc",
         "upload_date": "20260924", "duration": 729, "platform": "youtube", "transcript_source": "captions (manual, en)"}
+
+
+# Hermetic: HOME is an empty folder, so no test reads (or trips over) the real library under ~.
+_home = tempfile.TemporaryDirectory()
+_env = mock.patch.dict(os.environ, {"HOME": _home.name})
+
+
+def setUpModule():
+    _env.start()
+
+
+def tearDownModule():
+    _env.stop()
+    _home.cleanup()
 
 
 class TestSaveSummary(unittest.TestCase):
