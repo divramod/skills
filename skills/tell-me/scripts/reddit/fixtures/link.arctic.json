@@ -1,0 +1,191 @@
+{
+ "post": {
+  "id": "1wexekt",
+  "name": "t3_1wexekt",
+  "permalink": "/r/programming/comments/1wexekt/data_races_and_the_limits_of_threadsanitizer_in_c/",
+  "subreddit": "programming",
+  "score": 70,
+  "upvote_ratio": 0.86,
+  "num_comments": 7,
+  "link_flair_text": null,
+  "is_self": false,
+  "url": "https://theconsensus.dev/p/2026/09/06/data-races-and-the-limits-of-threadsanitizer-in-c-and-go.html",
+  "url_overridden_by_dest": "https://theconsensus.dev/p/2026/09/06/data-races-and-the-limits-of-threadsanitizer-in-c-and-go.html",
+  "selftext": "",
+  "created_utc": 1789272556,
+  "author": "mttd",
+  "title": "Data races and the limits of ThreadSanitizer in C and Go",
+  "is_video": false,
+  "post_hint": null,
+  "domain": "theconsensus.dev",
+  "crosspost_parent_list": null,
+  "over_18": false,
+  "is_gallery": null
+ },
+ "tree": [
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9ie8pu",
+    "author": "realestLink",
+    "body": "This is extremely well-written. I've always wondered how TSAN worked. Thanks for the write-up",
+    "score": 9,
+    "created_utc": 1789288133,
+    "parent_id": "t3_1wexekt",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9is1t8",
+    "author": "BenchEmbarrassed7316",
+    "body": "This is an interesting article.\n\nIt should have been mentioned that for rapid development, one ought to use Rust, which guarantees the absence of data races within its safe subset. An application programmer shouldn't have to deal with such issues.\n\nFurthermore, in go, interfaces and slices are \"fat pointers\" that cannot be updated atomically; non-atomic updates during a data race result in undefined behavior:\n\nhttps://www.ralfj.de/blog/2025/07/24/memory-safety.html\n\nAnother problem is that while everyone knows C is a memory-unsafe language, the fact that go is also not memory-safe isn't widely recognized. I am always reminded of this article, which illustrates just how widespread this issue is:\n\nhttps://www.uber.com/us/en/blog/dynamic-data-race-detection-in-go-code/",
+    "score": 13,
+    "created_utc": 1789295037,
+    "parent_id": "t3_1wexekt",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": {
+     "kind": "Listing",
+     "data": {
+      "children": [
+       {
+        "kind": "t1",
+        "data": {
+         "id": "p9oulu1",
+         "author": "Absolute_Enema",
+         "body": "So much for Go being designed for concurrency.",
+         "score": 5,
+         "created_utc": 1789359101,
+         "parent_id": "t1_p9is1t8",
+         "is_submitter": false,
+         "distinguished": null,
+         "replies": {
+          "kind": "Listing",
+          "data": {
+           "children": [
+            {
+             "kind": "t1",
+             "data": {
+              "id": "p9pfucw",
+              "author": "BenchEmbarrassed7316",
+              "body": ">  Go being designed for concurrency\n\n...by Rob Pike in the mid-1980s under the name 'Newsqueak':\n\n```\nbegin prog(){\n  p: int;\n  newc: chan of int;\n  for (;;) {\n    prime<-=p=<-c;\n    newc = mk();\n    begin filter(p, c, newc);\n    c = newc;\n  }\n}();\n```\n\nhttps://en.wikipedia.org/wiki/Newsqueak\n\nhttps://www.cs.tufts.edu/comp/250RTS/archive/rob-pike/impl-new-TR.pdf\n\nhttps://swtch.com/~rsc/thread/newsqueak.pdf\n\nThen, in the mid-2000s, they re-released this language under the name \"golang\". That isn't bad in itself (unless the \"Go\" language already existed at the time, and they told its creator, \"Go to hell, we're just taking this name for ourselves\"): \n\nhttps://en.wikipedia.org/wiki/Go!_(programming_language)#Conflict_with_Google\n\nHowever, the problem with the language's design itself stems from the fact that the original go development team responded to most constructive criticisms with \"Go to hell, we know better.\" Take, for example, the discussion regarding `null`:\n\nhttps://groups.google.com/g/golang-nuts/c/rvGTZSFU8sY",
+              "score": 7,
+              "created_utc": 1789368813,
+              "parent_id": "t1_p9oulu1",
+              "is_submitter": false,
+              "distinguished": null,
+              "replies": ""
+             }
+            }
+           ]
+          }
+         }
+        }
+       },
+       {
+        "kind": "t1",
+        "data": {
+         "id": "p9uyucv",
+         "author": "flatfinger",
+         "body": "Some dialects of C limit the number of operations that are capable of violating memory safety.  If one can produce a set of invariants show that if the invariants hold, none of the individual operations the program could do would break them or violate memory safety, that would prove the program was memory safe.\n\nUnfortunately, when using the gcc optimizer, a statement like `uint1=ushort1*ushort2;` can disrupt the behavior of surrounding code in ways that would violate memory safety and when using the clang operator, a statement like `while ((uint1 & 0x7FFF) != uint2) uint1*=3;` can do likewise.",
+         "score": 2,
+         "created_utc": 1789430735,
+         "parent_id": "t1_p9is1t8",
+         "is_submitter": false,
+         "distinguished": null,
+         "replies": ""
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9jcsmi",
+    "author": "Apprehensive_Bit7392",
+    "body": "The sync.Pool table is the one that would worry me in a real service. The article calls 128 slots small but doesn't put a number on it: by the birthday bound you're at even odds of a collision with about fourteen live pooled objects, and a collision silently orders two goroutines that have nothing to do with each other. Every race between them stops being reported, in pools that never touch.",
+    "score": -1,
+    "created_utc": 1789303518,
+    "parent_id": "t3_1wexekt",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9m7cbv",
+    "author": "irqlnotdispatchlevel",
+    "body": "Might just be because English is not my first language, but this sentence was hard to parse for me:\n\n> Each thread also stores a vector clock containing the time it is aware of for every other thread.\n\nDoesn't detract from how good the article is. ",
+    "score": 8,
+    "created_utc": 1789329820,
+    "parent_id": "t3_1wexekt",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": {
+     "kind": "Listing",
+     "data": {
+      "children": [
+       {
+        "kind": "t1",
+        "data": {
+         "id": "p9qm3ef",
+         "author": "eatonphil",
+         "body": "Yeah definitely. I had a hard time describing the vector clock algorithm even after many edits.",
+         "score": 3,
+         "created_utc": 1789388248,
+         "parent_id": "t1_p9m7cbv",
+         "is_submitter": false,
+         "distinguished": null,
+         "replies": {
+          "kind": "Listing",
+          "data": {
+           "children": [
+            {
+             "kind": "t1",
+             "data": {
+              "id": "p9unmq3",
+              "author": "backfire10z",
+              "body": "Frankly the number 1 thing I understand about the vector clock algo is that it’s more difficult to explain than it looks",
+              "score": 1,
+              "created_utc": 1789427186,
+              "parent_id": "t1_p9qm3ef",
+              "is_submitter": false,
+              "distinguished": null,
+              "replies": ""
+             }
+            }
+           ]
+          }
+         }
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9ngorl",
+    "author": "[deleted]",
+    "body": "[removed]",
+    "score": 1,
+    "created_utc": 1789342201,
+    "parent_id": "t3_1wexekt",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  }
+ ]
+}

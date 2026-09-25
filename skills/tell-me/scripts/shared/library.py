@@ -77,7 +77,7 @@ def last_summarized(root: Path) -> Path | None:
 # Folder depth (below the root) of the folder that stands for an author/site/owner, per source:
 # videos/<platform>/<channel>, articles/<site>, repos/github/<owner>, posts/x/<user>. The sidebar
 # labels that folder with `group_name` instead of its slug.
-GROUP_DEPTH = {"video": 3, "web": 2, "github": 3, "x": 3}
+GROUP_DEPTH = {"video": 3, "web": 2, "github": 3, "x": 3, "reddit": 3}
 
 
 def group_of(rel: str, source: str | None, c: dict) -> tuple[str, str]:
@@ -86,7 +86,7 @@ def group_of(rel: str, source: str | None, c: dict) -> tuple[str, str]:
     parts = rel.split("/")
     if not depth or len(parts) <= depth:
         return "", ""
-    name = c.get("site") if source == "web" else c.get("author")
+    name = c.get("site") if source in ("web", "reddit") else c.get("author")
     return "/".join(parts[:depth]), name or ""
 
 
@@ -229,7 +229,7 @@ const when=d=>[day(d),hm(d)].filter(Boolean).join(' ');
 const by=it=>[it.author,when(it.date)].filter(Boolean).join(' · ');
 // one glyph and label per source (the filter chips and the links)
 const TYPES={video:['▶','Videos'],web:['¶','Articles'],github:['⌥','GitHub'],x:['𝕏','X posts'],hn:['Y','Hacker News'],
-  file:['▤','Documents'],digest:['≡','Digests']};
+  reddit:['r/','Reddit'],file:['▤','Documents'],digest:['≡','Digests']};
 const typeOf=it=>it.type||(it.kind==='digest'?'digest':it.source)||'';
 const ico=it=>{const t=TYPES[typeOf(it)];return t?`<span class="ico" title="${esc(t[1])}" aria-hidden="true">${t[0]}</span>`:'';};
 const link=(it,sub)=>`<li><a href="${esc(ROOT+'/'+it.page)}"${it.path===SELF?' class="current" aria-current="page"':''} title="${esc(it.path)}">${ico(it)}${esc(it.title)}${sub?`<small>${esc(sub)}</small>`:''}</a></li>`;

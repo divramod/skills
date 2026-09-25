@@ -1,6 +1,6 @@
 ---
 name: tell-me
-description: Summarize anything from a URL or a path into a markdown note and an HTML page in ~/skills/tell-me — a video, playlist or channel (YouTube, TikTok, X, Vimeo, podcasts, any yt-dlp site), a blog post or web page, a GitHub repo, issue, pull request or discussion, an X post or thread with its replies, a Hacker News thread (article + discussion), or a local document (PDF, DOCX, PPTX, EPUB, Markdown). Several inputs at once get a digest across them. Each summary has anchor links back into the source, a links section (books, Wikipedia terms, repos, further reading, each with its date) and related items; modes tldr/summary/detailed/wisdom/qa (+ chapters for videos). Use when the user pastes a link or a file path and wants a summary, the gist, notes, or answers about it; called without input it opens the last summary in the browser.
+description: Summarize anything from a URL or a path into a markdown note and an HTML page in ~/skills/tell-me — a video, playlist or channel (YouTube, TikTok, X, Vimeo, podcasts, any yt-dlp site), a blog post or web page, a GitHub repo, issue, pull request or discussion, an X post or thread with its replies, a Hacker News thread or a Reddit post (article + discussion), or a local document (PDF, DOCX, PPTX, EPUB, Markdown). Several inputs at once get a digest across them. Each summary has anchor links back into the source, a links section (books, Wikipedia terms, repos, further reading, each with its date) and related items; modes tldr/summary/detailed/wisdom/qa (+ chapters for videos). Use when the user pastes a link or a file path and wants a summary, the gist, notes, or answers about it; called without input it opens the last summary in the browser.
 ---
 
 # tell-me
@@ -37,6 +37,7 @@ subskill lists them.
 | github | `github.com/<owner>/<repo>`, its `/issues/N`, `/pull/N`, `/discussions/N` | [subskills/github/SUBSKILL.md](subskills/github/SUBSKILL.md) |
 | x | `x.com` / `twitter.com` posts (`…/status/<id>`) | [subskills/x/SUBSKILL.md](subskills/x/SUBSKILL.md) |
 | hn | `news.ycombinator.com/item?id=<id>` | [subskills/hn/SUBSKILL.md](subskills/hn/SUBSKILL.md) |
+| reddit | `reddit.com/r/<sub>/comments/<id>/…` (www, old, new), `redd.it/<id>`, share links `…/r/<sub>/s/<code>` | [subskills/reddit/SUBSKILL.md](subskills/reddit/SUBSKILL.md) |
 | file | a local path (`~/…`, `./…`, `file://…`) or a document URL (`.pdf`, `.docx`, `.epub`, …) | [subskills/file/SUBSKILL.md](subskills/file/SUBSKILL.md) |
 
 `python3 $S/shared/route.py "<input>"` shows the routing without fetching anything.
@@ -87,7 +88,7 @@ else that source adds.
   links). Never build them yourself.
 - Never add content that isn't in the content file. Transcripts and OCR mishear names and jargon: correct them
   using the title and description. If the content looks garbled, say so in one line at the end.
-- Discussions (HN threads, X replies, GitHub issues): follow
+- Discussions (HN threads, Reddit posts, X replies, GitHub issues): follow
   [subskills/shared/discussion.md](subskills/shared/discussion.md): themes with attributed verbatim quotes.
 
 ## 5. Links
@@ -147,7 +148,8 @@ Each source's own scripts are listed in its subskill. Every `scripts/<source>/` 
 
 The library root is `~/skills/tell-me` (`TELL_ME_ROOT` overrides it): `videos/<platform>/<channel>/<title>/`,
 `articles/<site>/<title>/`, `repos/github/<owner>/<repo>/`, `posts/x/<user>/<words>-<id>/`,
-`discussions/hn/<title>-<id>/`, `documents/<folder>/<file>/`. A library still at the old root `~/me/summaries`
-stops every script with the `mv` command that moves it: tell the user, don't move it yourself. A video library from
-before this layout is migrated once with `python3 $S/video/migrate_library.py --apply` (dry run without `--apply`).
+`discussions/hn/<title>-<id>/`, `discussions/reddit/<subreddit>/<title>-<id>/`, `documents/<folder>/<file>/`.
+A library still at the old root `~/me/summaries` stops every script with the `mv` command that moves it: tell the
+user, don't move it yourself. A video library from before this layout is migrated once with
+`python3 $S/video/migrate_library.py --apply` (dry run without `--apply`).
 Tests: `$S/run-tests.sh`.

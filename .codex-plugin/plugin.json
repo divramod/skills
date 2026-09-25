@@ -1,7 +1,7 @@
 {
   "name": "divramod-skills",
   "version": "0.3.0",
-  "description": "divramod's agent skills: summarize anything (videos, web pages, GitHub repos, X threads, Hacker News, documents), and more.",
+  "description": "divramod's agent skills: summarize anything (videos, web pages, GitHub repos, X threads, Hacker News, Reddit, documents), and more.",
   "author": {
     "name": "Arvid Petermann",
     "url": "https://github.com/divramod"
@@ -9,7 +9,7 @@
   "homepage": "https://github.com/divramod/skills",
   "repository": "https://github.com/divramod/skills",
   "license": "MIT",
-  "keywords": ["skills", "summarize", "video", "youtube", "article", "github", "twitter", "x", "hacker-news", "pdf", "digest"],
+  "keywords": ["skills", "summarize", "video", "youtube", "article", "github", "twitter", "x", "hacker-news", "reddit", "pdf", "digest"],
   "skills": "./skills/",
   "interface": {
     "displayName": "divramod skills",

@@ -92,6 +92,8 @@ class TestNaming(unittest.TestCase):
             ({"source": "x", "id": "20", "author": "Jack", "title": "just setting up my twttr", "extras": {"user": "jack"}},
              "posts/x/jack/just-setting-up-my-twttr-20"),
             ({"source": "hn", "id": "1", "title": "Y Combinator"}, "discussions/hn/y-combinator-1"),
+            ({"source": "reddit", "id": "1wexekt", "title": "Data races!", "extras": {"subreddit": "Programming"}},
+             "discussions/reddit/programming/data-races-1wexekt"),
             ({"source": "file", "url": "file:///Users/a/Papers/Attention Is All You Need.pdf", "title": "x"},
              "documents/papers/attention-is-all-you-need"),
         ]

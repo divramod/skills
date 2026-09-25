@@ -89,7 +89,7 @@ class TestLibrary(unittest.TestCase):
     def test_sidebar_has_the_source_filter(self):
         from library import SIDEBAR_JS, sidebar_html
         self.assertIn('class="types"', sidebar_html())
-        for t in ("video", "web", "github", "x", "hn", "file", "digest"):
+        for t in ("video", "web", "github", "x", "hn", "reddit", "file", "digest"):
             self.assertIn(f"{t}:[", SIDEBAR_JS.replace("'", ""))
         self.assertIn("st.types", SIDEBAR_JS)
 
@@ -100,6 +100,8 @@ class TestLibrary(unittest.TestCase):
         self.assertEqual(group_of("repos/github/yt-dlp/yt-dlp", "github", {"author": "yt-dlp"}),
                          ("repos/github/yt-dlp", "yt-dlp"))
         self.assertEqual(group_of("discussions/hn/title-1", "hn", {"author": "pg"}), ("", ""))
+        self.assertEqual(group_of("discussions/reddit/python/title-1", "reddit", {"site": "r/Python", "author": "u"}),
+                         ("discussions/reddit/python", "r/Python"))
         self.assertEqual(group_of("videos/youtube", "video", {"author": "x"}), ("", ""))
 
     def test_start_time_is_folder_creation_time(self):

@@ -30,6 +30,14 @@ CASES = [
     ("https://vxtwitter.com/jack/status/20", ("x", "post", "20")),
     ("https://x.com/i/web/status/20", ("x", "post", "20")),
     ("https://news.ycombinator.com/item?id=1", ("hn", "item", "1")),
+    ("https://www.reddit.com/r/programming/comments/1wexekt/data_races/", ("reddit", "post", "1wexekt")),
+    ("https://old.reddit.com/r/Python/comments/1ABC/x/?utm_source=share", ("reddit", "post", "1abc")),
+    ("https://new.reddit.com/r/programming/comments/1wexekt/x/p9is1t8/?context=3", ("reddit", "comment", "1wexekt")),
+    ("https://reddit.com/comments/1wexekt", ("reddit", "post", "1wexekt")),
+    ("https://redd.it/1wexekt", ("reddit", "post", "1wexekt")),
+    ("https://www.reddit.com/r/programming/s/AbC123", ("reddit", "share", "share/AbC123")),
+    ("https://www.reddit.com/link/1abc/video/xyz/player", ("video", "video", None)),
+    ("https://v.redd.it/xyz", ("video", "video", None)),
     ("https://github.com/yt-dlp/yt-dlp", ("github", "repo", "yt-dlp/yt-dlp")),
     ("https://github.com/yt-dlp/yt-dlp.git", ("github", "repo", "yt-dlp/yt-dlp")),
     ("https://github.com/yt-dlp/yt-dlp/tree/master/yt_dlp", ("github", "repo", "yt-dlp/yt-dlp")),
@@ -132,7 +140,8 @@ class TestRoute(unittest.TestCase):
             self.assertEqual(route("~/doc.docx")["path"], str((Path(tmp) / "doc.docx").resolve()))
 
     def test_rejects(self):
-        for text in ("", "ftp://example.com/x", "mailto:a@b.c", "https://x.com/jack", "just some words"):
+        for text in ("", "ftp://example.com/x", "mailto:a@b.c", "https://x.com/jack", "just some words",
+                     "https://www.reddit.com/r/programming/", "https://www.reddit.com/user/bob"):
             with self.subTest(text):
                 with self.assertRaises(SkillError):
                     route(text)

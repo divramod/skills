@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare any input for summarizing: route it to its source, run scripts/<source>/prepare.py.
 
-route.py picks the source (video, web, github, x, hn, file); the source script fetches the content
+route.py picks the source (video, web, github, x, hn, reddit, file); the source script fetches the content
 into its library folder (content file with anchor links + metadata.json) and prints the envelope.
 This script checks the envelope and prints it unchanged, so the agent reads `subskill` and
 `template` next. Every flag after the input goes to the source script (e.g. --skip-download,

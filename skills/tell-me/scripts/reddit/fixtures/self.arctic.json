@@ -1,0 +1,139 @@
+{
+ "post": {
+  "id": "1wgae8i",
+  "name": "t3_1wgae8i",
+  "permalink": "/r/AskProgramming/comments/1wgae8i/i_decided_to_change_my_life_by_becoming_a/",
+  "subreddit": "AskProgramming",
+  "score": 0,
+  "upvote_ratio": 0.43,
+  "num_comments": 8,
+  "link_flair_text": "Other",
+  "is_self": true,
+  "url": "https://www.reddit.com/r/AskProgramming/comments/1wgae8i/i_decided_to_change_my_life_by_becoming_a/",
+  "url_overridden_by_dest": null,
+  "selftext": "I am 23 yo and I work full time at the factory in 5 shifts. I hate my job and it’s not interesting to me at all. Instead of just hating my job,I decided to change something in my life. \n\nThat’s why I want to start with bachelor computer science.It cost €15k,but I can study it in my free time. I studied java at school little bit and I enjoyed it,making games and websites looks like magic. \n\n I was the best chemistry student at school,my teacher said that he never saw someone with such high grades. So,instead of studying something unknown like programming I decided to study chemistry more. I was afraid to fail,afraid to spend my time  and money on something I will,probably,never be good in. \n\nBy the irony of fate I failed in chemistry,I lost my time and on money it. My whole world was ruined on the day I failed on chemistry. On that year I started to work fulltime and moved from my parents. Now  I have a job I hate and I see that factory workers are treated like garbage. They can fire you only because you walk strange or because they just don’t want to give you any rights and certainty in your life.\n\nI saw a lot of factories and they always have zero respect to the workers,because people without education can be easily replaced. \n\nI remembered that I wanted to become a programmer once and make videogames. That idea always seemed so childish and unrealistic to me,but it’s better to try and fail,than do nothing. I found a way to work and study online. It will be difficult,but I hope that I will reach my goal ",
+  "created_utc": 1789407803,
+  "author": "MindPrize1260",
+  "title": "I decided to change my life by becoming a programmer",
+  "is_video": false,
+  "post_hint": null,
+  "domain": "self.AskProgramming",
+  "crosspost_parent_list": null,
+  "over_18": false,
+  "is_gallery": null
+ },
+ "tree": [
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9sne79",
+    "author": "Eleventhousand",
+    "body": "Good luck.  I did this about 25 years ago - went back to college a bit late after dropping out initially and working manual labor.",
+    "score": 6,
+    "created_utc": 1789407991,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9snh8d",
+    "author": "ajamdonut",
+    "body": "When I was your age programmers were quite rare. Now I've met ex-nurses, ex-barman, ex-allsorts who decided to make the switch, some had jobs within 3 months, some took a year or two. But meeting them was proof that in the modern age, making that switch is not something stupid or crazy. Merely a choice.",
+    "score": -5,
+    "created_utc": 1789408012,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9snxa0",
+    "author": "CarPlane5196",
+    "body": "You are trying to get on the bandwagon at the time most people are getting off. ",
+    "score": 6,
+    "created_utc": 1789408123,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9soedv",
+    "author": "mavenHawk",
+    "body": "Hate to say it, but you are about 6 years late to the party. Honest to God, I would not spend 15K on a bachelor's degree in computer science right now. But I am talking about the US. It might be different where you are.\n\nCan you actually look at job listings in your country to see what they are asking for in terms of qualifications? ",
+    "score": 8,
+    "created_utc": 1789408240,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9sr0lk",
+    "author": "VillainGoose54",
+    "body": "If chemistry was your first major when you attended uni, it's pretty common for people to fail at their best subject from secondary/high school. Thats part of academic burnout when you it a wall and realized you dont have the effecient tools to succeed in higher education. This happened to me with maths, now im a psychology major. I also worked many jobs when I dropped out and developed mental issues that affect my work life. Programming can be a very fun hobby, but be careful pursuing it as a profession. The tech sector is heavily integrating ai and machine learning, so the job requirements are becoming more specific and diluted, which means that a lot of other tech skills are being marginalized. The main focus right now is machine learning and computational data science. Electrical engineering and computer engineering will always be needed and is something that will always be needed. Game development will always be needed as well, because gamers are gamers. In the end, it comes down to whether you truly believe that you will enjoy your studies and get paid for your work, like actually enjoying getting paid for what you enjoy doing. A decent number of people lose joy in what they do because it turned into work(a mandatory task), and they no longer see much purpose in their work. School is also hard when you're depressed, so you need to make sure you're already disciplined, or you will fall behind pretty quickly. Get yourself into an academic mindset and just give what you want your best effort, and don't let failing set you back, but use it as a learning lesson to push yourself forward. I wish you the best of luck in your journey, and may God bless your soul. Peace✌️",
+    "score": 1,
+    "created_utc": 1789408896,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9ssfzm",
+    "author": "AskProgramming-ModTeam",
+    "body": "Your post has been removed for being off topic. If you need support with some program please try r/techsupport. If you are looking for a laptop or PC build please visit r/SuggestALaptop or \nr/buildapc.",
+    "score": 1,
+    "created_utc": 1789409259,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": "moderator",
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9st7ow",
+    "author": "YahenP",
+    "body": "There is a saying in my country: the girls are always prettier in another village.",
+    "score": 1,
+    "created_utc": 1789409454,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  },
+  {
+   "kind": "t1",
+   "data": {
+    "id": "p9sv6nt",
+    "author": "Groundbreaking-Fish6",
+    "body": "You may want to consider an Information Technology degree that emphasizes using computers more than building computers. You also may be able to include your interests (Chemistry) or work knowledge (factory work) in a specialized degree like Chemistry Informatics or Factory Automation. Information systems were born in the business schools where programming is implementing tools to solve real world problems. In a ever changing world this is important. Computer Science is very Math heavy and works to solve computer problems. \n\nSince you already failed at Chemistry a hard science, you may want to try one of the softer sciences that involves people and using existing tools instead of building new ones. If Math really is your thing and your Chemistry failure was unrelated (too much partying), then go for it, just keep up this time.\n\nFinally, video game developers are like actors and other artistic pursuits, it takes a lot of work, is never secure and very few people make it. But you can have fun with it and who knows, best of luck to you.",
+    "score": 1,
+    "created_utc": 1789409955,
+    "parent_id": "t3_1wgae8i",
+    "is_submitter": false,
+    "distinguished": null,
+    "replies": ""
+   }
+  }
+ ]
+}

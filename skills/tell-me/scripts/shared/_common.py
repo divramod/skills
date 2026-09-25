@@ -50,7 +50,7 @@ def log(msg: str) -> None:
 
 # Top-level library folder per source.
 KIND_DIRS = {"video": "videos", "web": "articles", "github": "repos", "x": "posts", "hn": "discussions",
-             "file": "documents"}
+             "reddit": "discussions", "file": "documents"}
 
 
 def browser_cookies() -> str | None:
@@ -158,6 +158,7 @@ def dir_for(meta: dict, root: Path | None = None) -> Path:
     video   videos/<platform>/<channel>/<title>          web    articles/<site>/<title>
     github  repos/github/<owner>/<repo>[/<kind>s/<n>-<title>]
     x       posts/x/<user>/<first-words>-<id>            hn     discussions/hn/<title>-<id>
+    reddit  discussions/reddit/<subreddit>/<title>-<id>
     file    documents/<parent-folder>/<file-stem> (a URL: documents/<host>/<file-stem>)
     """
     source = meta.get("source") or "video"
@@ -178,6 +179,8 @@ def dir_for(meta: dict, root: Path | None = None) -> Path:
         return base / "x" / slugify(str(user or "unknown").lstrip("@")) / f"{slugify(title, 40)}-{meta['id']}"
     if source == "hn":
         return base / "hn" / f"{slugify(title, 60)}-{meta['id']}"
+    if source == "reddit":
+        return base / "reddit" / slugify(extras.get("subreddit") or "unknown") / f"{slugify(title, 60)}-{meta['id']}"
     if source == "file":
         url = meta.get("url") or ""
         if extras.get("original_path") or not url.startswith(("http://", "https://")):

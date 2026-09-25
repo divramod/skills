@@ -81,6 +81,18 @@ class TestPanels(unittest.TestCase):
             self.assertIn(want, html)
         self.assertIn("text post", panels.hn(Path("/"), {"extras": {"points": 3, "comments": 0}}, None))
 
+    def test_reddit(self):
+        html = panels.reddit(Path("/"), {"extras": {"subreddit": "programming", "score": 70, "upvote_ratio": 0.86,
+                                                    "comments": 9, "threads": 4, "flair": "Discussion",
+                                                    "article_url": "https://example.com/a", "api": "arctic"}}, None)
+        for want in ('href="https://www.reddit.com/r/programming/"', ">r/programming<", "<b>70</b> points (86% upvoted)",
+                     "<b>9</b> comments in 4 threads", "flair: Discussion", 'href="https://example.com/a"',
+                     "Arctic Shift"):
+            self.assertIn(want, html)
+        video = panels.reddit(Path("/"), {"extras": {"media": "https://v.redd.it/x", "subreddit": "a/../b"}}, None)
+        self.assertIn(">the media<", video)
+        self.assertNotIn("r/a/", video)  # not a subreddit name: no link
+
     def test_file(self):
         folder = folder_with({}, {"original.pdf": "%PDF"})
         html = panels.file(folder, {"extras": {"kind": "pdf", "pages": 15, "size": 2_200_000,
@@ -119,7 +131,8 @@ class TestPanels(unittest.TestCase):
         fields = ("stars", "forks", "license", "languages", "release", "pushed_at", "labels", "state", "state_reason",
                   "number", "comments", "additions", "deletions", "changed_files", "repo", "kind", "user", "views",
                   "likes", "replies", "replies_fetched", "posts", "points", "threads", "article_url", "snapshot",
-                  "size", "pages", "versions", "original_file", "language")
+                  "size", "pages", "versions", "original_file", "language", "subreddit", "score", "upvote_ratio",
+                  "flair", "media", "api")
         for fn in panels.PANELS.values():
             for v in values:
                 for meta in ({"extras": {f: v for f in fields}, "word_count": v, "site": v}, {"extras": v}):
@@ -139,7 +152,7 @@ class TestPanels(unittest.TestCase):
 
 class TestRenderedPage(unittest.TestCase):
     def test_every_source_has_a_panel_and_an_x_video_gets_the_player(self):
-        self.assertEqual(set(render_html.HEADER_PANELS), {"video", "web", "github", "x", "hn", "file"})
+        self.assertEqual(set(render_html.HEADER_PANELS), {"video", "web", "github", "x", "hn", "reddit", "file"})
         meta = {"source": "x", "id": "1", "title": "A post", "url": "https://x.com/a/status/1", "video_file":
                 "video.mp4", "video": {"source_url": "https://x.com/a/status/1", "playlist_item": 1},
                 "extras": {"user": "a", "likes": 3}}

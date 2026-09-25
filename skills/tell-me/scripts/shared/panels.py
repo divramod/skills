@@ -166,6 +166,24 @@ def hn(folder: Path, meta: dict, url: str | None) -> str:
     )
 
 
+def reddit(folder: Path, meta: dict, url: str | None) -> str:
+    ex = extras_of(meta)
+    comments, threads, ratio = as_int(ex.get("comments")), as_int(ex.get("threads")), ex.get("upvote_ratio")
+    in_threads = f" in {threads:,} {plural(threads, 'thread')}" if threads else ""
+    sub = text(ex.get("subreddit"))
+    upvoted = f" ({round(ratio * 100)}% upvoted)" if isinstance(ratio, float) and 0 < ratio <= 1 else ""
+    points = count(ex.get("score"), "points")
+    return facts(
+        link(f"https://www.reddit.com/r/{sub}/", f"r/{sub}") if sub and re.fullmatch(r"\w{1,50}", sub) else None,
+        points + upvoted if points else None,
+        f"<b>{num(comments)}</b> comments{in_threads}" if comments is not None else None,
+        f"flair: {esc(ex['flair'])}" if text(ex.get("flair")) else None,
+        link(ex.get("article_url"), "the article") or link(ex.get("media"), "the media"),
+        link(ex.get("snapshot"), "archived copy"),
+        "from the Arctic Shift archive" if ex.get("api") == "arctic" else None,
+    )
+
+
 def file(folder: Path, meta: dict, url: str | None) -> str:
     ex = extras_of(meta)
     size = as_int(ex.get("size"))
@@ -179,4 +197,4 @@ def file(folder: Path, meta: dict, url: str | None) -> str:
     )
 
 
-PANELS = {"web": web, "github": github, "x": x, "hn": hn, "file": file}
+PANELS = {"web": web, "github": github, "x": x, "hn": hn, "reddit": reddit, "file": file}

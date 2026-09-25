@@ -1,7 +1,7 @@
 # Discussions: themes with quotes
 
-For Hacker News threads, X replies and GitHub issue, pull request and discussion comments. A discussion is not
-linear, so don't retell it in order: group it by what people argue about.
+For Hacker News threads, Reddit posts, X replies and GitHub issue, pull request and discussion comments. A
+discussion is not linear, so don't retell it in order: group it by what people argue about.
 
 1. **The original first.** Summarize what is being discussed (the linked article, the post, the issue body) in its
    own section before the discussion.

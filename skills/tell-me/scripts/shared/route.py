@@ -5,6 +5,9 @@
           any other host in VIDEO_HOSTS, and direct media files (.mp4, .mp3, ...)
   x       x.com / twitter.com / fixupx / fxtwitter / vxtwitter posts (…/status/<id>)
   hn      news.ycombinator.com/item?id=<id>
+  reddit  reddit.com/r/<sub>/comments/<id>[/<slug>/<comment>] (www, old, new, np), reddit.com/comments/<id>,
+          redd.it/<id>, share links reddit.com/r/<sub>/s/<code> (resolved by reddit/prepare.py);
+          reddit.com/link/… and v.redd.it videos stay with video
   github  github.com/<owner>/<repo>[/tree|blob/…]; /issues/N, /pull/N, /discussions/N
   file    a local path (absolute, ~, relative, file://) or a document URL (.pdf, .docx, .epub, …)
   web     any other http(s) URL
@@ -24,7 +27,7 @@ from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 
 from _common import SkillError, run_main
 
-SOURCES = ("video", "web", "github", "x", "hn", "file")
+SOURCES = ("video", "web", "github", "x", "hn", "reddit", "file")
 
 # Hosts whose pages are videos/audio for yt-dlp (matched with any subdomain).
 VIDEO_HOSTS = (
@@ -52,6 +55,7 @@ TRACKING_PARAMS = re.compile(r"^(utm_\w+|fbclid|gclid|mc_cid|mc_eid|ref_src|ref_
 _BARE_HOST_RE = re.compile(r"^[\w-]+(\.[\w-]+)*\.[a-z]{2,}(:\d+)?(/|\?|$)", re.I)
 _YT_ID_RE = re.compile(r"^[\w-]{11}$")
 _GITHUB_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")  # an owner or repo name
+_REDDIT_ID_RE = re.compile(r"^[a-z0-9]{1,13}$")  # base36 post and comment ids
 
 
 def host_of(url: str) -> str:
@@ -167,6 +171,28 @@ def x_post(host: str, segs: list[str]) -> dict | None:
     raise SkillError(f"x/twitter: only post URLs are supported (…/status/<id>), got {'/'.join(segs) or 'the home page'}")
 
 
+def reddit(host: str, segs: list[str]) -> dict | None:
+    if host == "redd.it" and len(segs) == 1 and _REDDIT_ID_RE.match(segs[0].lower()):
+        pid = segs[0].lower()
+        return {"kind": "post", "id": pid, "url": f"https://www.reddit.com/comments/{pid}/"}
+    if not (host == "reddit.com" or host.endswith(".reddit.com")) or segs[:1] == ["link"]:
+        return None  # reddit.com/link/<id>/video/…: a video
+    low = [s.lower() for s in segs]
+    if len(low) >= 4 and low[0] == "r" and low[2] == "s":  # a share link: only Reddit knows its post
+        return {"kind": "share", "id": f"share/{segs[3]}", "url": f"https://www.reddit.com/r/{segs[1]}/s/{segs[3]}",
+                "subreddit": segs[1]}
+    i = low.index("comments") if "comments" in low else -1
+    if i < 0 or i + 1 >= len(low) or not _REDDIT_ID_RE.match(low[i + 1]) or i not in (0, 2):
+        raise SkillError(f"reddit: only post links are supported (…/comments/<id>/…), got /{'/'.join(segs)}")
+    pid, sub = low[i + 1], segs[1] if i == 2 and low[0] in ("r", "u", "user") else None
+    base = f"https://www.reddit.com/r/{sub}/comments/{pid}/" if sub and low[0] == "r" else \
+        f"https://www.reddit.com/comments/{pid}/"
+    out = {"kind": "post", "id": pid, "url": base, **({"subreddit": sub} if sub and low[0] == "r" else {})}
+    if len(low) > i + 3 and _REDDIT_ID_RE.match(low[i + 3]):  # …/comments/<id>/<slug>/<comment id>
+        out |= {"kind": "comment", "comment": low[i + 3], "url": f"{base}_/{low[i + 3]}/"}
+    return out
+
+
 def local_file(text: str, cwd: Path) -> dict:
     raw = unquote(urlsplit(text).path) if text.startswith("file://") else text
     path = (cwd / Path(raw).expanduser()).resolve() if not Path(raw).expanduser().is_absolute() \
@@ -217,6 +243,8 @@ def route(text: str, cwd: Path | None = None) -> dict:
         return {"source": "hn", "kind": "item", "id": hid, "url": f"https://news.ycombinator.com/item?id={hid}"}
     if (x := x_post(host, segs)) is not None:
         return {"source": "x"} | x
+    if (rd := reddit(host, segs)) is not None:
+        return {"source": "reddit"} | rd
     if (gh := github(host, segs)) is not None:
         return {"source": "github"} | gh
     if suffix in REMOTE_DOC_EXT:

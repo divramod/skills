@@ -349,7 +349,7 @@ HEADER_PANELS = PANELS | {
 }
 # Label of the collapsed content-file section.
 CONTENT_LABELS = {"video": "Transcript", "web": "Article", "github": "Repository", "x": "Posts",
-                  "hn": "Article and discussion", "file": "Document"}
+                  "hn": "Article and discussion", "reddit": "Post and discussion", "file": "Document"}
 
 
 def build(folder: Path) -> str:
