@@ -30,8 +30,8 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **Files**: skills/tell-me/scripts/file/convert.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -41,8 +41,8 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **Files**: skills/tell-me/scripts/file/prepare.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -52,8 +52,8 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **Files**: skills/tell-me/scripts/file/*.sh, subskills/file/, templates/file/
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -63,8 +63,8 @@ Fixtures: a 3-page PDF, a docx and an md file, generated in the tests where poss
   **Files**: –
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 

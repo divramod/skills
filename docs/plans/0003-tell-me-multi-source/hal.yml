@@ -6,7 +6,7 @@ retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: 'handoff: 003 shipped; 004 github built+tested (50b83ef), review to re-run; 005 x not started'
+last_action: '004 shipped (fixes f1caed9); 005 x built+tested (5314c0a), review running; 006 file in build'
 active: true
 targets:
 - skills/tell-me

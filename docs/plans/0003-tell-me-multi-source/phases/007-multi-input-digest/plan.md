@@ -30,8 +30,8 @@ Reuse the existing digest folder/metadata logic from `list_videos.py` by moving 
   **Files**: skills/tell-me/scripts/shared/prepare.py
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -41,8 +41,8 @@ Reuse the existing digest folder/metadata logic from `list_videos.py` by moving 
   **Files**: skills/tell-me/templates/shared/digest.md, SKILL.md
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -52,8 +52,8 @@ Reuse the existing digest folder/metadata logic from `list_videos.py` by moving 
   **Files**: –
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 

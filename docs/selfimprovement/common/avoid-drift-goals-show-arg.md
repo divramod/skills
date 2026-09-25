@@ -5,7 +5,7 @@ status: proposed
 category: wrong-command
 severity: low
 mechanical: true
-occurrences: 1
+occurrences: 2
 first_seen: 2026-09-25
 last_seen: 2026-09-25
 ---
