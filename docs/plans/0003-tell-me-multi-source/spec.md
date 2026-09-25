@@ -83,7 +83,7 @@ python3 $S/shared/save_summary.py "<dir>" --mode <mode> --summary-lang xx --mode
 python3 $S/shared/check_quotes.py "<dir>" <<'EOF' ... EOF    # G6: quotes missing from the content file
 python3 $S/<source>/related.py "<dir>" [--query ...]         # G7 (video: today's similar_videos.py)
 $S/<source>/install-prerequisites.sh                        # on exit code 2
-cd $S && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done
+$S/run-tests.sh                                             # every folder's unit tests
 python3 scripts/check-plugins.py
 ```
 
@@ -185,13 +185,13 @@ short imperative prose, no duplication of what SKILL.md or `subskills/shared/` a
 ```yaml
 criteria:
   - description: all tell-me tests pass (existing + new)
-    verify: cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done
+    verify: skills/tell-me/scripts/run-tests.sh
     expected_exit: 0
   - description: plugin manifests + per-source prereq scripts are consistent
-    verify: python3 scripts/check-plugins.py
+    verify: python3 scripts/check-plugins.py && python3 -m unittest discover -s scripts
     expected_exit: 0
   - description: router classifies every source
-    verify: cd skills/tell-me/scripts && for u in https://youtu.be/dQw4w9WgXcQ https://github.com/yt-dlp/yt-dlp https://x.com/jack/status/20 https://news.ycombinator.com/item?id=1 https://example.com/blog/post ./README.md; do python3 shared/route.py "$u" || exit 1; done
+    verify: cd skills/tell-me/scripts && for u in https://youtu.be/dQw4w9WgXcQ https://github.com/yt-dlp/yt-dlp https://x.com/jack/status/20 https://news.ycombinator.com/item?id=1 https://example.com/blog/post ../SKILL.md; do python3 shared/route.py "$u" || exit 1; done
     expected_exit: 0
   - description: every source has a subskill, a template and is linked from SKILL.md
     verify: cd skills/tell-me && for s in video web github x hn file; do test -f subskills/$s/SUBSKILL.md && test -f templates/$s/template.md && grep -q "subskills/$s/SUBSKILL.md" SKILL.md || exit 1; done

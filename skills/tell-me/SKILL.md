@@ -138,4 +138,4 @@ The library root is `~/me/summaries` (`TELL_ME_ROOT` overrides it): `videos/<pla
 `articles/<site>/<title>/`, `repos/github/<owner>/<repo>/`, `posts/x/<user>/<words>-<id>/`,
 `discussions/hn/<title>-<id>/`, `documents/<folder>/<file>/`. A video library from before this layout is migrated
 once with `python3 $S/video/migrate_library.py --apply` (dry run without `--apply`).
-Tests: `cd $S && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`.
+Tests: `$S/run-tests.sh`.
