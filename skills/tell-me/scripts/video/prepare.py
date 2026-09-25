@@ -45,8 +45,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
-from _common import (BOT_HINT, SkillError, envelope, find_existing, find_file, fmt_date, fmt_ts, is_bot_error,
-                     log, parse_ts, platform_of, probe_duration, read_json, require, run_main, ts_link,
+from _common import (BOT_HINT, SkillError, browser_cookies, envelope, find_existing, find_file, fmt_date, fmt_ts,
+                     is_bot_error, log, parse_ts, platform_of, probe_duration, read_json, require, run_main, ts_link,
                      update_json, user_of, video_dir, ytdlp_base)
 from download_video import download, download_status, is_running, record, start_background, tag_video
 
@@ -353,7 +353,7 @@ def main(argv=None) -> int:
     ap.add_argument("--lang", help="preferred transcript language (e.g. en, de); default: spoken language")
     ap.add_argument("--source", choices=["auto", "captions", "whisper"], default="auto",
                     help="auto = captions, Whisper fallback (default)")
-    ap.add_argument("--cookies-from-browser", default=os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"),
+    ap.add_argument("--cookies-from-browser", default=browser_cookies(),
                     help="pass browser cookies to yt-dlp (chrome, firefox, safari, ...)")
     ap.add_argument("--refresh", action="store_true", help="refetch the transcript even if it exists")
     ap.add_argument("--keep-audio", action="store_true", help="keep the audio file downloaded for Whisper")

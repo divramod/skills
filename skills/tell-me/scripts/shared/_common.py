@@ -51,6 +51,11 @@ KIND_DIRS = {"video": "videos", "web": "articles", "github": "repos", "x": "post
              "file": "documents"}
 
 
+def browser_cookies() -> str | None:
+    """The browser yt-dlp reads cookies from: $TELL_ME_BROWSER (old name: $DM_SUMMARIZE_VIDEO_BROWSER)."""
+    return os.environ.get("TELL_ME_BROWSER") or os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER") or None
+
+
 def library_root() -> Path:
     if os.environ.get("TELL_ME_ROOT"):
         return Path(os.environ["TELL_ME_ROOT"]).expanduser()

@@ -191,12 +191,12 @@ class TestApi(unittest.TestCase):
     def test_unknown_or_escaping_paths(self):
         self.assertEqual(self.call("/api/status?path=../../etc")[0], 404)
         self.assertEqual(self.call("/api/status?path=youtube/nope")[0], 404)
-        self.assertEqual(self.call("/api/download", {"path": "../x"}, {"X-DM-Summarize": "1"})[0], 404)
+        self.assertEqual(self.call("/api/download", {"path": "../x"}, {"X-Tell-Me": "1"})[0], 404)
 
     def test_download_needs_header_and_same_host(self):
         self.assertEqual(self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"})[0], 403)
         self.assertEqual(self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"},
-                                   {"X-DM-Summarize": "1", "Origin": "https://evil.example"})[0], 403)
+                                   {"X-Tell-Me": "1", "Origin": "https://evil.example"})[0], 403)
         self.assertEqual(self.call("/api/status?path=videos/youtube/chan/zeta-talk", headers={"Host": "evil.example"})[0], 403)
 
     def test_download_starts_best_quality_background_job(self):
@@ -207,11 +207,17 @@ class TestApi(unittest.TestCase):
             calls.append((folder, args))
             return real(folder, *args) if args == ("--status",) else (0, {"status": "running"})
         with mock.patch("serve_library.video_cli", side_effect=fake):
-            code, _ = self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
+            code, _ = self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-Tell-Me": "1"})
         self.assertEqual(code, 202)
         started = [c for c in calls if "--background" in c[1]]
         self.assertEqual(started, [(self.root / "videos/youtube/chan/zeta-talk",
                                     (META["webpage_url"], "--background", "--quality", "best"))])
+
+    def test_pages_rendered_before_the_rename_still_send_the_old_header(self):
+        with mock.patch("serve_library.video_cli", return_value=(0, {"status": "running"})):
+            code, _ = self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
+        self.assertEqual(code, 202)
+        self.assertEqual(self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-Tell-Me": "0"})[0], 403)
 
     def test_an_x_posts_video_downloads_from_the_post_with_its_item(self):
         rel = "x/someone/1234-a-post"
@@ -225,7 +231,7 @@ class TestApi(unittest.TestCase):
             return (0, None) if args == ("--status",) else (0, {"status": "running"})
         with mock.patch("serve_library.video_cli", side_effect=fake):
             self.assertEqual(self.call(f"/api/status?path={rel}")[0], 200)
-            self.assertEqual(self.call("/api/download", {"path": rel}, {"X-DM-Summarize": "1"})[0], 202)
+            self.assertEqual(self.call("/api/download", {"path": rel}, {"X-Tell-Me": "1"})[0], 202)
         self.assertIn(("https://x.com/someone/status/1234", "--background", "--quality", "best", "--playlist-item", "2"),
                       calls)
 
@@ -238,7 +244,7 @@ class TestApi(unittest.TestCase):
         folder = self.root / "videos/youtube/chan/zeta-talk"
         with mock.patch("serve_library.video_cli", return_value=(1, "boom")):
             self.assertEqual(self.call("/api/status?path=videos/youtube/chan/zeta-talk")[1], {"status": "failed", "error": "boom"})
-            code, data = self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
+            code, data = self.call("/api/download", {"path": "videos/youtube/chan/zeta-talk"}, {"X-Tell-Me": "1"})
         self.assertEqual((code, data["status"]), (202, "failed"))
         with mock.patch("serve_library.VIDEO_CLI", folder / "nope.py"):
             self.assertEqual(serve_library.video_cli(folder, "--status")[0], 2)
@@ -256,7 +262,7 @@ class TestApi(unittest.TestCase):
         self.assertIn('<div class="dl rm" hidden><button type="button">🗑 Delete downloaded video</button>', page)
         self.assertIn("video.mkv, 2 KB", page)
         self.assertEqual(self.call("/api/delete-video", {"path": "videos/youtube/chan/zeta-talk"})[0], 403)  # no header
-        code, data = self.call("/api/delete-video", {"path": "videos/youtube/chan/zeta-talk"}, {"X-DM-Summarize": "1"})
+        code, data = self.call("/api/delete-video", {"path": "videos/youtube/chan/zeta-talk"}, {"X-Tell-Me": "1"})
         self.assertEqual((code, data), (200, {"status": "none", "deleted": "video.mkv"}))
         self.assertFalse((folder / "video.mkv").exists())
         self.assertIn('data-yt="abc"', (folder / "summary.html").read_text())

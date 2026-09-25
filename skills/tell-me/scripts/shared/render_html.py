@@ -265,7 +265,7 @@ if(yt&&location.protocol.startsWith('http')){
 }
 // Download the video into this folder via the library server, then reload to play it locally.
 const dl=document.querySelector('.dl:not(.rm)'),rm=document.querySelector('.dl.rm'),self=document.body.dataset.self;
-const post=(p,b)=>fetch(p,{method:'POST',headers:{'X-DM-Summarize':'1','Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());
+const post=(p,b)=>fetch(p,{method:'POST',headers:{'X-Tell-Me':'1','Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());
 if(rm&&self&&location.protocol.startsWith('http')){
   rm.hidden=false;
   const btn=rm.querySelector('button'),out=rm.querySelector('.dl-status');
@@ -278,7 +278,7 @@ if(rm&&self&&location.protocol.startsWith('http')){
 }
 if(dl&&self&&location.protocol.startsWith('http')){
   const btn=dl.querySelector('button'),out=dl.querySelector('.dl-status');
-  const api=(m,p,b)=>fetch(p,{method:m,headers:{'X-DM-Summarize':'1','Content-Type':'application/json'},body:b&&JSON.stringify(b)}).then(r=>r.json());
+  const api=(m,p,b)=>fetch(p,{method:m,headers:{'X-Tell-Me':'1','Content-Type':'application/json'},body:b&&JSON.stringify(b)}).then(r=>r.json());
   let timer=null;
   const show=s=>{
     if(s.status==='done'){out.textContent='Downloaded, loading the local video…';clearInterval(timer);setTimeout(()=>location.reload(),600);return;}

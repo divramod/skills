@@ -24,8 +24,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
-from _common import (BOT_HINT, SkillError, SKILL_DIR, digest_dir, find_existing, is_bot_error, log, platform_of,
-                     require, run_main, slugify, source_root, user_of)
+from _common import (BOT_HINT, SkillError, SKILL_DIR, browser_cookies, digest_dir, find_existing, is_bot_error, log,
+                     platform_of, require, run_main, slugify, source_root, user_of)
 
 _CHANNEL_RE = re.compile(r"youtube\.com/(@[^/?#]+|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?(\?.*)?$")
 
@@ -66,7 +66,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url")
     ap.add_argument("--limit", type=int, default=None, help="max videos (channels default to 10)")
-    ap.add_argument("--cookies-from-browser", default=os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"))
+    ap.add_argument("--cookies-from-browser", default=browser_cookies())
     args = ap.parse_args(argv)
 
     require("yt-dlp")

@@ -11,8 +11,8 @@ It also lets a summary page download its video (same file and quality as video/p
   POST /api/download  {"path": "<folder>"}      -> starts video/download_video.py in the background
   POST /api/delete-video {"path": "<folder>"}   -> deletes video.<ext>, refreshes summary.md/.html
 The API only answers requests for this host (no DNS rebinding), and POST needs the
-X-DM-Summarize header, which other sites can't send cross-origin without a CORS preflight that
-this server never grants. The video URL always comes from the folder's metadata.json.
+X-Tell-Me header (pages rendered before the rename send X-DM-Summarize, also accepted), which other sites
+can't send cross-origin without a CORS preflight that this server never grants. The video URL always comes from the folder's metadata.json.
 
 Usage: serve_library.py [--port 8765] [--root DIR]   (foreground)
        serve_library.py --ensure                     (start in the background if needed, print base URL)
@@ -33,9 +33,9 @@ import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from _common import library_root, log, read_json, run_main, write_json
+from _common import browser_cookies, library_root, log, read_json, run_main, write_json
 
-DEFAULT_PORT = int(os.environ.get("DM_SUMMARIZE_VIDEO_PORT", "8765"))
+DEFAULT_PORT = int(os.environ.get("TELL_ME_PORT") or os.environ.get("DM_SUMMARIZE_VIDEO_PORT") or "8765")
 STATE_FILE = ".server.json"
 _RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)$")
 
@@ -129,8 +129,8 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
             folder = self._folder(parse_qs(urlsplit(self.path).query).get("path", [None])[0])
             return self._json(200, video_state(folder)) if folder else self._json(404, {"error": "unknown folder"})
         if method == "POST" and route in ("/api/download", "/api/delete-video"):
-            if self.headers.get("X-DM-Summarize") != "1":
-                return self._json(403, {"error": "missing X-DM-Summarize header"})
+            if "1" not in (self.headers.get("X-Tell-Me"), self.headers.get("X-DM-Summarize")):  # old pages: old name
+                return self._json(403, {"error": "missing X-Tell-Me header"})
             try:
                 length = min(int(self.headers.get("Content-Length") or 0), 4096)
                 rel = json.loads(self.rfile.read(length) or b"{}").get("path")
@@ -219,8 +219,8 @@ def start_download(folder: Path) -> dict:
     args = [url, "--background", "--quality", "best"] + (["--playlist-item", str(item)] if item else [])
     if meta.get("video_quality"):
         args += ["--have-quality", meta["video_quality"]]
-    if os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"):
-        args += ["--cookies-from-browser", os.environ["DM_SUMMARIZE_VIDEO_BROWSER"]]
+    if browser_cookies():
+        args += ["--cookies-from-browser", browser_cookies()]
     code, out = video_cli(folder, *args)
     if code != 0:
         return {"status": "failed", "error": out}

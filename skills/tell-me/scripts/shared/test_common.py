@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _common import (MissingTool, SkillError, detect_agent, install_script, dir_for, find_by_id, source_root, unique_dir, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
+from _common import (MissingTool, SkillError, browser_cookies, detect_agent, install_script, dir_for, find_by_id, source_root, unique_dir, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
                      ts_url, update_json, user_of, video_dir)
 
 
@@ -44,6 +44,14 @@ class TestNaming(unittest.TestCase):
         with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_ROOT": "/tmp/yt-notes"}, clear=True):
             with self.assertRaisesRegex(SkillError, "set TELL_ME_ROOT"):
                 library_root()  # its parent may be ~: never guess
+
+    def test_browser_cookies_new_name_first_then_the_old_one(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(browser_cookies())
+        with mock.patch.dict(os.environ, {"DM_SUMMARIZE_VIDEO_BROWSER": "firefox"}, clear=True):
+            self.assertEqual(browser_cookies(), "firefox")
+        with mock.patch.dict(os.environ, {"TELL_ME_BROWSER": "chrome", "DM_SUMMARIZE_VIDEO_BROWSER": "firefox"}):
+            self.assertEqual(browser_cookies(), "chrome")
 
     def test_unique_dir_on_collision(self):
         with tempfile.TemporaryDirectory() as tmp:

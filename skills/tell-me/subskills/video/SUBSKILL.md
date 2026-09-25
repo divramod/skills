@@ -19,7 +19,8 @@ python3 $S/shared/prepare.py "<url>" [--skip-download] [--visual] [--lang xx] [-
   script then waits for the download (frames need it) while it fetches the transcript. With `--skip-download` it
   fetches only a <=1080p copy for the frames. Then also read `frames/index.md` and look at the frames that matter.
 - `--lang xx` picks the transcript language (default: the spoken language).
-- A bot check or HTTP 429 in the output means retry with `--cookies-from-browser chrome`. If that fails too, run
+- A bot check or HTTP 429 in the output means retry with `--cookies-from-browser chrome` (`TELL_ME_BROWSER=chrome`
+  makes it the default, also for the page's download button). If that fails too, run
   `$S/video/install-prerequisites.sh --upgrade` (yt-dlp ages fast).
 - Without captions the transcript comes from local Whisper, which can take minutes. Run it in the background and
   tell the user.

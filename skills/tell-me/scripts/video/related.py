@@ -25,7 +25,7 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
 from link_dates import youtube_dates
-from _common import (BOT_HINT, SkillError, fmt_ts, is_bot_error, log, read_json, require,
+from _common import (BOT_HINT, SkillError, browser_cookies, fmt_ts, is_bot_error, log, read_json, require,
                      run_main, source_root, ytdlp_base)
 
 
@@ -83,7 +83,7 @@ def main(argv=None) -> int:
     ap.add_argument("folder", type=Path)
     ap.add_argument("--query", action="append", required=True, help="search query; repeat for several")
     ap.add_argument("--per-query", type=int, default=8)
-    ap.add_argument("--cookies-from-browser", default=os.environ.get("DM_SUMMARIZE_VIDEO_BROWSER"))
+    ap.add_argument("--cookies-from-browser", default=browser_cookies())
     args = ap.parse_args(argv)
     require("yt-dlp")
     meta = read_json(args.folder / "metadata.json")

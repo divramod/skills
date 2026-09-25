@@ -218,9 +218,9 @@ const ROOT=document.body.dataset.root, SELF=document.body.dataset.self;
 const nav=aside.querySelector('nav'), q=aside.querySelector('input');
 const DEF={view:'tree',dir:{tree:1,date:-1,title:1,author:1},types:[]};
 let st=DEF;
-try{st=Object.assign({},DEF,JSON.parse(localStorage.getItem('dm-lib')||'{}'));st.dir=Object.assign({},DEF.dir,st.dir);}catch(e){}
+try{st=Object.assign({},DEF,JSON.parse(localStorage.getItem('tell-me-lib')||localStorage.getItem('dm-lib')||'{}'));st.dir=Object.assign({},DEF.dir,st.dir);}catch(e){}
 if(!Array.isArray(st.types))st.types=[];  // a stale or hand-edited value
-const save=()=>{try{localStorage.setItem('dm-lib',JSON.stringify(st))}catch(e){}};
+const save=()=>{try{localStorage.setItem('tell-me-lib',JSON.stringify(st))}catch(e){}};
 const col=new Intl.Collator(undefined,{sensitivity:'base',numeric:true});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const day=d=>(d||'').slice(0,10);
@@ -307,15 +307,15 @@ document.getElementById('lib-toggle').addEventListener('click',()=>document.body
 const MIN=180,MAX=Math.max(MIN,Math.min(700,innerWidth-360)),handle=aside.querySelector('.resize');
 const setW=w=>{w=Math.round(Math.min(MAX,Math.max(MIN,w)));document.documentElement.style.setProperty('--side',w+'px');
   handle.setAttribute('aria-valuenow',w);return w;};
-try{const w=+localStorage.getItem('dm-lib-width');if(w)setW(w);}catch(e){}
-const saveW=()=>{try{localStorage.setItem('dm-lib-width',aside.getBoundingClientRect().width|0)}catch(e){}};
+try{const w=+(localStorage.getItem('tell-me-lib-width')||localStorage.getItem('dm-lib-width'));if(w)setW(w);}catch(e){}
+const saveW=()=>{try{localStorage.setItem('tell-me-lib-width',aside.getBoundingClientRect().width|0)}catch(e){}};
 handle.addEventListener('pointerdown',e=>{
   e.preventDefault();handle.setPointerCapture(e.pointerId);document.body.classList.add('resizing');
   const move=ev=>setW(ev.clientX);
   const up=()=>{handle.removeEventListener('pointermove',move);document.body.classList.remove('resizing');saveW();};
   handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});
 });
-handle.addEventListener('dblclick',()=>{document.documentElement.style.removeProperty('--side');try{localStorage.removeItem('dm-lib-width')}catch(e){}});
+handle.addEventListener('dblclick',()=>{document.documentElement.style.removeProperty('--side');try{localStorage.removeItem('tell-me-lib-width');localStorage.removeItem('dm-lib-width')}catch(e){}});
 handle.addEventListener('keydown',e=>{
   const step=e.shiftKey?50:10,w=aside.getBoundingClientRect().width;
   if(e.key==='ArrowLeft'){setW(w-step);saveW();e.preventDefault();}
