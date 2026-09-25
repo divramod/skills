@@ -7,7 +7,7 @@ and every other harness that reads the [Agent Skills](https://agentskills.io) `S
 
 | Skill | What it does |
 |---|---|
-| [tell-me](./skills/tell-me/SKILL.md) | Summarize a video, playlist or channel from a URL (YouTube, TikTok, X, podcasts, …) into `~/me/summaries/videos/`: captions via yt-dlp, local Whisper fallback, automatic background video download (`--skip-download` to skip), keyframes, a links section (books, Wikipedia terms, tools, further reading), a browser-readable `summary.html` that records which agent CLI wrote it, modes tldr/summary/chapters/detailed/wisdom/qa. Needs yt-dlp, ffmpeg, uv: run its `scripts/install-prerequisites.sh`. |
+| [tell-me](./skills/tell-me/SKILL.md) | Summarize anything from a URL or a path into `~/me/summaries/`: a video, playlist or channel (YouTube, TikTok, X, podcasts, any yt-dlp site; captions or local Whisper, background download), a web page (trafilatura + defuddle, Jina and Wayback fallbacks), a GitHub repo, issue, PR or discussion (`--deep` packs the repo with repomix), an X post or thread with its replies and video, a Hacker News thread (article + discussion), or a document (PDF, DOCX, PPTX, EPUB, … via markitdown). Several inputs at once get a digest. Every summary links back into its source (timestamps, paragraphs, line numbers, permalinks, pages), checks its quotes and links, lists related items, and gets a page in a browsable library with a source filter. Modes tldr/summary/chapters/detailed/wisdom/qa. Each source checks its own tools: run `scripts/<source>/install-prerequisites.sh` (or `scripts/install-prerequisites.sh` for all). |
 
 ## Install
 

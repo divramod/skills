@@ -9,9 +9,9 @@
     {
       "name": "divramod-skills",
       "source": "./",
-      "description": "divramod's agent skills: summarize videos from a URL, and more.",
+      "description": "divramod's agent skills: summarize anything (videos, web pages, GitHub repos, X threads, Hacker News, documents), and more.",
       "category": "productivity",
-      "keywords": ["skills", "video", "summarize", "youtube"]
+      "keywords": ["skills", "summarize", "video", "youtube", "article", "github", "twitter", "x", "hacker-news", "pdf", "digest"]
     }
   ]
 }

@@ -53,8 +53,31 @@ class TestLibrary(unittest.TestCase):
         self.assertTrue(zeta.pop("summarized"))  # summary.md mtime (no created_at in META)
         self.assertEqual(zeta, {
             "path": "videos/youtube/chan/zeta-talk", "page": "videos/youtube/chan/zeta-talk/summary.html", "title": "Zeta talk",
-            "author": "Chan", "source": "video", "group": "videos/youtube/chan", "group_name": "Chan",
+            "author": "Chan", "source": "video", "type": "video", "group": "videos/youtube/chan", "group_name": "Chan",
             "date": zeta["date"], "kind": "summary", "mode": "tldr"})
+
+    def test_type_is_the_source_or_digest(self):
+        make(self.root, "posts/x/a/post-1", {"source": "x", "id": "1", "title": "Post"})
+        make(self.root, "documents/papers/tiny", {"source": "file", "id": "s", "title": "Tiny"})
+        digest = self.root / "digests" / "2026-09-25-a-and-1-more"
+        digest.mkdir(parents=True)
+        (digest / "metadata.json").write_text(json.dumps({"kind": "digest", "title": "A and B", "items": []}))
+        (digest / "digest.html").write_text("")
+        playlist = self.root / "videos" / "youtube" / "chan" / "_digests" / "pl"
+        playlist.mkdir(parents=True)
+        (playlist / "metadata.json").write_text(json.dumps({"kind": "digest", "title": "PL", "videos": []}))
+        (playlist / "digest.html").write_text("")
+        types = {e["path"]: e["type"] for e in entries(self.root)}
+        self.assertEqual(types, {"posts/x/a/post-1": "x", "documents/papers/tiny": "file",
+                                 "digests/2026-09-25-a-and-1-more": "digest",
+                                 "videos/youtube/chan/_digests/pl": "digest"})
+
+    def test_sidebar_has_the_source_filter(self):
+        from library import SIDEBAR_JS, sidebar_html
+        self.assertIn('class="types"', sidebar_html())
+        for t in ("video", "web", "github", "x", "hn", "file", "digest"):
+            self.assertIn(f"{t}:[", SIDEBAR_JS.replace("'", ""))
+        self.assertIn("st.types", SIDEBAR_JS)
 
     def test_group_per_source(self):
         from library import group_of

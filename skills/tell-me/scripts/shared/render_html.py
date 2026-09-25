@@ -23,6 +23,7 @@ from pathlib import Path
 
 from _common import SkillError, contract, read_json, run_main
 from library import INDEX_FILE, SIDEBAR_CSS, SIDEBAR_JS, root_of, sidebar_html, write_index
+from panels import CSS as PANELS_CSS, PANELS
 
 # ---------------------------------------------------------------- markdown
 
@@ -339,7 +340,12 @@ def player_html(folder: Path, meta: dict, url: str | None) -> str:
 
 
 # Per-source panel under the page header: fn(folder, metadata, url) -> html. Sources without one get none.
-HEADER_PANELS = {"video": player_html}
+HEADER_PANELS = PANELS | {
+    "video": player_html,
+    # an x post with a video: its facts, then the player of the downloaded video
+    "x": lambda folder, meta, url: PANELS["x"](folder, meta, url) + (
+        player_html(folder, meta, url) if meta.get("video_file") else ""),
+}
 # Label of the collapsed content-file section.
 CONTENT_LABELS = {"video": "Transcript", "web": "Article", "github": "Repository", "x": "Posts",
                   "hn": "Article and discussion", "file": "Document"}
@@ -398,7 +404,7 @@ def build(folder: Path) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
 <title>{html.escape(title)}</title>
-<style>{CSS}{SIDEBAR_CSS if sidebar else ""}</style>
+<style>{CSS}{PANELS_CSS}{SIDEBAR_CSS if sidebar else ""}</style>
 </head>
 <body{body_attrs}>
 {sidebar}
