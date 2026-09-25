@@ -7,7 +7,7 @@ and every other harness that reads the [Agent Skills](https://agentskills.io) `S
 
 | Skill | What it does |
 |---|---|
-| [dm-summarize-video](./skills/dm-summarize-video/SKILL.md) | Summarize a video, playlist or channel from a URL (YouTube, TikTok, X, podcasts, …) into `~/me/summaries/videos/`: captions via yt-dlp, local Whisper fallback, optional download (`-d`) and keyframes, modes tldr/summary/chapters/detailed/wisdom/qa. Needs yt-dlp, ffmpeg, uv: run its `scripts/install-prerequisites.sh`. |
+| [dm-summarize-video](./skills/dm-summarize-video/SKILL.md) | Summarize a video, playlist or channel from a URL (YouTube, TikTok, X, podcasts, …) into `~/me/summaries/videos/`: captions via yt-dlp, local Whisper fallback, automatic background video download (`--skip-download` to skip), keyframes, a links section (books, Wikipedia terms, tools, further reading), a browser-readable `summary.html` that records which agent CLI wrote it, modes tldr/summary/chapters/detailed/wisdom/qa. Needs yt-dlp, ffmpeg, uv: run its `scripts/install-prerequisites.sh`. |
 
 ## Install
 
