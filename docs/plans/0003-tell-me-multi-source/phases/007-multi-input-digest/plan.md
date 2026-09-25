@@ -1,7 +1,7 @@
 ---
 name: multi-input-digest
 description: Multiple inputs in one call and a generalized digest across any sources.
-status: approved
+status: shipped
 phase_id: "007"
 depends_on: ["001"]
 wave: "02"
@@ -24,7 +24,7 @@ Reuse the existing digest folder/metadata logic from `list_videos.py` by moving 
 
 ## Tasks
 
-- [ ] **T601** — N-input prepare + digest folder
+- [x] **T601** — N-input prepare + digest folder
   **Acceptance**: unit test: 2 fixture inputs → 2 envelopes + digest_dir
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/shared/prepare.py
@@ -32,10 +32,10 @@ Reuse the existing digest folder/metadata logic from `list_videos.py` by moving 
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T602** — Generalize `templates/shared/digest.md` + SKILL.md step (multi-input and playlists share it)
+- [x] **T602** — Generalize `templates/shared/digest.md` + SKILL.md step (multi-input and playlists share it)
   **Acceptance**: review
   **Verify**: review
   **Files**: skills/tell-me/templates/shared/digest.md, SKILL.md
@@ -43,10 +43,10 @@ Reuse the existing digest folder/metadata logic from `list_videos.py` by moving 
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T603** — E2E: a video + an article + an HN post in one call
+- [x] **T603** — E2E: a video + an article + an HN post in one call
   **Acceptance**: 3 summaries + digest page
   **Verify**: manual
   **Files**: –
@@ -54,8 +54,8 @@ Reuse the existing digest folder/metadata logic from `list_videos.py` by moving 
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
 ## Risks
 
