@@ -1,7 +1,7 @@
 ---
 name: tell-me-multi-source
 description: 'Generalize tell-me from videos to blog posts, GitHub repos, X posts, Hacker News threads and local documents via a router SKILL.md + per-source subskills, scripts and templates with shared/ folders'
-status: approved
+status: in_progress
 approved: '2026-09-25'
 schema_version: 1
 created: '2026-09-25'
@@ -11,8 +11,8 @@ tier_source: manual
 
 ## Objective
 
-`tell-me <anything>` summarizes whatever it is given, not just videos: a blog post, a GitHub repo, an x.com post or
-thread, a Hacker News post (article + discussion), or a document on the local filesystem. Each source gets the
+`tell-me <anything>` summarizes whatever it is given, not just videos: a blog post, a GitHub repo, x.com tweets (a post or
+thread), a hackernews post (article + discussion), or a document on the local filesystem. Each source gets the
 same treatment the videos get today: a folder in the library with `summary.md`, `summary.html`, the extracted
 content, `metadata.json`, the links section with dates, and an entry in the library sidebar.
 
@@ -83,7 +83,7 @@ python3 $S/shared/save_summary.py "<dir>" --mode <mode> --summary-lang xx --mode
 python3 $S/shared/check_quotes.py "<dir>" <<'EOF' ... EOF    # G6: quotes missing from the content file
 python3 $S/<source>/related.py "<dir>" [--query ...]         # G7 (video: today's similar_videos.py)
 $S/<source>/install-prerequisites.sh                        # on exit code 2
-cd $S && python3 -m unittest discover -s . -p 'test_*.py' -t .
+cd $S && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done
 python3 scripts/check-plugins.py
 ```
 
@@ -185,7 +185,7 @@ short imperative prose, no duplication of what SKILL.md or `subskills/shared/` a
 ```yaml
 criteria:
   - description: all tell-me tests pass (existing + new)
-    verify: cd skills/tell-me/scripts && python3 -m unittest discover -s . -p 'test_*.py' -t .
+    verify: cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done
     expected_exit: 0
   - description: plugin manifests + per-source prereq scripts are consistent
     verify: python3 scripts/check-plugins.py
