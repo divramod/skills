@@ -21,15 +21,9 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from _common import SkillError, detect_agent, fmt_ts, log, read_json, run_main, update_json
+from _common import SkillError, detect_agent, fmt_date, fmt_ts, log, read_json, run_main, update_json
 
 MODES = ("tldr", "summary", "chapters", "detailed", "wisdom", "qa", "digest")
-
-
-def fmt_date(upload_date: str | None) -> str | None:
-    if upload_date and re.fullmatch(r"\d{8}", upload_date):
-        return f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}"
-    return upload_date
 
 
 def yaml_scalar(value) -> str:

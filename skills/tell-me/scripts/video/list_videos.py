@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
-from _common import (BOT_HINT, SkillError, find_existing, is_bot_error, library_root, log, platform_of,
+from _common import (BOT_HINT, SkillError, SKILL_DIR, find_existing, is_bot_error, library_root, log, platform_of,
                      require, run_main, slugify, user_of, write_json)
 
 _CHANNEL_RE = re.compile(r"youtube\.com/(@[^/?#]+|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?(\?.*)?$")
@@ -93,7 +93,9 @@ def main(argv=None) -> int:
         "kind": "digest", "source_kind": kind, "title": listing["title"], "channel": listing["channel"],
         "webpage_url": args.url, "platform": platform_of(data), "videos": listing["videos"],
     })
-    print(json.dumps({"digest_dir": str(folder), **listing}, indent=2, ensure_ascii=False))
+    print(json.dumps({"source": "video", "dir": str(folder), "digest_dir": str(folder), **listing,
+                      "subskill": str(SKILL_DIR / "subskills" / "video" / "SUBSKILL.md"),
+                      "template": str(SKILL_DIR / "templates" / "shared" / "digest.md")}, indent=2, ensure_ascii=False))
     return 0
 
 

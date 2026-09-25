@@ -13,7 +13,8 @@ import sys
 import unicodedata
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).resolve().parent
+SCRIPTS_DIR = Path(__file__).resolve().parent  # scripts/shared
+SKILL_DIR = SCRIPTS_DIR.parent.parent
 INSTALL_SCRIPT = SCRIPTS_DIR / "install-prerequisites.sh"
 INSTALL_HINTS = {
     "yt-dlp": "brew install yt-dlp",
@@ -108,6 +109,68 @@ def find_existing(info: dict, root: Path | None = None) -> Path | None:
         except (OSError, json.JSONDecodeError):
             continue
     return None
+
+
+# ---------------------------------------------------------------- source contract
+
+# Shared metadata.json fields every source writes (G2); per-source data goes into `extras`.
+CONTRACT_KEYS = ("source", "id", "url", "title", "author", "published", "fetched", "site", "word_count",
+                 "duration", "extractor", "content_file", "extras")
+# Keys every scripts/<source>/prepare.py prints (plus its own extras).
+ENVELOPE_KEYS = ("source", "kind", "dir", "id", "title", "url", "content_file", "summary", "summary_exists",
+                 "subskill", "template")
+
+
+def fmt_date(value: str | None) -> str | None:
+    """yt-dlp's 20260924 -> 2026-09-24; ISO dates pass through."""
+    if value and re.fullmatch(r"\d{8}", value):
+        return f"{value[:4]}-{value[4:6]}-{value[6:]}"
+    return value
+
+
+def contract(meta: dict) -> dict:
+    """The contract fields of a metadata.json. Video folders written before the contract are mapped
+    from their yt-dlp keys, so shared code reads only these fields."""
+    digest = meta.get("kind") == "digest"
+    legacy = {
+        "source": None if digest else "video",
+        "id": meta.get("id"),
+        "url": meta.get("webpage_url"),
+        "title": meta.get("title"),
+        "author": meta.get("channel") or meta.get("uploader") or meta.get("user"),
+        "published": fmt_date(meta.get("upload_date")),
+        "fetched": meta.get("prepared_at") or meta.get("prepared"),
+        "site": meta.get("platform"),
+        "duration": meta.get("duration"),
+        "extractor": meta.get("transcript_source"),
+        "content_file": None if digest else "transcript.md",
+        "extras": {},
+    }
+    return {k: meta[k] if meta.get(k) not in (None, "") else legacy.get(k) for k in CONTRACT_KEYS}
+
+
+def subskill_path(source: str) -> Path:
+    return SKILL_DIR / "subskills" / source / "SUBSKILL.md"
+
+
+def template_path(source: str) -> Path:
+    return SKILL_DIR / "templates" / source / "template.md"
+
+
+def envelope(folder: Path, meta: dict, kind: str, **extras) -> dict:
+    """The JSON a source's prepare.py prints: the ENVELOPE_KEYS, then the source's extras."""
+    c = contract(meta)
+    content = folder / c["content_file"] if c["content_file"] else None
+    summary = folder / "summary.md"
+    out = {
+        "source": c["source"], "kind": kind, "dir": str(folder), "id": c["id"], "title": c["title"], "url": c["url"],
+        "author": c["author"], "published": c["published"],
+        "content_file": str(content) if content else None,
+        "content_words": len(content.read_text(encoding="utf-8").split()) if content and content.exists() else 0,
+        "summary": str(summary), "summary_exists": summary.exists(),
+        "subskill": str(subskill_path(c["source"])), "template": str(template_path(c["source"])),
+    }
+    return out | extras
 
 
 # ---------------------------------------------------------------- time + links

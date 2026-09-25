@@ -137,5 +137,24 @@ class TestRenderTranscript(unittest.TestCase):
         self.assertIn("[[00:44](https://www.youtube.com/watch?v=abc&t=44s)] x", md)
 
 
+class TestContractFields(unittest.TestCase):
+    def test_video_contract_fields(self):
+        import tempfile
+        from _common import CONTRACT_KEYS
+        from prepare import contract_fields
+        with tempfile.TemporaryDirectory() as tmp:
+            transcript = Path(tmp) / "transcript.md"
+            transcript.write_text("a b c d")
+            info = {"id": "abc", "extractor_key": "Youtube", "title": "T", "channel": "Chan", "upload_date": "20260101",
+                    "webpage_url": "https://www.youtube.com/watch?v=abc", "view_count": 5, "chapters": [{}]}
+            fields = contract_fields(info, "captions (manual, en)", "2026-09-25T10:00:00", transcript)
+        self.assertEqual(fields, {
+            "source": "video", "url": "https://www.youtube.com/watch?v=abc", "author": "Chan", "published": "2026-01-01",
+            "fetched": "2026-09-25T10:00:00", "site": "youtube", "word_count": 4, "extractor": "captions (manual, en)",
+            "content_file": "transcript.md", "extras": {"views": 5, "chapters": 1}})
+        # with id/title/duration from META_KEYS every contract key is present
+        self.assertEqual(set(CONTRACT_KEYS) - set(fields), {"id", "title", "duration"})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,9 @@ Steps (all deterministic; the agent only writes the summary afterwards):
      (mlx-whisper on Apple Silicon, openai-whisper elsewhere, via uvx; uses a finished
      video.<ext> if present, else a small audio-only download)
   4. [--visual] scene keyframes -> frames/ (extract_frames.py)
-Writes transcript.md (with timestamp links) + metadata.json and prints one JSON object on stdout.
+Writes transcript.md (with timestamp links) + metadata.json (the shared contract fields plus the
+yt-dlp keys) and prints the source envelope on stdout. A playlist or channel URL is handed to
+list_videos.py (--limit N) and prints its video list instead.
 
 Root: $DM_SUMMARIZE_VIDEO_ROOT or ~/me/summaries/videos.
 Requires: yt-dlp, ffmpeg; uvx only for the Whisper fallback.
@@ -33,9 +35,9 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
-from _common import (BOT_HINT, SkillError, find_existing, find_file, fmt_ts, is_bot_error, log,
-                     parse_ts, platform_of, probe_duration, read_json, require, run_main, ts_link, update_json,
-                     user_of, video_dir, ytdlp_base)
+from _common import (BOT_HINT, SkillError, envelope, find_existing, find_file, fmt_date, fmt_ts, is_bot_error,
+                     log, parse_ts, platform_of, probe_duration, read_json, require, run_main, ts_link,
+                     update_json, user_of, video_dir, ytdlp_base)
 from download_video import download, download_status, is_running, record, start_background, tag_video
 
 PARAGRAPH_SECONDS = 30
@@ -195,6 +197,22 @@ def render_transcript(info: dict, source: str, body: str) -> str:
     return "\n".join(rows)
 
 
+def contract_fields(info: dict, source: str | None, fetched: str, transcript: Path) -> dict:
+    """The shared metadata.json fields (see _common.CONTRACT_KEYS) for a video."""
+    return {
+        "source": "video",
+        "url": info.get("webpage_url") or info.get("original_url"),
+        "author": info.get("channel") or info.get("uploader"),
+        "published": fmt_date(info.get("upload_date")),
+        "fetched": fetched,
+        "site": platform_of(info),
+        "word_count": len(transcript.read_text(encoding="utf-8").split()) if transcript.exists() else 0,
+        "extractor": source,
+        "content_file": transcript.name,
+        "extras": {"views": info.get("view_count"), "chapters": len(info.get("chapters") or [])},
+    }
+
+
 # ---------------------------------------------------------------- side effects
 
 
@@ -304,7 +322,16 @@ def main(argv=None) -> int:
                     help="pass browser cookies to yt-dlp (chrome, firefox, safari, ...)")
     ap.add_argument("--refresh", action="store_true", help="refetch the transcript even if it exists")
     ap.add_argument("--keep-audio", action="store_true", help="keep the audio file downloaded for Whisper")
+    ap.add_argument("--limit", type=int, help="playlist/channel URLs: max videos (channels default to 10)")
     args = ap.parse_args(argv)
+
+    if not args.url.startswith(("http://", "https://")):
+        raise SkillError(f"local media files are not supported yet: {args.url}")
+    from route import route
+    if route(args.url)["kind"] in ("playlist", "channel"):
+        import list_videos
+        return list_videos.main([args.url] + (["--limit", str(args.limit)] if args.limit else []) + (
+            ["--cookies-from-browser", args.cookies_from_browser] if args.cookies_from_browser else []))
 
     require("yt-dlp", "ffmpeg")
     info = fetch_info(args)
@@ -344,13 +371,14 @@ def main(argv=None) -> int:
         pool.shutdown(wait=True)
 
     # Merge, don't overwrite: a background download may add video_file/video_quality at any time.
+    prepared_at = old_meta.get("prepared_at") or datetime.now().isoformat(timespec="seconds")
     meta = update_json(folder / "metadata.json", {k: info.get(k) for k in META_KEYS} | {
         "platform": platform_of(info),
         "user": user_of(info),
         "transcript_source": source,
         "prepared": old_meta.get("prepared") or date.today().isoformat(),
-        "prepared_at": old_meta.get("prepared_at") or datetime.now().isoformat(timespec="seconds"),
-    })
+        "prepared_at": prepared_at,
+    } | contract_fields(info, source, prepared_at, transcript))
     video = folder / meta["video_file"] if meta.get("video_file") else None
     video = video if video and video.exists() and not is_running(folder) else None
     if video_future and video:
@@ -366,26 +394,20 @@ def main(argv=None) -> int:
     elif (folder / "frames" / "index.md").exists():
         frames_index = folder / "frames" / "index.md"
 
-    summary = folder / "summary.md"
-    out = {
-        "dir": str(folder),
-        "reused": bool(existing),
-        "id": info.get("id"),
-        "title": info.get("title"),
-        "channel": info.get("channel") or info.get("uploader"),
-        "platform": platform_of(info),
-        "duration": fmt_ts(info.get("duration") or 0),
-        "chapters": len(info.get("chapters") or []),
-        "transcript": str(transcript),
-        "transcript_source": source,
-        "transcript_words": len(transcript.read_text(encoding="utf-8").split()),
-        "video_file": str(video) if video else None,
-        "video_download": download_status(folder),
-        "frames_index": str(frames_index) if frames_index else None,
-        "description_links": description_links(info.get("description")),
-        "summary": str(summary),
-        "summary_exists": summary.exists(),
-    }
+    out = envelope(folder, meta, "video",
+        reused=bool(existing),
+        channel=info.get("channel") or info.get("uploader"),
+        platform=platform_of(info),
+        duration=fmt_ts(info.get("duration") or 0),
+        chapters=len(info.get("chapters") or []),
+        transcript=str(transcript),
+        transcript_source=source,
+        transcript_words=len(transcript.read_text(encoding="utf-8").split()),
+        video_file=str(video) if video else None,
+        video_download=download_status(folder),
+        frames_index=str(frames_index) if frames_index else None,
+        description_links=description_links(info.get("description")),
+    )
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 0
 
