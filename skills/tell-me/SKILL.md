@@ -89,16 +89,25 @@ on the video's topic, and similar videos to watch next.
   counterpoint), so it's always clear what the speaker said and what you added.
 - **Similar videos:** pick 2-4 search queries (the topic, the key concepts, the speaker or channel plus the topic)
   and run `python3 $S/similar_videos.py "<dir>" --query "<q1>" --query "<q2>"`. Choose 4-6 of the results, best
-  first, and say in one line what each adds. Only link videos from its output. Where a result has a `summary`
+  first, and say in one line what each adds. Each result has its `published` date: prefer recent videos when the
+  topic moves fast. Only link videos from its output. Where a result has a `summary`
   path, also add `([summary](<that path>))`.
-- Then check the links. Fix or drop everything under `broken`. `unverified` means the site blocks scripts (often
-  Amazon): keep those links when your web search showed the page.
+- **Dates are added for you.** When you save, `save_summary.py` checks every link and writes how current it is right
+  after it: videos, papers and articles get their publish date; GitHub repos their latest release (version + date)
+  and last commit on the default branch; packages their latest version; books the first-publication year; Wikipedia
+  the last edit. Never write dates yourself. To look at dates before saving (e.g. to prefer recent sources), run the
+  check below.
+- Fix or drop every link reported as broken (`BROKEN LINK:` when saving, `broken` below). `unverified` means the
+  site blocks scripts (often Amazon): keep those links when your web search showed the page.
 
 ```bash
 python3 $S/check_links.py <<'EOF'
 <body>
 EOF
 ```
+
+To refresh the dates of an existing summary later (new releases, new commits):
+`python3 $S/check_links.py --folder "<dir>" --annotate`.
 
 ## 4. Save
 
@@ -145,7 +154,8 @@ and only save the answer when the user asks.
 | `list_videos.py` | playlist/channel → video list + digest folder |
 | `extract_frames.py` | scene-change keyframes → `frames/` + `index.md` (called by `--visual`) |
 | `save_summary.py` | body on stdin → `summary.md` / `digest.md` with frontmatter + header + agent, then the HTML page |
-| `check_links.py` | checks every external link in a body: ok / unverified (site blocks scripts) / broken |
+| `check_links.py` | checks every external link: ok / unverified / broken, plus its dates; `--annotate` writes them in |
+| `link_dates.py` | how current a link is: publish date, release + last commit, package version, book year, wiki edit |
 | `render_html.py` | `summary.md` → `summary.html` (sidebar, player, keyframes, transcript); `--open` |
 | `library.py` | rebuild `<root>/library.js` (sidebar index); `--pages` re-renders every page; `--open-last` opens the latest summary |
 | `serve_library.py` | local http server for the library (YouTube embeds, video seeking, the page's download button); `--ensure`, `--stop` |

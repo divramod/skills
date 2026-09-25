@@ -15,6 +15,7 @@ if have brew; then
   have yt-dlp || pkgs+=(yt-dlp)
   { have ffmpeg && have ffprobe; } || pkgs+=(ffmpeg)
   have uvx || pkgs+=(uv)
+  have gh || pkgs+=(gh)
   have python3 || pkgs+=(python)
   if [ "${#pkgs[@]}" -gt 0 ]; then
     echo "brew install ${pkgs[*]}"

@@ -4,7 +4,9 @@
 The agent picks the queries (the topic, the key concepts, "<channel> <topic>"); this script runs
 them, merges the results, drops duplicates and the video itself, and marks videos that already
 have a summary in the library. Prints JSON: {"videos": [{id, title, url, channel, duration,
-views, query, summary?}]}, where `summary` is a path relative to <folder> to that video's page.
+views, published, query, summary?}]}, where `published` is the upload date (search results don't
+carry it, so each video is looked up with yt-dlp, in parallel) and `summary` is a path relative to
+<folder> to that video's page.
 
 Usage: similar_videos.py <folder> --query "fine-tuning llms with lora" [--query ...] [--per-query 8]
 Requires: yt-dlp.
@@ -18,6 +20,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from link_dates import youtube_dates
 from _common import (BOT_HINT, SkillError, fmt_ts, is_bot_error, library_root, log, read_json, require,
                      run_main, ytdlp_base)
 
@@ -85,6 +88,10 @@ def main(argv=None) -> int:
     with ThreadPoolExecutor(max_workers=4) as pool:
         found = list(pool.map(lambda q: (q, search(q, args.per_query, args.cookies_from_browser)), args.query))
     videos = merge(found, meta.get("id"), summarized_ids(library_root()), args.folder.resolve())
+    dates = youtube_dates([v["id"] for v in videos])
+    for v in videos:
+        if dates.get(v["id"]):
+            v["published"] = dates[v["id"]]
     log(f"{len(videos)} candidate videos from {len(args.query)} queries")
     print(json.dumps({"videos": videos}, indent=2, ensure_ascii=False))
     return 0

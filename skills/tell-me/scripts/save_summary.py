@@ -3,8 +3,9 @@
 
 The agent writes only the body (TL;DR, key points, ...). This script adds YAML frontmatter
 and the title/metadata header from the folder's metadata.json, so every note in the library
-looks the same, records which agentic CLI wrote it (auto-detected, or --agent/--model), and
-renders the HTML page (render_html.py).
+looks the same, records which agentic CLI wrote it (auto-detected, or --agent/--model), checks
+every link and writes its date after it (check_links.py: publish date, release + last commit, ...;
+--no-link-check skips this) and renders the HTML page (render_html.py).
 
 Usage: save_summary.py <folder> [--mode summary] [--summary-lang en] [--agent NAME] [--model M]
                        [--body-file F] [--open] < body.md
@@ -20,7 +21,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from _common import SkillError, detect_agent, fmt_ts, read_json, run_main, update_json
+from _common import SkillError, detect_agent, fmt_ts, log, read_json, run_main, update_json
 
 MODES = ("tldr", "summary", "chapters", "detailed", "wisdom", "qa", "digest")
 
@@ -117,6 +118,7 @@ def main(argv=None) -> int:
     ap.add_argument("--model", help="model that wrote the summary (e.g. claude-opus-5-5)")
     ap.add_argument("--body-file", type=Path, help="read the body from a file instead of stdin")
     ap.add_argument("--open", action="store_true", help="open the HTML page in the default browser")
+    ap.add_argument("--no-link-check", action="store_true", help="don't check links or add their dates (offline)")
     args = ap.parse_args(argv)
 
     meta = read_json(args.folder / "metadata.json")
@@ -125,6 +127,13 @@ def main(argv=None) -> int:
     body = args.body_file.read_text(encoding="utf-8") if args.body_file else sys.stdin.read()
     if not body.strip():
         raise SkillError("empty summary body")
+    if not args.no_link_check:
+        from check_links import annotate, run_checks, summary_line
+        report, labels = run_checks(body)
+        body = annotate(body, labels)
+        log(summary_line(report))
+        for r in report["broken"]:
+            log(f"BROKEN LINK: {r['url']} ({r.get('status') or r.get('error')}): fix or remove it and save again")
     digest = meta.get("kind") == "digest"
     mode = args.mode or ("digest" if digest else "summary")
     out = args.folder / ("digest.md" if digest else "summary.md")

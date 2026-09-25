@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Check the external tools tell-me needs. Exit 1 if a required tool is missing.
 #   required: yt-dlp, ffmpeg, ffprobe, python3
-#   optional: uvx (Whisper fallback when a video has no captions)
+#   optional: uvx (Whisper fallback when a video has no captions), gh (GitHub dates without the 60 requests/hour limit)
 # Also warns when yt-dlp is older than 60 days: YouTube breaks old versions quickly.
 # Fix everything with: install-prerequisites.sh  (add --upgrade to refresh yt-dlp)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REQUIRED=(yt-dlp ffmpeg ffprobe python3)
-OPTIONAL=(uvx)
+OPTIONAL=(uvx gh)
 missing=0
 
 hint() {
@@ -17,6 +17,7 @@ hint() {
     ffmpeg|ffprobe) echo "brew install ffmpeg" ;;
     python3) echo "brew install python" ;;
     uvx) echo "brew install uv" ;;
+    gh) echo "brew install gh && gh auth login" ;;
   esac
 }
 
@@ -32,7 +33,11 @@ for t in "${OPTIONAL[@]}"; do
   if command -v "$t" >/dev/null 2>&1; then
     echo "ok       $t"
   else
-    echo "missing  $t (optional, needed for the Whisper fallback) -> $(hint "$t")" >&2
+    case "$t" in
+      uvx) why="needed for the Whisper fallback" ;;
+      gh) why="GitHub release/commit dates beyond 60 requests/hour" ;;
+    esac
+    echo "missing  $t (optional, $why) -> $(hint "$t")" >&2
   fi
 done
 

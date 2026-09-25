@@ -219,6 +219,8 @@ article h3{font-size:1.08rem;margin:1.6rem 0 .4rem}
 a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
 a.ts{font-variant-numeric:tabular-nums;font-size:.86em;text-decoration:none;background:var(--code);border-radius:5px;padding:0 5px;white-space:nowrap}
 a.ts:hover{text-decoration:underline}
+/* date labels written by check_links.py right after a link: [Title](url) *(published 2025-06-03)* */
+article a:not(.ts)+em{font-style:normal;font-size:.8em;color:var(--muted);white-space:normal}
 li{margin:.25rem 0}
 blockquote{margin:1rem 0;padding:.2rem 1rem;border-left:3px solid var(--accent);color:var(--muted)}
 code{background:var(--code);border-radius:4px;padding:1px 4px;font-size:.88em}
