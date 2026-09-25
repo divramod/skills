@@ -156,5 +156,57 @@ class TestContractFields(unittest.TestCase):
         self.assertEqual(set(CONTRACT_KEYS) - set(fields), {"id", "title", "duration"})
 
 
+class TestContentPart(unittest.TestCase):
+    """--dir/--content-part: the video of another item (an x post) goes into that item's folder."""
+
+    def run_part(self, folder: Path, *extra: str) -> tuple[dict, str]:
+        import contextlib
+        import io
+        import json
+        from unittest import mock
+
+        import prepare
+        info = {"id": "99", "title": "Clip", "duration": 92, "webpage_url": "https://x.com/u/status/99",
+                "extractor_key": "Twitter", "uploader": "u"}
+        out = io.StringIO()
+        with mock.patch.object(prepare, "require"), \
+                mock.patch.object(prepare, "fetch_info", return_value=info), \
+                mock.patch.object(prepare, "fetch_transcript", return_value=([(0.0, "hello there")], "captions")) as ft, \
+                mock.patch.object(prepare, "start_background", return_value={"status": "running"}) as bg, \
+                mock.patch.object(prepare, "find_existing", side_effect=AssertionError("no library lookup")), \
+                contextlib.redirect_stdout(out):
+            prepare.main(["https://x.com/u/status/99", "--dir", str(folder), "--content-part", "video", *extra])
+        self.calls = (ft.call_count, bg.call_count)
+        return json.loads(out.getvalue()), (folder / "video-transcript.md").read_text()
+
+    def test_writes_into_the_given_folder_without_touching_the_owner_fields(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "posts" / "x" / "u" / "clip-99"
+            folder.mkdir(parents=True)
+            (folder / "metadata.json").write_text(json.dumps({"source": "x", "id": "99", "title": "A post"}))
+            out, text = self.run_part(folder)
+            meta = json.loads((folder / "metadata.json").read_text())
+            self.assertEqual(self.calls, (1, 1))  # transcript + background download
+            self.assertFalse((folder / "content.md").exists())
+            self.assertIn("## Transcript", text)
+            self.assertIn("hello there", text)
+            self.assertEqual((meta["source"], meta["id"], meta["title"]), ("x", "99", "A post"))
+            self.assertEqual(meta["video"]["transcript_source"], "captions")
+            self.assertEqual(meta["video"]["transcript_file"], "video-transcript.md")
+            self.assertEqual((out["part"], out["transcript_source"], out["duration"]), ("video", "captions", "01:32"))
+            self.assertEqual(list(Path(tmp).glob("videos")), [])  # no library entry of its own
+            # a second run reuses the transcript; --skip-download starts no download
+            out, _ = self.run_part(folder, "--skip-download")
+            self.assertEqual(self.calls, (0, 0))
+
+    def test_dir_needs_content_part(self):
+        from _common import SkillError
+        import prepare
+        with self.assertRaises(SkillError):
+            prepare.main(["https://x.com/u/status/99", "--dir", "/tmp"])
+
+
 if __name__ == "__main__":
     unittest.main()

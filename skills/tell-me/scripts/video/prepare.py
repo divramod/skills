@@ -17,6 +17,11 @@ yt-dlp keys) and prints the source envelope on stdout. A playlist or channel URL
 list_videos.py (--limit N) and prints its video list instead.
 
 Folder: <root>/videos/<platform>/<user>/<title>/ (root: $TELL_ME_ROOT or ~/me/summaries).
+
+As a part of another source's item (an x post's video): --dir <folder> --content-part <name> writes into that
+folder instead, keeps the transcript as <name>-transcript.md, stores the video's facts under metadata.json's
+<name> key (the other source owns the contract fields; the download still records video_file/video_quality) and
+prints {part, transcript, transcript_source, ...} instead of an envelope. No videos/… library entry is made.
 Requires: yt-dlp, ffmpeg; uvx only for the Whisper fallback.
 """
 from __future__ import annotations
@@ -323,20 +328,29 @@ def main(argv=None) -> int:
     ap.add_argument("--refresh", action="store_true", help="refetch the transcript even if it exists")
     ap.add_argument("--keep-audio", action="store_true", help="keep the audio file downloaded for Whisper")
     ap.add_argument("--limit", type=int, help="playlist/channel URLs: max videos (channels default to 10)")
+    ap.add_argument("--dir", type=Path, help="with --content-part: the other source's folder to write into")
+    ap.add_argument("--content-part", metavar="NAME",
+                    help="prepare the video as part NAME of another item (needs --dir; see above)")
     args = ap.parse_args(argv)
+    if bool(args.dir) != bool(args.content_part):
+        raise SkillError("--dir and --content-part go together")
 
     if not args.url.startswith(("http://", "https://")):
         raise SkillError(f"local media files are not supported yet: {args.url}")
     from route import route
-    if route(args.url)["kind"] in ("playlist", "channel"):
+    if not args.content_part and route(args.url)["kind"] in ("playlist", "channel"):
         import list_videos
         return list_videos.main([args.url] + (["--limit", str(args.limit)] if args.limit else []) + (
             ["--cookies-from-browser", args.cookies_from_browser] if args.cookies_from_browser else []))
 
     require("yt-dlp", "ffmpeg")
     info = fetch_info(args)
-    existing = find_existing(info)
-    folder = existing or video_dir(info)
+    part = args.content_part
+    if part:
+        existing, folder = None, args.dir
+    else:
+        existing = find_existing(info)
+        folder = existing or video_dir(info)
     folder.mkdir(parents=True, exist_ok=True)
     log(f"{'reusing' if existing else 'folder'}: {folder}")
     if existing:  # a folder from before the multi-source layout keeps its transcript
@@ -346,14 +360,15 @@ def main(argv=None) -> int:
 
     old_meta = read_json(folder / "metadata.json")
     have_quality = old_meta.get("video_quality")
-    transcript = folder / "content.md"
-    source = old_meta.get("transcript_source")
+    transcript = folder / (f"{part}-transcript.md" if part else "content.md")
+    source = (old_meta.get(part) or {}).get("transcript_source") if part else old_meta.get("transcript_source")
     need_transcript = args.refresh or not (transcript.exists() and source)
     if not need_transcript:
         log("using existing transcript (pass --refresh to refetch)")
 
     # Title, chapters etc. first: the download tags the file from metadata.json when it finishes.
-    update_json(folder / "metadata.json", {k: info.get(k) for k in META_KEYS})
+    if not part:  # a part: the owning source wrote its title already
+        update_json(folder / "metadata.json", {k: info.get(k) for k in META_KEYS})
     # Default: detached background download, nothing here waits for it.
     # --visual: frames need the file, so download in parallel with the transcript and wait.
     how, wanted = download_plan(args.skip_download, args.visual, have_quality, find_file(folder, "video") is not None)
@@ -373,6 +388,9 @@ def main(argv=None) -> int:
             record(folder, video_future.result(), "best" if have_quality == "best" else wanted)
     finally:
         pool.shutdown(wait=True)
+
+    if part:
+        return print_part(folder, part, info, transcript, source, video_future, args)
 
     # Merge, don't overwrite: a background download may add video_file/video_quality at any time.
     prepared_at = old_meta.get("prepared_at") or datetime.now().isoformat(timespec="seconds")
@@ -412,6 +430,29 @@ def main(argv=None) -> int:
         frames_index=str(frames_index) if frames_index else None,
         description_links=description_links(info.get("description")),
     )
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+    return 0
+
+
+def print_part(folder: Path, part: str, info: dict, transcript: Path, source: str | None, video_future,
+               args) -> int:
+    """--content-part: the video's facts under metadata.json's <part> key, then the part JSON on stdout."""
+    facts = {k: info.get(k) for k in ("id", "title", "duration", "webpage_url", "upload_date", "extractor_key")}
+    meta = update_json(folder / "metadata.json", {part: facts | {"transcript_source": source,
+                                                                 "transcript_file": transcript.name}})
+    video = folder / meta["video_file"] if meta.get("video_file") else None
+    video = video if video and video.exists() and not is_running(folder) else None
+    if video_future and video:
+        tag_video(folder, video)
+    frames_index = None
+    if args.visual:
+        from extract_frames import extract
+        frames_index = extract(folder, max_frames=args.max_frames)
+    out = {"part": part, "dir": str(folder), "title": info.get("title"), "url": info.get("webpage_url"),
+           "duration": fmt_ts(info.get("duration") or 0), "transcript": str(transcript),
+           "transcript_source": source, "transcript_words": len(transcript.read_text(encoding="utf-8").split()),
+           "video_file": str(video) if video else None, "video_download": download_status(folder),
+           "frames_index": str(frames_index) if frames_index else None}
     print(json.dumps(out, indent=2, ensure_ascii=False))
     return 0
 
