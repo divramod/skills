@@ -1,7 +1,7 @@
 ---
 name: hn-source
 description: Hacker News: Algolia comment tree, linked article via the web extractor, discussion as themes with attributed quotes, check_quotes.py, past discussions.
-status: in_progress
+status: shipped
 phase_id: "003"
 depends_on: ["001", "002"]
 wave: "03"
@@ -24,7 +24,7 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
 
 ## Tasks
 
-- [ ] **T201** — `hn/prepare.py`: Algolia fetch + Firebase fallback, flatten with attribution/permalinks, article via web extractor
+- [x] **T201** — `hn/prepare.py`: Algolia fetch + Firebase fallback, flatten with attribution/permalinks, article via web extractor
   **Acceptance**: the fixture renders the expected content.md; a deleted/dead comment is skipped
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/hn/
@@ -32,10 +32,10 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T202** — `shared/check_quotes.py` + test
+- [x] **T202** — `shared/check_quotes.py` + test
   **Acceptance**: an invented quote is flagged, a real quote passes (normalized)
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/shared/check_quotes.py, test_check_quotes.py
@@ -43,10 +43,10 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T203** — `hn/related.py` past discussions (same URL, other ids)
+- [x] **T203** — `hn/related.py` past discussions (same URL, other ids)
   **Acceptance**: fixture test
   **Verify**: `cd skills/tell-me/scripts && for d in */; do python3 -m unittest discover -s "$d" -p 'test_*.py' || exit 1; done`
   **Files**: skills/tell-me/scripts/hn/related.py
@@ -54,10 +54,10 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T204** — `subskills/shared/discussion.md` (Willison method: themes as headers, attributed quotes, uncommon opinions, run check_quotes) + `subskills/hn/SUBSKILL.md` + `templates/hn/template.md`
+- [x] **T204** — `subskills/shared/discussion.md` (Willison method: themes as headers, attributed quotes, uncommon opinions, run check_quotes) + `subskills/hn/SUBSKILL.md` + `templates/hn/template.md`
   **Acceptance**: linked from SKILL.md
   **Verify**: review
   **Files**: skills/tell-me/subskills/, skills/tell-me/templates/hn/
@@ -65,10 +65,10 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
-- [ ] **T205** — hn prereq scripts (python3 only) + E2E on one link post and one Ask HN
+- [x] **T205** — hn prereq scripts (python3 only) + E2E on one link post and one Ask HN
   **Acceptance**: summary.html in library
   **Verify**: manual
   **Files**: skills/tell-me/scripts/hn/*.sh
@@ -76,8 +76,8 @@ Fixtures: one small thread and one big thread (≥300 comments), both Algolia JS
   **State**:
   - [x] built
   - [x] tested
-  - [ ] reviewed
-  - [ ] shipped
+  - [x] reviewed
+  - [x] shipped
 
 ## Risks
 
