@@ -1,9 +1,9 @@
 ---
-name: dm-summarize-video
+name: tell-me
 description: Summarize a video, playlist or channel from a URL (YouTube first; also TikTok, X, Vimeo, podcasts and any yt-dlp-supported site) into a markdown note in ~/me/summaries/videos. Captions via yt-dlp with a local Whisper fallback, video download (best quality, in the background; --skip-download to skip), keyframes for visual content, a links section (books, Wikipedia terms, tools, further reading), and modes tldr/summary/chapters/detailed/wisdom/qa. Use when the user pastes a video link and wants a summary, the gist, notes, or answers about it; called without a link it opens the last summarized video in the browser.
 ---
 
-# dm-summarize-video
+# tell-me
 
 Scripts do all deterministic work: fetching, folders, downloads, timestamp links, frames and file writing.
 Your job is the judgment: pick the mode, read, write the summary, and check it against the transcript.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check the external tools dm-summarize-video needs. Exit 1 if a required tool is missing.
+# Check the external tools tell-me needs. Exit 1 if a required tool is missing.
 #   required: yt-dlp, ffmpeg, ffprobe, python3
 #   optional: uvx (Whisper fallback when a video has no captions)
 # Also warns when yt-dlp is older than 60 days: YouTube breaks old versions quickly.

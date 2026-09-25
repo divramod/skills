@@ -1,4 +1,4 @@
-"""Shared helpers for the dm-summarize-video scripts. Stdlib only.
+"""Shared helpers for the tell-me scripts. Stdlib only.
 
 Library layout: <root>/<platform>/<user>/<title-slug>/ with summary.md, transcript.md,
 metadata.json, video.<ext>, frames/. Root: $DM_SUMMARIZE_VIDEO_ROOT or ~/me/summaries/videos.
@@ -37,7 +37,7 @@ class MissingTool(SkillError):
 
 
 def log(msg: str) -> None:
-    print(f"[dm-summarize-video] {msg}", file=sys.stderr)
+    print(f"[tell-me] {msg}", file=sys.stderr)
 
 
 def library_root() -> Path:

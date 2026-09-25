@@ -17,7 +17,7 @@ Skills keep deterministic work (fetching, parsing, file layout, downloads, forma
 When a skill's scripts call external command-line tools (yt-dlp, ffmpeg, uvx, jq, ...):
 
 1. **Every script checks each tool before using it** and exits non-zero with a clear message that names the missing
-   tool and how to install it. Python scripts: `shutil.which()` (see `skills/dm-summarize-video/scripts/_common.py`
+   tool and how to install it. Python scripts: `shutil.which()` (see `skills/tell-me/scripts/_common.py`
    `require()`). Bash scripts: `command -v <tool>`.
 2. **The skill ships `scripts/check-prerequisites.sh`**: it checks every required and optional tool, prints `ok` or
    `MISSING <tool> -> <install command>`, and exits 1 when a required tool is missing.

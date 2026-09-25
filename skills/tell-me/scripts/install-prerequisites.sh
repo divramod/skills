@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the external tools dm-summarize-video needs (only the missing ones).
+# Install the external tools tell-me needs (only the missing ones).
 #   macOS / Linux with Homebrew: brew install yt-dlp ffmpeg uv python
 #   Debian/Ubuntu without brew:  apt-get install ffmpeg python3; uv via astral.sh; yt-dlp via `uv tool`
 # Usage: install-prerequisites.sh [--upgrade]   (--upgrade also upgrades yt-dlp, which ages fast)

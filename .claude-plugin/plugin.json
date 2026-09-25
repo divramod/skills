@@ -11,6 +11,6 @@
   "license": "MIT",
   "keywords": ["skills", "video", "summarize", "youtube"],
   "skills": [
-    "./skills/dm-summarize-video"
+    "./skills/tell-me"
   ]
 }

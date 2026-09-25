@@ -93,7 +93,7 @@ def main(argv=None) -> int:
     for r in results:
         out[r.pop("result")].append(r)
     print(json.dumps(out, indent=2, ensure_ascii=False))
-    print(f"[dm-summarize-video] {len(urls)} links: {len(out['ok'])} ok, {len(out['unverified'])} unverified "
+    print(f"[tell-me] {len(urls)} links: {len(out['ok'])} ok, {len(out['unverified'])} unverified "
           f"(site blocks scripts), {len(out['broken'])} broken", file=sys.stderr)
     return 1 if out["broken"] else 0
 
