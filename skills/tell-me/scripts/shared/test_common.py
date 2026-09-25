@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _common import (MissingTool, detect_agent, dir_for, find_by_id, source_root, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
+from _common import (MissingTool, detect_agent, install_script, dir_for, find_by_id, source_root, find_existing, find_file, library_root, platform_of, require, slugify, ts_link,
                      ts_url, user_of, video_dir)
 
 
@@ -109,6 +109,12 @@ class TestRequire(unittest.TestCase):
         self.assertIn("definitely-not-a-tool-xyz", str(cm.exception))
         self.assertIn("install-prerequisites.sh", str(cm.exception))
         require("python3")  # present: no error
+
+    def test_install_script_of_the_running_source(self):
+        scripts = Path(__file__).resolve().parent.parent
+        self.assertEqual(install_script(str(scripts / "video" / "prepare.py")), scripts / "video" / "install-prerequisites.sh")
+        self.assertEqual(install_script(str(scripts / "hn" / "prepare.py")), scripts / "hn" / "install-prerequisites.sh")
+        self.assertEqual(install_script("/elsewhere/run.py"), scripts / "install-prerequisites.sh")
 
 
 class TestAgentAndFiles(unittest.TestCase):

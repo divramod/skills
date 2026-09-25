@@ -5,8 +5,9 @@
 - each SKILL.md frontmatter `name` equals its folder name, and has a `description`
 - .claude-plugin/plugin.json and .codex-plugin/plugin.json share name + version
 - the plugin name matches in both marketplaces
-- a skill whose scripts call external tools ships executable scripts/check-prerequisites.sh
-  and scripts/install-prerequisites.sh (see CLAUDE.md, "Skill script rules")
+- every scripts folder whose own scripts call external tools (scripts/ itself, or a per-source
+  scripts/<folder>/) ships executable check-prerequisites.sh and install-prerequisites.sh; when any
+  scripts/<folder>/ does, scripts/ also ships both as aggregators (see CLAUDE.md, "Skill script rules")
 
 Run: python3 scripts/check-plugins.py   (exit 1 on any problem)
 """
@@ -24,6 +25,36 @@ TOOL_MARKERS = ("subprocess", "shutil.which", "command -v", "os.system(")
 
 def load(rel):
     return json.loads((ROOT / rel).read_text())
+
+
+def uses_tools(folder: Path) -> bool:
+    """True when a script directly in folder (not the prereq scripts themselves) calls external tools."""
+    return any(
+        any(marker in f.read_text(errors="ignore") for marker in TOOL_MARKERS)
+        for f in folder.iterdir()
+        if f.is_file() and f.suffix in (".py", ".sh") and f.name not in PREREQ_SCRIPTS
+    )
+
+
+def prereq_errors(skill: Path) -> list[str]:
+    """Missing or non-executable prereq scripts in skill/scripts and each skill/scripts/<folder>/."""
+    scripts = skill / "scripts"
+    if not scripts.is_dir():
+        return []
+    subfolders = [d for d in sorted(scripts.iterdir()) if d.is_dir() and not d.name.startswith((".", "_"))]
+    need = [d for d in subfolders if uses_tools(d)]
+    if uses_tools(scripts) or need:  # scripts/ itself, or the aggregators over the per-folder scripts
+        need.insert(0, scripts)
+    errors = []
+    for folder in need:
+        for name in PREREQ_SCRIPTS:
+            f = folder / name
+            rel = f.relative_to(skill.parent.parent)
+            if not f.is_file():
+                errors.append(f"{rel} missing ({folder.name}/ scripts call external tools)")
+            elif not os.access(f, os.X_OK):
+                errors.append(f"{rel} is not executable")
+    return errors
 
 
 def main() -> int:
@@ -50,21 +81,7 @@ def main() -> int:
             errors.append(f"{skill_md.relative_to(ROOT)}: frontmatter description is missing")
 
     for skill in sorted(p.parent for p in (ROOT / "skills").glob("*/SKILL.md")):
-        scripts = skill / "scripts"
-        if not scripts.is_dir():
-            continue
-        uses_tools = any(
-            any(marker in f.read_text(errors="ignore") for marker in TOOL_MARKERS)
-            for f in scripts.iterdir()
-            if f.is_file() and f.suffix in (".py", ".sh") and f.name not in PREREQ_SCRIPTS
-        )
-        if uses_tools:
-            for name in PREREQ_SCRIPTS:
-                f = scripts / name
-                if not f.is_file():
-                    errors.append(f"{f.relative_to(ROOT)} missing (scripts call external tools)")
-                elif not os.access(f, os.X_OK):
-                    errors.append(f"{f.relative_to(ROOT)} is not executable")
+        errors += prereq_errors(skill)
 
     for key in ("name", "version"):
         if claude.get(key) != codex.get(key):

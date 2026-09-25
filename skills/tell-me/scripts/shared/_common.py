@@ -16,17 +16,20 @@ from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent  # scripts/shared
 SKILL_DIR = SCRIPTS_DIR.parent.parent
-INSTALL_SCRIPT = SCRIPTS_DIR / "install-prerequisites.sh"
 INSTALL_HINTS = {
     "yt-dlp": "brew install yt-dlp",
     "ffmpeg": "brew install ffmpeg",
     "ffprobe": "brew install ffmpeg",
     "uvx": "brew install uv",
+    "npx": "brew install node",
+    "gh": "brew install gh",
+    "pdftotext": "brew install poppler",
+    "pandoc": "brew install pandoc",
 }
 BOT_HINT = (
     "YouTube bot check / rate limit hit. Retry with --cookies-from-browser chrome "
     "(or firefox/safari), wait a few minutes, or upgrade yt-dlp: "
-    f"{INSTALL_SCRIPT} --upgrade"
+    f"{SCRIPTS_DIR.parent / 'video' / 'install-prerequisites.sh'} --upgrade"
 )
 
 
@@ -59,14 +62,23 @@ def source_root(source: str, root: Path | None = None) -> Path:
     return (root or library_root()) / KIND_DIRS[source]
 
 
+def install_script(script: str | None = None) -> Path:
+    """install-prerequisites.sh of the running script's source folder (scripts/<source>/), else the aggregator."""
+    folder = Path(script or sys.argv[0]).resolve().parent
+    own = folder / "install-prerequisites.sh"
+    if folder.parent == SCRIPTS_DIR.parent and own.is_file():
+        return own
+    return SCRIPTS_DIR.parent / "install-prerequisites.sh"
+
+
 def require(*tools: str) -> None:
-    """Fail with a clear message when an external tool is missing."""
+    """Fail with a clear message (exit 2) when an external tool is missing; names the source's installer."""
     missing = [t for t in tools if not shutil.which(t)]
     if missing:
         hints = "\n".join(f"  {t}: {INSTALL_HINTS.get(t, 'install it and put it on PATH')}" for t in missing)
         raise MissingTool(
             f"missing required tool(s): {', '.join(missing)}\n{hints}\n"
-            f"or run: {INSTALL_SCRIPT}"
+            f"or run: {install_script()}"
         )
 
 
