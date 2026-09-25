@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -34,7 +35,11 @@ def root_of(folder: Path) -> Path | None:
 
 
 def downloaded_at(folder: Path, meta: dict) -> str:
-    """When the video entered the library: prepared_at, else prepared date + transcript mtime."""
+    """When the skill started on this video: the folder's creation time (macOS/BSD birth time; the folder is
+    created right at the start and reused by video id), else prepared_at, else prepared date + transcript mtime."""
+    birth = getattr(folder.stat(), "st_birthtime", None)
+    if birth:
+        return datetime.fromtimestamp(birth).isoformat(timespec="seconds")
     if meta.get("prepared_at"):
         return meta["prepared_at"]
     stamp = folder / "transcript.md"
@@ -44,11 +49,19 @@ def downloaded_at(folder: Path, meta: dict) -> str:
 
 
 def summarized_at(folder: Path, meta: dict) -> str:
-    """When the summary was written: summary.created_at, else the note's mtime."""
-    created = (meta.get("summary") or {}).get("created_at")
-    if created:
-        return created
+    """When the summary was written: summary.created_at, else its recorded date (start of that day), else
+    the note's mtime. Edits after saving (date refreshes, a finished download) change the mtime, so the
+    mtime is only the last resort."""
+    summary = meta.get("summary") or {}
+    if summary.get("created_at"):
+        return summary["created_at"]
     note = folder / ("digest.md" if meta.get("kind") == "digest" else "summary.md")
+    created = summary.get("created")
+    if not created and note.exists():
+        m = re.search(r'^created: "?(\d{4}-\d{2}-\d{2})', note.read_text(encoding="utf-8"), re.M)
+        created = m.group(1) if m else None
+    if created:
+        return f"{created}T00:00:00"
     return datetime.fromtimestamp(note.stat().st_mtime).isoformat(timespec="seconds") if note.exists() else ""
 
 
@@ -126,7 +139,11 @@ body.has-lib main{flex:1 1 auto;min-width:0;margin:0 auto}
 #lib details[open]>summary::before{transform:rotate(90deg)}
 #lib summary:hover{background:var(--code)}
 #lib .group{margin:10px 8px 2px;font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+#lib .tech{font-weight:400;color:var(--muted);font-size:.9em;text-transform:none;letter-spacing:0;margin-left:4px}
 #lib .empty{padding:10px;color:var(--muted)}
+#lib .resize{position:absolute;top:0;right:-4px;width:8px;height:100%;cursor:col-resize;z-index:6}
+#lib .resize:hover,#lib .resize:focus-visible,body.resizing #lib .resize{background:linear-gradient(90deg,transparent 3px,var(--accent) 3px,var(--accent) 5px,transparent 5px);outline:none}
+body.resizing{cursor:col-resize;user-select:none}
 #lib-toggle{display:none}
 @media (max-width:700px){
   body.has-lib{display:block}
@@ -155,7 +172,9 @@ def sidebar_html() -> str:
         for k, path in _ICONS.items())
     return (f'<button type="button" id="lib-toggle" aria-label="Library">☰</button>'
             f'<aside id="lib" aria-label="Library" hidden><div class="bar">{buttons}<span class="count"></span></div>'
-            f'<input type="search" placeholder="Filter…" aria-label="Filter summaries"><nav></nav></aside>')
+            f'<input type="search" placeholder="Filter…" aria-label="Filter summaries"><nav></nav>'
+            f'<div class="resize" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0" '
+            f'title="Drag to resize · double-click to reset"></div></aside>')
 
 
 SIDEBAR_JS = r"""
@@ -171,17 +190,28 @@ const save=()=>{try{localStorage.setItem('dm-lib',JSON.stringify(st))}catch(e){}
 const col=new Intl.Collator(undefined,{sensitivity:'base',numeric:true});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const day=d=>(d||'').slice(0,10);
+const hm=d=>(d||'').slice(11,16);                     // time the skill started (prepared_at)
+const when=d=>[day(d),hm(d)].filter(Boolean).join(' ');
+const by=it=>[it.author,when(it.date)].filter(Boolean).join(' · ');
 const link=(it,sub)=>`<li><a href="${esc(ROOT+'/'+it.page)}"${it.path===SELF?' class="current" aria-current="page"':''} title="${esc(it.path)}">${esc(it.title)}${sub?`<small>${esc(sub)}</small>`:''}</a></li>`;
+// channel folder "youtube/aidotengineer" -> display name "AI Engineer"
+const chan=it=>it.path.split('/').slice(0,2).join('/');
+const names={};for(const it of L.items)if(it.author)names[chan(it)]=it.author;
+const tech=(name,techName)=>name&&name!==techName?` <span class="tech">${esc(techName)}</span>`:'';
 function tree(items,d){
   const t={};
   for(const it of items){const parts=it.path.split('/');parts.pop();let n=t;for(const p of parts){n=n[p]=n[p]||{};}(n['\0']=n['\0']||[]).push(it);}
-  const rec=n=>{
-    const dirs=Object.keys(n).filter(k=>k!=='\0').sort((a,b)=>d*col.compare(a,b));
+  const rec=(n,prefix)=>{
+    // folders sort by the name shown first: the channel's display name where there is one
+    const shown=k=>names[prefix?prefix+'/'+k:k]||k;
+    const dirs=Object.keys(n).filter(k=>k!=='\0').sort((a,b)=>d*(col.compare(shown(a),shown(b))||col.compare(a,b)));
     const files=(n['\0']||[]).sort((a,b)=>d*col.compare(a.path.split('/').pop(),b.path.split('/').pop()));
-    return '<ul>'+dirs.map(k=>{const inner=rec(n[k]);const open=SELF&&inner.includes('aria-current')||q.value?' open':'';
-      return `<li><details${open}><summary>${esc(k)}</summary>${inner}</details></li>`;}).join('')+files.map(it=>link(it,it.author)).join('')+'</ul>';
+    return '<ul>'+dirs.map(k=>{const p=prefix?prefix+'/'+k:k,inner=rec(n[k],p);const open=SELF&&inner.includes('aria-current')||q.value?' open':'';
+      // channel folders show the channel's display name, then the folder name
+      const label=names[p]&&names[p]!==k?`${esc(names[p])}${tech(names[p],k)}`:esc(k);
+      return `<li><details${open}><summary>${label}</summary>${inner}</details></li>`;}).join('')+files.map(it=>link(it,when(it.date))).join('')+'</ul>';
   };
-  return rec(t);
+  return rec(t,'');
 }
 function render(){
   const f=q.value.trim().toLowerCase();
@@ -192,13 +222,15 @@ function render(){
   else if(st.view==='tree')h=tree(items,d);
   else if(st.view==='date'){
     const s=items.slice().sort((a,b)=>d*(a.date<b.date?-1:a.date>b.date?1:0));let last='';
-    for(const it of s){const g=day(it.date);if(g!==last){if(last)h+='</ul>';h+=`<div class="group">${esc(g)}</div><ul>`;last=g;}h+=link(it,it.author);}
+    for(const it of s){const g=day(it.date);if(g!==last){if(last)h+='</ul>';h+=`<div class="group">${esc(g)}</div><ul>`;last=g;}h+=link(it,[when(it.date),it.author].filter(Boolean).join(' · '));}
     h+='</ul>';
   }else if(st.view==='title'){
-    h='<ul>'+items.slice().sort((a,b)=>d*col.compare(a.title,b.title)).map(it=>link(it,it.author)).join('')+'</ul>';
+    h='<ul>'+items.slice().sort((a,b)=>d*col.compare(a.title,b.title)).map(it=>link(it,by(it))).join('')+'</ul>';
   }else{
-    const s=items.slice().sort((a,b)=>d*col.compare(a.author,b.author)||col.compare(a.title,b.title));let last=null;
-    for(const it of s){if(it.author!==last){if(last!==null)h+='</ul>';h+=`<div class="group">${esc(it.author||'unknown')}</div><ul>`;last=it.author;}h+=link(it,day(it.date));}
+    // grouped by channel folder (two channels may share a display name), headed "Name folder-name"
+    const s=items.slice().sort((a,b)=>d*(col.compare(a.author,b.author)||col.compare(chan(a),chan(b)))||col.compare(a.title,b.title));let last=null;
+    for(const it of s){const c=chan(it);if(c!==last){if(last!==null)h+='</ul>';
+      h+=`<div class="group">${esc(it.author||'unknown')}${tech(it.author,c.split('/')[1]||'')}</div><ul>`;last=c;}h+=link(it,when(it.date));}
     h+='</ul>';
   }
   nav.innerHTML=h;
@@ -217,6 +249,24 @@ aside.querySelector('.bar').addEventListener('click',e=>{
 });
 q.addEventListener('input',render);
 document.getElementById('lib-toggle').addEventListener('click',()=>document.body.classList.toggle('lib-open'));
+// Resizable: drag the right edge (or arrow keys on it); the width is remembered, double-click resets it.
+const MIN=180,MAX=Math.max(MIN,Math.min(700,innerWidth-360)),handle=aside.querySelector('.resize');
+const setW=w=>{w=Math.round(Math.min(MAX,Math.max(MIN,w)));document.documentElement.style.setProperty('--side',w+'px');
+  handle.setAttribute('aria-valuenow',w);return w;};
+try{const w=+localStorage.getItem('dm-lib-width');if(w)setW(w);}catch(e){}
+const saveW=()=>{try{localStorage.setItem('dm-lib-width',aside.getBoundingClientRect().width|0)}catch(e){}};
+handle.addEventListener('pointerdown',e=>{
+  e.preventDefault();handle.setPointerCapture(e.pointerId);document.body.classList.add('resizing');
+  const move=ev=>setW(ev.clientX);
+  const up=()=>{handle.removeEventListener('pointermove',move);document.body.classList.remove('resizing');saveW();};
+  handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up,{once:true});
+});
+handle.addEventListener('dblclick',()=>{document.documentElement.style.removeProperty('--side');try{localStorage.removeItem('dm-lib-width')}catch(e){}});
+handle.addEventListener('keydown',e=>{
+  const step=e.shiftKey?50:10,w=aside.getBoundingClientRect().width;
+  if(e.key==='ArrowLeft'){setW(w-step);saveW();e.preventDefault();}
+  if(e.key==='ArrowRight'){setW(w+step);saveW();e.preventDefault();}
+});
 aside.hidden=false;document.body.classList.add('has-lib');
 render();
 })();

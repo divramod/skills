@@ -52,8 +52,25 @@ class TestLibrary(unittest.TestCase):
         self.assertTrue(zeta.pop("summarized"))  # summary.md mtime (no created_at in META)
         self.assertEqual(zeta, {
             "path": "youtube/chan/zeta-talk", "page": "youtube/chan/zeta-talk/summary.html", "title": "Zeta talk",
-            "author": "Chan", "date": "2026-09-24T10:00:00", "kind": "video", "mode": "tldr"})
-        self.assertTrue(items["youtube/other/alpha"]["date"].startswith("2026-09-20T"))  # prepared + transcript mtime
+            "author": "Chan", "date": zeta["date"], "kind": "video", "mode": "tldr"})
+
+    def test_start_time_is_folder_creation_time(self):
+        from datetime import datetime
+        from library import downloaded_at
+        folder = make(self.root, "youtube/chan/zeta-talk", META)
+        birth = getattr(folder.stat(), "st_birthtime", None)
+        if not birth:
+            self.skipTest("no folder creation time on this file system")
+        self.assertEqual(downloaded_at(folder, META), datetime.fromtimestamp(birth).isoformat(timespec="seconds"))
+
+    def test_start_time_falls_back_without_creation_time(self):
+        from library import downloaded_at
+        folder = make(self.root, "youtube/chan/zeta-talk", META)
+        real = os.stat(folder)
+        no_birth = mock.Mock(spec=["st_mtime"], st_mtime=real.st_mtime)
+        with mock.patch.object(Path, "stat", lambda self, **kw: no_birth if self == folder else os.stat(self)):
+            self.assertEqual(downloaded_at(folder, META), "2026-09-24T10:00:00")  # prepared_at
+            self.assertTrue(downloaded_at(folder, {"prepared": "2026-09-20"}).startswith("2026-09-20T"))
 
     def test_last_summarized_prefers_created_at_and_skips_digests(self):
         self.assertIsNone(last_summarized(self.root))
@@ -62,6 +79,12 @@ class TestLibrary(unittest.TestCase):
         make(self.root, "youtube/chan/_digests/pl", {"kind": "digest", "title": "PL", "summary": {"created_at": "2027-01-01T00:00:00"}})
         (self.root / "youtube/chan/_digests/pl/digest.html").write_text("")
         self.assertEqual(last_summarized(self.root), self.root / "youtube/chan/new/summary.html")
+
+    def test_date_only_summary_does_not_jump_ahead_after_an_edit(self):
+        make(self.root, "youtube/chan/timed", META | {"summary": {"created_at": "2026-09-25T09:00:00"}})
+        old = make(self.root, "youtube/chan/dateonly", META | {"id": "d", "summary": {"created": "2026-09-25"}})
+        (old / "summary.md").write_text((old / "summary.md").read_text())  # fresh mtime (e.g. dates refreshed)
+        self.assertEqual(last_summarized(self.root), self.root / "youtube/chan/timed/summary.html")
 
     def test_index_is_loadable_js(self):
         make(self.root, "youtube/chan/zeta-talk", META)
