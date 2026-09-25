@@ -46,6 +46,8 @@ CASES = [
     ("https://arxiv.org/pdf/1706.03762.pdf", ("file", "pdf", None)),
     ("https://archive.org/details/some-lecture", ("video", "video", None)),
     ("https://archive.org/details/book/book.pdf", ("file", "pdf", None)),
+    ("https://example.edu/files/syllabus.doc", ("file", "doc", None)),  # textutil (macOS) converts it
+    ("https://example.edu/files/lecture.ppt", ("web", "page", None)),  # no converter reads .ppt: not a document
     ("https://web.archive.org/web/2020/https://example.com/post", ("web", "page", None)),
     ("https://www.instagram.com/p/Cabc123/", ("video", "video", None)),
     ("https://www.instagram.com/photographer", ("web", "page", None)),

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for file/convert.py (offline: markitdown, pdftotext and pandoc answer recorded output)."""
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -14,6 +15,7 @@ from _common import MissingTool, SkillError  # noqa: E402
 
 FIXTURES = HERE / "fixtures"
 PDF = FIXTURES / "three-pages.pdf"
+LAYOUT = "three-pages.bbox-layout.html"  # pdftotext -enc UTF-8 -bbox-layout three-pages.pdf -
 
 
 def recorded(name: str) -> str:
@@ -26,13 +28,13 @@ def tools(*present: str):
 
 
 def runner(answers: dict):
-    """convert.run answering by the command's tool (markitdown, pdftotext, pdfinfo, pandoc); an Exception
-    answer is raised. `calls` records the tools asked."""
+    """convert.run answering by the command's tool (markitdown, layout = pdftotext -bbox-layout, bbox =
+    pdftotext -bbox, pdfinfo, pandoc, textutil); an Exception answer is raised. `calls` records the tools asked."""
     calls: list[str] = []
 
     def run(cmd):
         tool = "markitdown" if cmd[0] == "uvx" else cmd[0]
-        key = "bbox" if "-bbox" in cmd else tool
+        key = "layout" if "-bbox-layout" in cmd else "bbox" if "-bbox" in cmd else tool
         calls.append(key)
         answer = answers.get(key)
         if isinstance(answer, Exception):
@@ -52,11 +54,81 @@ class TestCleanUp(unittest.TestCase):
     def test_short_lines_that_are_not_a_stamp_stay(self):
         self.assertEqual(convert.clean_pdf_page("Table\n1\n2\nend"), "Table 1 2 end")
 
+    def test_a_column_of_numbers_is_no_stamp(self):
+        self.assertEqual(convert.clean_pdf_page("Scores\n\n1\n2\n3\n4\n5"), "Scores\n\n1 2 3 4 5")
+
+    def test_compounds_keep_their_hyphen_broken_words_join(self):
+        page = ("We read left-to-\nright and pre-\ntrain a task-\nspecific model with self-\nattention; the "
+                "hyphen-\nated word joins, BERT-\nBASE too.\n\nEvery task needs a specific head.")
+        self.assertEqual(convert.clean_pdf_page(page).split("\n\n")[0],
+                         "We read left-to-right and pre-train a task-specific model with self-attention; the "
+                         "hyphenated word joins, BERT-BASE too.")
+
+    def test_the_documents_own_spelling_decides(self):
+        vocab = convert.vocabulary("the pretrained model\nwith a fine-tuning step")
+        self.assertEqual(convert.clean_pdf_page("a pre-\ntrained model", vocab), "a pretrained model")
+        self.assertEqual(convert.clean_pdf_page("a fine-\ntuning step", vocab), "a fine-tuning step")
+        self.assertNotIn("pre", convert.vocabulary("a pre-\ntrained model"))  # the halves of a broken word
+
+    def test_numbers_that_are_no_list_items(self):
+        self.assertEqual(convert.clean_pdf_page("as shown in\n2018. The model\n1. first\n2) second"),
+                         "as shown in 2018. The model\n1. first\n2) second")
+
+    def test_urls_broken_at_a_line_end(self):
+        self.assertEqual(convert.clean_pdf_page("code at https://github.com/google-research/\nbert and "
+                                                "https://blog.\nopenai.com/language-unsupervised. See\n"
+                                                "https://x.org/a-\nlong-path. Done."),
+                         "code at https://github.com/google-research/bert and "
+                         "https://blog.openai.com/language-unsupervised. See https://x.org/a-long-path. Done.")
+
+    def test_a_paragraph_cut_by_a_column_break_and_section_numbers(self):
+        self.assertEqual(convert.clean_pdf_page("2.1\n\nRelated Work\n\nmodels of this kind are, as the "
+                                                "column before says, often\n\ntrained on text.\n\n3\n\nIt is long "
+                                                "enough to be a paragraph and not a heading, so it stays."),
+                         "2.1 Related Work\n\nmodels of this kind are, as the column before says, often trained on "
+                         "text.\n\n3\n\nIt is long enough to be a paragraph and not a heading, so it stays.")
+
     def test_split_pages(self):
         self.assertEqual(convert.split_pages("a\n\fb\n\fc\n\f"), ["a", "b", "c"])
 
+    def test_layout_pages(self):
+        def line(x0, y0, x1, y1, *ws):
+            return (f'<line xMin="{x0}" yMin="{y0}" xMax="{x1}" yMax="{y1}">'
+                    + "".join(f'<word xMin="{x0}" yMin="{y0}" xMax="{x1}" yMax="{y1}">{w}</word>' for w in ws)
+                    + "</line>")
+        page = ('<page width="612" height="792"><flow><block>'
+                + line(18, 200, 36, 600, "arXiv:1810.04805v2", "[cs.CL]")  # rotated in the margin
+                + '</block></flow><flow><block>'
+                + line(84, 100, 290, 110, "There", "are", "two", "strate-")
+                + line(72, 113, 290, 123, "gies.", "It", "ends", "here.")
+                + line(84, 126, 290, 136, "A", "new", "paragraph", "&amp;")
+                + line(72, 139, 200, 149, "it", "ends.")
+                + '</block></flow></page><page width="612" height="792">\n</page>')
+        self.assertEqual(convert.layout_pages(page),
+                         ["There are two strate-\ngies. It ends here.\n\nA new paragraph &\nit ends.", ""])
+        pages = convert.layout_pages(recorded(LAYOUT))
+        self.assertEqual(len(pages), 3)
+        self.assertIn("It is short on pur-\npose and has a hyphenated word.", pages[1])  # hyphens as printed
+
     def test_pptx_slides(self):
         self.assertEqual(convert.pptx_slides("<!-- Slide number: 2 -->\n# Goals"), "## Slide 2\n# Goals")
+
+
+class TestReadText(unittest.TestCase):
+    def read(self, data: bytes) -> str:
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(data)
+        self.addCleanup(Path(f.name).unlink)
+        return convert.read_text(Path(f.name))
+
+    def test_encodings(self):
+        text = "Café naïve – “quoted” résumé"
+        self.assertEqual(self.read(text.encode("utf-8")), text)
+        self.assertEqual(self.read(b"\xef\xbb\xbf" + text.encode("utf-8")), text)
+        self.assertEqual(self.read(text.encode("utf-16")), text)  # with its BOM
+        self.assertEqual(self.read(text.encode("cp1252")), text)
+        self.assertEqual(self.read("Größe".encode("latin-1")), "Größe")
+        self.assertEqual(self.read(b"\x81\xe9"), "\x81é")  # a byte cp1252 leaves undefined: Latin-1
 
 
 class TestProperties(unittest.TestCase):
@@ -89,41 +161,75 @@ class TestProperties(unittest.TestCase):
         self.assertEqual(convert.pdf_title_from_layout(bbox), "Attention Is All You&Need")
         self.assertIsNone(convert.pdf_title_from_layout(""))
 
+    def test_pdf_title_with_mixed_fonts_and_a_short_upright_word(self):
+        # ACL 2023: the first title line mixes two fonts (heights 18.48 / 18.67, tops 66.90 / 66.96), the second
+        # starts with "to" (taller than wide in a large font); two body words share that "to"'s x position.
+        self.assertEqual(convert.pdf_title_from_layout(recorded("acl-2023-long-1.page1.bbox.html")),
+                         "One Cannot Stand for Everyone! Leveraging Multiple User Simulators to train Task-oriented "
+                         "Dialogue Systems")
+
 
 class TestConvert(unittest.TestCase):
-    def test_text_is_read(self):
+    def test_markdown_is_read(self):
         with tools(), mock.patch.object(convert, "run", side_effect=AssertionError("no tool")):
             doc = convert.convert(FIXTURES / "plan.md")
-        self.assertEqual((doc.converter, doc.title, doc.author, doc.pages), ("read", "Quarterly Plan", "Jane Roe",
-                                                                             None))
+        self.assertEqual((doc.converter, doc.title, doc.author, doc.pages, doc.language),
+                         ("read", "Quarterly Plan", "Jane Roe", None, None))
 
-    def test_pdf_with_markitdown_pages(self):
-        run, calls = runner({"markitdown": recorded("three-pages.markitdown.md"),
+    def test_plain_text_is_fenced_and_has_no_heading_title(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, language in (("notes.txt", "text"), ("data.csv", "csv"), ("paper.tex", "latex")):
+                path = Path(tmp) / name
+                path.write_bytes("# not a heading\nCafé".encode("cp1252"))
+                with tools(), mock.patch.object(convert, "run", side_effect=AssertionError("no tool")):
+                    doc = convert.convert(path)
+                self.assertEqual((doc.language, doc.title, doc.markdown), (language, None, "# not a heading\nCafé"))
+
+    def test_pdf_with_pdftotext(self):
+        run, calls = runner({"layout": recorded(LAYOUT),
                              "pdfinfo": "Title: A Tiny Paper on Pages\nAuthor: Ada Lovelace\n"
                                         "CreationDate: Wed Apr 10 23:11:43 2024 CEST\nPages: 3\n"})
         with tools("uvx", "pdftotext", "pdfinfo"), run:
             doc = convert.convert(PDF)
         self.assertEqual((doc.converter, len(doc.pages), doc.title, doc.author, doc.published),
-                         ("markitdown", 3, "A Tiny Paper on Pages", "Ada Lovelace", "2024-04-10"))
+                         ("pdftotext", 3, "A Tiny Paper on Pages", "Ada Lovelace", "2024-04-10"))
         self.assertIn("It is short on purpose and has a hyphenated word.", doc.pages[1])
-        self.assertEqual(calls, ["markitdown", "pdfinfo"])
+        self.assertEqual(calls, ["layout", "pdfinfo"])
 
-    def test_pdf_falls_back_to_pdftotext_without_uvx(self):
-        run, calls = runner({"pdftotext": recorded("three-pages.pdftotext.txt"), "bbox": ""})
-        with tools("pdftotext"), run:
+    def test_pdf_title_from_the_layout_pdftotext_already_read(self):
+        run, calls = runner({"layout": recorded(LAYOUT), "pdfinfo": "Title:\nPages: 3\n"})
+        with tools("pdftotext", "pdfinfo"), run:
             doc = convert.convert(PDF)
-        self.assertEqual((doc.converter, len(doc.pages)), ("pdftotext", 3))
-        self.assertEqual(doc.attempts, ["markitdown: uvx is missing"])
+        self.assertEqual((doc.title, calls), ("A Tiny Paper on Pages", ["layout", "pdfinfo"]))
+
+    def test_pdf_falls_back_to_markitdown(self):
+        run, calls = runner({"markitdown": recorded("three-pages.markitdown.md")})
+        with tools("uvx"), run:
+            doc = convert.convert(PDF)
+        self.assertEqual((doc.converter, len(doc.pages), calls), ("markitdown", 3, ["markitdown"]))
+        self.assertEqual(doc.attempts, ["pdftotext: pdftotext is not installed"])
         self.assertIsNone(doc.title)  # no pdfinfo, no layout title: prepare.py falls back to the file name
+        run, _ = runner({"layout": SkillError("Syntax Error"), "markitdown": recorded("three-pages.markitdown.md")})
+        with tools("uvx", "pdftotext"), run:
+            self.assertEqual(convert.convert(PDF).attempts, ["pdftotext: failed (Syntax Error)"])
 
     def test_pdf_without_any_converter_is_a_missing_tool(self):
-        with tools(), self.assertRaises(MissingTool):
+        with tools(), self.assertRaisesRegex(MissingTool, "pdftotext, uvx missing"):
             convert.convert(PDF)
 
     def test_scanned_pdf(self):
-        run, _ = runner({"markitdown": "\f\f", "pdftotext": "\f\f"})
-        with tools("uvx", "pdftotext"), run, self.assertRaisesRegex(SkillError, "scanned PDF"):
+        run, _ = runner({"markitdown": "\f\f", "layout": "<page></page><page></page>"})
+        with tools("uvx", "pdftotext"), run, self.assertRaisesRegex(SkillError, "scanned PDF") as caught:
             convert.convert(PDF)
+        self.assertNotIsInstance(caught.exception, MissingTool)
+
+    def test_a_failure_next_to_a_missing_tool_is_no_missing_tool(self):
+        run, _ = runner({"markitdown": SkillError("boom")})
+        with tools("uvx"), run, self.assertRaisesRegex(SkillError, "installing pandoc may help") as caught:
+            convert.convert(FIXTURES / "plan.docx")
+        self.assertNotIsInstance(caught.exception, MissingTool)
+        with tools(), self.assertRaisesRegex(MissingTool, "uvx, pandoc missing"):
+            convert.convert(FIXTURES / "plan.docx")
 
     def test_docx_pptx_epub_with_markitdown(self):
         docs = {}
@@ -147,6 +253,45 @@ class TestConvert(unittest.TestCase):
         run, _ = runner({"markitdown": SkillError("boom")})
         with tools("uvx", "pandoc"), run, self.assertRaisesRegex(SkillError, "could not convert plan.pptx"):
             convert.convert(FIXTURES / "plan.pptx")  # pandoc cannot read pptx
+
+
+class TestLegacyFormats(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def file(self, name: str) -> Path:
+        path = self.dir / name
+        path.write_bytes(b"{\\rtf1\\ansi Hello}" if name.endswith(".rtf") else b"\xd0\xcf\x11\xe0")
+        return path
+
+    def test_rtf_goes_to_pandoc_first(self):
+        run, calls = runner({"pandoc": "Hello from the RTF.\n"})
+        with tools("uvx", "pandoc", "textutil"), run:
+            doc = convert.convert(self.file("legacy.rtf"))
+        self.assertEqual((doc.converter, calls), ("pandoc", ["pandoc"]))
+
+    def test_raw_rtf_from_markitdown_is_no_conversion(self):
+        run, _ = runner({"markitdown": "{\\rtf1\\ansi\\ansicpg1252 Hello}"})
+        with tools("uvx"), run, self.assertRaisesRegex(SkillError, "markitdown: returned the raw RTF"):
+            convert.convert(self.file("legacy.rtf"))
+        run, calls = runner({"textutil": "Hello from the RTF.\n"})
+        with tools("uvx", "textutil"), run:
+            self.assertEqual(convert.convert(self.file("legacy.rtf")).converter, "textutil")
+
+    def test_doc_with_textutil(self):
+        run, calls = runner({"textutil": "Hello from Word 97.\n"})
+        with tools("uvx", "textutil"), run:
+            doc = convert.convert(self.file("legacy.doc"))
+        self.assertEqual((doc.converter, doc.markdown, calls), ("textutil", "Hello from Word 97.\n", ["textutil"]))
+        with tools("uvx"), self.assertRaisesRegex(SkillError, "macOS only") as caught:
+            convert.convert(self.file("legacy.doc"))
+        self.assertNotIsInstance(caught.exception, MissingTool)  # nothing to install on Linux
+
+    def test_ppt_is_not_supported(self):
+        with tools("uvx"), self.assertRaisesRegex(SkillError, "save it as .pptx"):
+            convert.convert(self.file("old.ppt"))
 
 
 if __name__ == "__main__":

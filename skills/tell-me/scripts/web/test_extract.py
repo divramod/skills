@@ -2,6 +2,7 @@
 """Unit tests for web/extract.py (offline: recorded fixtures, network and tools mocked)."""
 import email.message
 import json
+import shlex
 import subprocess
 import sys
 import threading
@@ -427,6 +428,13 @@ class TestHttpGet(unittest.TestCase):
         with mock.patch.object(extract, "open_url", return_value=self.response(b"%PDF-1.7", "application/pdf")):
             with self.assertRaisesRegex(extract.NotAPage, "application/pdf document"):
                 extract.http_get(URL)
+
+    def test_the_file_command_in_the_message_quotes_the_url(self):
+        url = "https://x.org/it's here.pdf?a=1&b=2"
+        with mock.patch.object(extract, "open_url", return_value=self.response(b"%PDF-1.7", "application/pdf")):
+            with self.assertRaises(extract.NotAPage) as caught:
+                extract.http_get(url)
+        self.assertIn(f"scripts/file/prepare.py {shlex.quote(url)})", str(caught.exception))
 
 
 class Redirects(BaseHTTPRequestHandler):

@@ -21,6 +21,7 @@ import argparse
 import ipaddress
 import json
 import re
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -308,7 +309,7 @@ def http_get(url: str, timeout: int = TIMEOUT, accept: str = "text/html,*/*",
             ctype = r.headers.get_content_type()
             if not TEXT_TYPE_RE.match(ctype):
                 raise NotAPage(f"{url} is a {ctype} document, not a web page: summarize it as a file "
-                               f"(python3 scripts/file/prepare.py '{url}')")
+                               f"(python3 scripts/file/prepare.py {shlex.quote(url)})")
             permanent = all(c in (301, 308) for c in getattr(r, "redirect_codes", []))
             return decode(r.read(MAX_BYTES), r.headers.get_content_charset()), r.geturl(), permanent
     except urllib.error.HTTPError as e:

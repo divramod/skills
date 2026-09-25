@@ -45,7 +45,8 @@ source's own fields. Flags after the input go to the source script; the subskill
 - **Exit code 1** is an expected error (unsupported input, not found, blocked). Show the message; it names the
   fallback that was tried.
 - If `summary_exists` is true and the user did not ask for a new mode or language, show the existing page
-  (`python3 $S/shared/render_html.py "<dir>" --open`) instead of rewriting it.
+  (`python3 $S/shared/render_html.py "<dir>" --open`) instead of rewriting it, unless the envelope says
+  `changed: true` (the source has a new version: summarize it).
 - A playlist or channel (`kind: playlist|channel`) prints a list of items instead: prepare every item where
   `summary_exists` is false (parallel subagents when there are more than 3), then write the digest (step 7).
 - **Several inputs** in one call print `kind: inputs` with one envelope per input in `items` (or `{input, error,

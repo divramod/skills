@@ -58,6 +58,62 @@ class TestText(unittest.TestCase):
             "application/pdf", 'attachment; filename="../Report 2026.pdf"')), "Report 2026.pdf")
         self.assertEqual(prepare.file_name("https://x.org/a/paper.pdf", headers("application/octet-stream")),
                          "paper.pdf")
+        self.assertEqual(prepare.file_name("https://x.org/get/42", headers("application/octet-stream"),
+                                           b"%PDF-1.5\n"), "42.pdf")
+
+    def test_plain_text_goes_in_a_fence(self):
+        doc = convert.Document("# not a heading\n```\ncode\n```", "read", language="text")
+        meta = {"title": "notes", "url": "file:///x/notes.txt"}
+        content = prepare.render_content(meta, {"original_file": "original.txt"}, doc)
+        self.assertIn("## Document\n\n````text\n# not a heading\n```\ncode\n```\n````", content)
+        self.assertNotIn("- words:", content)
+
+
+class FakeResponse(io.BytesIO):
+    """What urllib.request.urlopen returns, over `body`."""
+
+    def __init__(self, body: bytes, ctype: str, length: int | None = None):
+        super().__init__(body)
+        self.headers = email.message.Message()
+        self.headers["Content-Type"] = ctype
+        if length is not None:
+            self.headers["Content-Length"] = str(length)
+
+
+class TestDownload(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def download(self, url: str, body: bytes, ctype: str, length: int | None = None) -> Path:
+        with mock.patch.object(prepare.urllib.request, "urlopen", return_value=FakeResponse(body, ctype, length)):
+            return prepare.download(url, self.dir)
+
+    def test_a_pdf(self):
+        path = self.download("https://arxiv.org/pdf/1810.04805", b"%PDF-1.5\n" + b"x" * 5000, "application/pdf")
+        self.assertEqual((path.name, path.stat().st_size), ("1810.04805.pdf", 5009))
+
+    def test_octet_stream_with_a_pdf_inside(self):
+        self.assertEqual(self.download("https://x.org/get?id=3", b"%PDF-1.4 ...", "application/octet-stream").name,
+                         "get.pdf")
+
+    def test_the_size_limit_counts_the_bytes(self):
+        with mock.patch.object(prepare, "MAX_DOWNLOAD", 10_000), \
+                self.assertRaisesRegex(SkillError, "more than 0 MB"):
+            self.download("https://x.org/big.pdf", b"%PDF-1.5" + b"x" * 20_000, "application/pdf")  # no length
+        with mock.patch.object(prepare, "MAX_DOWNLOAD", 10_000), self.assertRaisesRegex(SkillError, "more than"):
+            self.download("https://x.org/big.pdf", b"%PDF-1.5", "application/pdf", length=20_000)
+
+    def test_an_html_page_instead_of_the_pdf(self):
+        with self.assertRaisesRegex(SkillError, "sent an HTML page .* captcha"):
+            self.download("https://x.org/paper.pdf", b"<!DOCTYPE html><title>Just a moment...</title>", "text/html")
+        with self.assertRaisesRegex(SkillError, "sent an HTML page"):  # a wrong content type does not hide it
+            self.download("https://x.org/slides.pptx", b"\n  <html><body>login</body></html>", "application/pdf")
+
+    def test_a_pdf_url_that_serves_no_pdf(self):
+        with self.assertRaisesRegex(SkillError, "is not a PDF"):
+            self.download("https://x.org/paper.pdf", b"PK\x03\x04 a zip", "application/octet-stream")
 
 
 class PrepareCase(unittest.TestCase):
@@ -112,19 +168,93 @@ class TestPrepare(PrepareCase):
         refreshed = self.run_prepare(str(pdf), "--refresh")
         self.assertEqual((refreshed["dir"], self.converted), (first["dir"], 1))
 
+    def md(self, name: str, text: str, title: str | None = "Notes") -> tuple[Path, convert.Document]:
+        path = self.docs / name
+        path.write_text(text)
+        return path, convert.Document(text, "read", title=title)
+
     def test_a_changed_file_is_a_new_version_in_the_same_folder(self):
-        md = self.docs / "notes.md"
-        md.write_text("# Notes\n\nfirst draft\n")
-        doc1 = convert.Document("# Notes\n\nfirst draft\n", "read", title="Notes")
-        first = self.run_prepare(str(md), doc=doc1)
-        old_id = first["id"]
-        md.write_text("# Notes\n\nsecond draft\n")
-        second = self.run_prepare(str(md), doc=convert.Document("# Notes\n\nsecond draft\n", "read", title="Notes"))
-        self.assertEqual((second["dir"], second["changed"], second["reused"]), (first["dir"], True, True))
+        md, doc = self.md("notes.md", "# Notes\n\nfirst draft\n")
+        first = self.run_prepare(str(md), doc=doc)
+        folder, old_id = Path(first["dir"]), first["id"]
+        fetched = json.loads((folder / "metadata.json").read_text())["fetched"]
+        (folder / "summary.md").write_text("see [original.md](original.md)")
+        (folder / "summary.html").write_text('<a href="original.md">')
+        prepare.update_json(folder / "metadata.json", {"summary": {"mode": "tldr"}})
+        md, doc = self.md("notes.md", "# Notes\n\nsecond draft, much longer now\n")
+        second = self.run_prepare(str(md), doc=doc)
+        self.assertEqual((second["dir"], second["changed"], second["reused"], second["summary_exists"]),
+                         (first["dir"], True, True, False))
         self.assertNotEqual(second["id"], old_id)
-        self.assertEqual([v["sha256"] for v in second["versions"]], [old_id])
+        short = old_id[:8]
+        self.assertEqual(second["versions"], [{"sha256": old_id, "prepared": fetched,
+                                               "original_file": f"original.{short}.md",
+                                               "summary_file": f"summary.{short}.md", "summary": {"mode": "tldr"}}])
+        self.assertEqual((folder / f"summary.{short}.md").read_text(),
+                         f"see [original.{short}.md](original.{short}.md)")  # its links follow the kept original
+        self.assertTrue((folder / f"summary.{short}.html").exists())
+        self.assertEqual((folder / f"original.{short}.md").read_text(), "# Notes\n\nfirst draft\n")
+        self.assertEqual((folder / "original.md").read_text(), md.read_text())
+        meta = json.loads((folder / "metadata.json").read_text())
+        self.assertNotIn("summary", meta)
         content = Path(second["content_file"]).read_text()
         self.assertIn("### Notes\n\nsecond draft", content)  # the document's heading below ## Document
+        self.assertEqual(meta["word_count"], len(content.split()))
+
+    def test_another_document_under_a_reused_name_gets_its_own_folder(self):
+        pdf = self.docs / "paper.pdf"
+        pdf.write_bytes(b"%PDF-1 first")
+        first = self.run_prepare(str(pdf))  # "A Tiny Paper on Pages"
+        pdf.write_bytes(b"%PDF-1 second")
+        other = convert.Document("Completely different words about gardening and tomatoes.", "pdftotext",
+                                 ["Completely different words about gardening and tomatoes."], "Growing Tomatoes")
+        second = self.run_prepare(str(pdf), doc=other)
+        self.assertNotEqual(second["dir"], first["dir"])
+        self.assertEqual((second["reused"], second.get("changed"), second["title"]), (False, None, "Growing Tomatoes"))
+        old_meta = json.loads((Path(first["dir"]) / "metadata.json").read_text())
+        self.assertEqual(old_meta["extras"]["aliases"], [])  # the path names the new document now
+        self.assertTrue((Path(first["dir"]) / "original.pdf").read_bytes().endswith(b"first"))
+        again = self.run_prepare(str(pdf), doc=other)
+        self.assertEqual((again["dir"], self.converted), (second["dir"], 0))
+        # --refresh is the evidence that it is a new version of the first one
+        pdf.write_bytes(b"%PDF-1 third")
+        third = self.run_prepare(str(pdf), "--refresh", doc=other)
+        self.assertEqual((third["dir"], third["changed"]), (second["dir"], True))
+
+    def test_an_untitled_document_with_mostly_the_same_words_is_a_new_version(self):
+        text = "one two three four five six seven eight nine ten\n"
+        txt, doc = self.md("log.txt", text, title=None)
+        first = self.run_prepare(str(txt), doc=doc)
+        txt, doc = self.md("log.txt", text + "eleven\n", title=None)
+        self.assertEqual(self.run_prepare(str(txt), doc=doc)["dir"], first["dir"])
+
+    def test_no_ping_pong_between_two_paths_that_had_the_same_content(self):
+        a, doc = self.md("a.md", "# Notes\n\nsame\n")
+        (self.tmp / "other").mkdir()
+        b = self.tmp / "other" / "a.md"
+        b.write_text(a.read_text())
+        first = self.run_prepare(str(a), doc=doc)
+        self.assertEqual(self.run_prepare(str(b), doc=doc)["dir"], first["dir"])  # same content: one folder
+        b.write_text("# Notes\n\nsame, edited\n")
+        edited = convert.Document(b.read_text(), "read", title="Notes")
+        self.assertEqual(self.run_prepare(str(b), doc=edited)["changed"], True)
+        meta = json.loads((Path(first["dir"]) / "metadata.json").read_text())
+        self.assertEqual(meta["extras"]["aliases"], [str(b)])  # a has the earlier content
+        a_again = self.run_prepare(str(a), doc=doc)
+        self.assertNotEqual(a_again["dir"], first["dir"])
+        for path, d, folder in ((a, doc, a_again["dir"]), (b, edited, first["dir"]), (a, doc, a_again["dir"])):
+            env = self.run_prepare(str(path), doc=d)
+            self.assertEqual((env["dir"], env["reused"], env.get("changed"), self.converted), (folder, True, None, 0))
+        versions = json.loads((Path(first["dir"]) / "metadata.json").read_text())["extras"]["versions"]
+        self.assertEqual(len(versions), 1)
+
+    def test_the_librarys_own_copy_can_be_prepared_again(self):
+        pdf = self.docs / "tiny.pdf"
+        shutil.copy(FIXTURES / "three-pages.pdf", pdf)
+        first = self.run_prepare(str(pdf))
+        env = self.run_prepare(str(Path(first["dir"]) / "original.pdf"), "--refresh")  # no SameFileError
+        self.assertEqual((env["dir"], self.converted), (first["dir"], 1))
+        self.assertEqual((Path(first["dir"]) / "original.pdf").read_bytes(), pdf.read_bytes())
 
     def test_a_url_is_downloaded(self):
         def fake_download(url, into):

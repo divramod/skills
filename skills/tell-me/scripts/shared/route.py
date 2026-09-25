@@ -37,10 +37,10 @@ VIDEO_HOSTS = (
 )
 MEDIA_EXT = {".mp4", ".m4v", ".mkv", ".webm", ".mov", ".avi", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav",
              ".flac", ".m3u8"}
-DOC_EXT = {".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls", ".epub", ".odt", ".rtf", ".md", ".txt",
+DOC_EXT = {".pdf", ".docx", ".doc", ".pptx", ".xlsx", ".xls", ".epub", ".odt", ".rtf", ".md", ".txt",
            ".html", ".htm", ".csv", ".json", ".xml", ".ipynb", ".tex", ".rst", ".org"}
 # Document URLs that go to the file source (a remote .md/.html/.txt is just a web page).
-REMOTE_DOC_EXT = {".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls", ".epub", ".odt", ".rtf", ".ipynb"}
+REMOTE_DOC_EXT = {".pdf", ".docx", ".doc", ".pptx", ".xlsx", ".xls", ".epub", ".odt", ".rtf", ".ipynb"}
 X_HOSTS = {"x.com", "twitter.com", "fixupx.com", "fxtwitter.com", "vxtwitter.com", "fixvx.com", "nitter.net",
            "xcancel.com"}
 # github.com/<first segment> that are not owners.

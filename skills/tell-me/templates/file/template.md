@@ -1,5 +1,6 @@
 <!-- file: what the file source adds to the shared templates (templates/shared/<mode>.md). -->
 <!-- Anchor links: [p. n](original.pdf#page=n) page links in a PDF's content.md; copy them, never build them.
+     They are relative to the document's folder: only this summary.md may use them, never a digest.
      Documents without pages: name the section or slide in words. -->
 
 <!-- paper: in summary / detailed mode put these sections in place of "## Key points" (the other modes keep their
