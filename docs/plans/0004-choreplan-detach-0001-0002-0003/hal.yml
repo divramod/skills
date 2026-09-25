@@ -1,0 +1,24 @@
+schema_version: 1
+automode: completed
+cadence: phase
+gap_policy: small_inline_big_to_gaps_plan
+retry_budget: 3
+tier: micro
+tier_source: manual
+auto_downgrade: false
+last_action: shipped via /hal-lc-fix at (pending)
+active: false
+targets: []
+targets_rationale: tier-zero /hal-lc-fix — single trivial change
+phases: []
+queue_position: 0
+phase_budget_tokens: 250000
+drift_budget_tokens: 40000
+adaptive_clear: false
+clear_mode: context
+notify:
+  channel: none
+token_spent_total: 0
+auto_research: false
+daemon_resume_strategy: c_c
+resume_watchdog_minutes: 30
