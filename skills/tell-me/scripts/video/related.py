@@ -88,7 +88,7 @@ def main(argv=None) -> int:
     require("yt-dlp")
     meta = read_json(args.folder / "metadata.json")
     if not meta:
-        raise SkillError(f"{args.folder}/metadata.json missing: run prepare_video.py first")
+        raise SkillError(f"{args.folder}/metadata.json missing: run prepare.py first")
     with ThreadPoolExecutor(max_workers=4) as pool:
         found = list(pool.map(lambda q: (q, search(q, args.per_query, args.cookies_from_browser)), args.query))
     videos = merge(found, meta.get("id"), summarized_ids(library_root()), args.folder.resolve())

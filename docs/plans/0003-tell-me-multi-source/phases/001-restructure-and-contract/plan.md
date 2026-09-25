@@ -34,7 +34,7 @@ Restructure without new behaviour. Afterwards the video flow works exactly as be
   **Files**: skills/tell-me/scripts/**
   **Size**: L
   **State**:
-  - [ ] built
+  - [x] built
   - [ ] tested
   - [ ] reviewed
   - [ ] shipped

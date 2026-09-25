@@ -7,7 +7,7 @@ video has too few scene changes (e.g. static slides). Writes <dir>/frames/NNN.jp
 <dir>/frames/index.md (frame -> timestamp link).
 
 Usage: extract_frames.py <video-dir> [--max 40] [--threshold 0.3] [--min 4]
-Requires: ffmpeg. The folder must contain video.<ext> (prepare_video.py downloads it unless --skip-download).
+Requires: ffmpeg. The folder must contain video.<ext> (prepare.py downloads it unless --skip-download).
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def extract(folder: Path, max_frames: int = 40, threshold: float = 0.3, min_fram
     require("ffmpeg")
     video = find_file(folder, "video")
     if not video:
-        raise SkillError(f"no video.<ext> in {folder}; run prepare_video.py without --skip-download first")
+        raise SkillError(f"no video.<ext> in {folder}; run prepare.py without --skip-download first")
     info = read_json(folder / "metadata.json")
     duration = float(info.get("duration") or 0) or probe_duration(video) or 60.0
     out = folder / "frames"

@@ -1,5 +1,5 @@
 schema_version: 1
-automode: idle
+automode: running
 cadence: phase
 gap_policy: small_inline_big_to_gaps_plan
 retry_budget: 3
