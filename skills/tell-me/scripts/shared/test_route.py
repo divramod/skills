@@ -71,6 +71,19 @@ class TestRoute(unittest.TestCase):
                          ("https://github.com/yt-dlp/yt-dlp/tree/master/yt_dlp/extractor", "master", "yt_dlp/extractor"))
         self.assertEqual(route(r["url"])["path"], "yt_dlp/extractor")  # shared/prepare.py passes the url on
 
+    def test_github_ref_path_is_kept_whole_for_slashed_refs(self):
+        r = route("https://github.com/o/r/blob/feature/x/src/a%20b.py")
+        self.assertEqual((r["kind"], r["ref"], r["path"], r["ref_path"]),
+                         ("blob", "feature", "x/src/a b.py", "feature/x/src/a b.py"))  # github/prepare.py splits it
+        self.assertNotIn("ref_path", route("https://github.com/o/r"))
+
+    def test_github_names_are_validated(self):
+        for bad in ("https://github.com/o/..", "https://github.com/o/.", "https://github.com/o%20x/r",
+                    "https://github.com/o/r@x/issues/1", "https://github.com/o/.git"):
+            with self.subTest(bad), self.assertRaisesRegex(SkillError, "not a GitHub owner or repo name"):
+                route(bad)
+        self.assertEqual(route("https://github.com/o.x/r_y-z.js")["id"], "o.x/r_y-z.js")
+
     def test_web_url_is_kept_as_given(self):
         r = route("http://localhost:8000/doc#/route?utm_source=x")
         self.assertEqual(r["url"], "http://localhost:8000/doc#/route?utm_source=x")

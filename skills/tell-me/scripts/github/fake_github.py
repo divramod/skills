@@ -25,7 +25,9 @@ def repo_answers() -> dict:
         f"repos/{REPO}/releases/latest": load("release.json"),
         f"repos/{REPO}/commits/main": load("commit.json"),
         f"repos/{REPO}/git/trees/{SHA}?recursive=1": load("tree.json"),
-        f"repos/{REPO}/readme": {"path": "README.md", "content": base64.b64encode(readme.encode()).decode()},
+        f"repos/{REPO}/readme?ref={SHA}": {"path": "README.md",
+                                           "content": base64.b64encode(readme.encode()).decode()},
+        f"repos/{REPO}/git/matching-refs/heads/main": [{"ref": "refs/heads/main"}],
     }
 
 
@@ -49,6 +51,7 @@ class FakeGitHub(GitHub):
         return self.get("graphql:" + json.dumps(variables, sort_keys=True))
 
     def raw_file(self, repo: str, sha: str, path: str) -> str:
+        self.calls.append(f"raw:{path}")
         if path not in self.files:
             raise NotFound(f"not found: {path}")
         return self.files[path]

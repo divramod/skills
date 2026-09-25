@@ -51,6 +51,7 @@ GITHUB_RESERVED = {"about", "apps", "blog", "collections", "contact", "customer-
 TRACKING_PARAMS = re.compile(r"^(utm_\w+|fbclid|gclid|mc_cid|mc_eid|ref_src|ref_url|si|igshid)$")
 _BARE_HOST_RE = re.compile(r"^[\w-]+(\.[\w-]+)*\.[a-z]{2,}(:\d+)?(/|\?|$)", re.I)
 _YT_ID_RE = re.compile(r"^[\w-]{11}$")
+_GITHUB_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")  # an owner or repo name
 
 
 def host_of(url: str) -> str:
@@ -131,6 +132,9 @@ def github(host: str, segs: list[str]) -> dict | None:
     if host != "github.com" or len(segs) < 2 or segs[0].lower() in GITHUB_RESERVED:
         return None
     owner, repo = segs[0], re.sub(r"\.git$", "", segs[1])
+    for name in (owner, repo):
+        if not _GITHUB_NAME_RE.match(name) or name in (".", ".."):
+            raise SkillError(f"github: {name!r} is not a GitHub owner or repo name (letters, digits, . _ -)")
     base = f"https://github.com/{owner}/{repo}"
     rest = segs[2:]
     kinds = {"issues": "issue", "pull": "pull", "pulls": "pull", "discussions": "discussion"}
@@ -141,7 +145,10 @@ def github(host: str, segs: list[str]) -> dict | None:
                 "repo": f"{owner}/{repo}", "number": int(rest[1])}
     out = {"kind": "repo", "id": f"{owner}/{repo}", "url": base, "repo": f"{owner}/{repo}"}
     if len(rest) >= 2 and rest[0] in ("tree", "blob"):
-        out |= {"ref": rest[1], "path": "/".join(rest[2:]), "url": f"{base}/{rest[0]}/{'/'.join(rest[1:])}"}
+        # ref/path is a guess: a ref may hold slashes (feature/x); github/prepare.py splits `ref_path` by the
+        # repo's branches and tags
+        out |= {"ref": unquote(rest[1]), "path": unquote("/".join(rest[2:])),
+                "ref_path": unquote("/".join(rest[1:])), "url": f"{base}/{rest[0]}/{'/'.join(rest[1:])}"}
         if rest[0] == "blob":
             out["kind"] = "blob"
     return out

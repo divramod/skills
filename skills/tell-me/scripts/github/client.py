@@ -23,6 +23,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _comm
 
 from _common import SkillError, log, require, run_main
 
+HOST = "github.com"
 API = "https://api.github.com/"
 RAW = "https://raw.githubusercontent.com/"
 TIMEOUT = 60
@@ -87,26 +88,36 @@ class GitHub:
             raise SkillError("GitHub discussions need gh: run `gh auth login`")
         if data.get("errors"):
             msg = "; ".join(e.get("message", "?") for e in data["errors"])
-            if any(e.get("type") == "NOT_FOUND" for e in data["errors"]):
+            if any(e.get("type") == "NOT_FOUND" or "Could not resolve to" in e.get("message", "")
+                   for e in data["errors"]):
                 raise NotFound(msg)
             raise SkillError(f"GitHub GraphQL: {msg}")
         return data["data"]
 
     def raw_file(self, repo: str, sha: str, path: str) -> str:
-        """A file's text from raw.githubusercontent.com (no API rate limit)."""
+        """A file's text at a commit. gh: the contents API (its login reaches private repos); else
+        raw.githubusercontent.com (no API rate limit), with the token when set (private repos need it)."""
         quoted = urllib.parse.quote(path)
-        return http(f"{RAW}{repo}/{sha}/{quoted}", {"User-Agent": "tell-me"})
+        if self.use_gh:
+            return self.get(f"repos/{repo}/contents/{quoted}?ref={sha}", raw=True)
+        headers = {"User-Agent": "tell-me"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        return http(f"{RAW}{repo}/{sha}/{quoted}", headers)
 
     def _gh(self, args: list[str], raw: bool = False):
+        # --hostname: github.com even when GH_HOST points gh at a GitHub Enterprise server
+        cmd = ["gh", args[0], "--hostname", HOST, *args[1:]]
         try:
-            p = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                timeout=TIMEOUT)
         except subprocess.TimeoutExpired:
             raise SkillError(f"gh {args[1]} timed out after {TIMEOUT}s")
         if p.returncode != 0:
             err = (p.stderr.strip() or p.stdout.strip()).splitlines()
             msg = err[-1] if err else f"gh exited {p.returncode}"
-            if "HTTP 404" in msg or "Not Found" in msg:
+            # GraphQL answers a missing discussion or repo with "Could not resolve to a Discussion ..."
+            if "HTTP 404" in msg or "Not Found" in msg or "Could not resolve to" in msg:
                 raise NotFound(f"not found on GitHub: {args[1]} ({msg})")
             if "rate limit" in msg.lower():
                 raise SkillError(f"GitHub rate limit reached ({msg}); wait for the reset (`gh api rate_limit`)")
@@ -119,7 +130,8 @@ def gh_ready() -> bool:
     if not shutil.which("gh"):
         return False
     try:
-        return subprocess.run(["gh", "auth", "token"], capture_output=True, timeout=15).returncode == 0
+        return subprocess.run(["gh", "auth", "token", "--hostname", HOST], capture_output=True,
+                              timeout=15).returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False
 

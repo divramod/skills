@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "shared"))  # _common + the shared steps
 
-from _common import SkillError, find_by_id, library_root, log, read_json, run_main
+from _common import SkillError, library_root, log, read_json, run_main, source_root
 from client import GitHub
 
 TOPICS = 6  # topics searched one by one (the repo's own name as a topic is skipped)
@@ -35,6 +35,22 @@ def search(gh: GitHub, q: str) -> tuple[list[dict], int]:
     query = urllib.parse.urlencode({"q": q, "sort": "stars", "order": "desc", "per_page": PER_SEARCH})
     answer = gh.get(f"search/repositories?{query}") or {}
     return answer.get("items") or [], answer.get("total_count") or 0
+
+
+def library_repos(root: Path | None = None) -> dict[str, Path]:
+    """owner/repo (lower case; its aliases too) -> the folder of its summary, from one walk of the library."""
+    base = source_root("github", root)
+    found: dict[str, Path] = {}
+    if not base.is_dir():
+        return found
+    for meta in base.rglob("metadata.json"):
+        data = read_json(meta)
+        if data.get("source") != "github" or "#" in str(data.get("id")) or data.get("kind") == "digest":
+            continue
+        for name in [data.get("id"), *((data.get("extras") or {}).get("aliases") or [])]:
+            if name:
+                found.setdefault(str(name).lower(), meta.parent)
+    return found
 
 
 def similar(gh: GitHub, repo: str, topics: list[str], query: str | None = None, limit: int = 10,
@@ -54,6 +70,7 @@ def similar(gh: GitHub, repo: str, topics: list[str], query: str | None = None, 
         for h in found:
             hits.setdefault(h["full_name"], h)
     mine = set(searched)
+    library = library_repos(root) if folder else {}
     out = []
     for full, h in hits.items():
         if full.lower() == repo.lower() or h.get("fork"):
@@ -64,7 +81,7 @@ def similar(gh: GitHub, repo: str, topics: list[str], query: str | None = None, 
                 "shared_topics": shared, "score": round(sum(weight.get(t, 1.0) for t in shared), 2)}
         if h.get("archived"):
             item["archived"] = True
-        known = find_by_id("github", full, root)
+        known = library.get(full.lower())
         if known and (known / "summary.html").exists() and folder:
             item["summary"] = os.path.relpath(known / "summary.html", folder).replace(os.sep, "/")
         out.append(item)

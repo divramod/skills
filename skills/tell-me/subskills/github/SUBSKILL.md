@@ -2,10 +2,13 @@
 
 GitHub repositories, and their issues, pull requests and discussions.
 
-- **Repo** (`github.com/<owner>/<repo>`, also a `/tree/<ref>/<path>` or `/blob/<ref>/<path>` link, which reads that
-  path first): `content.md` has a header (description, stars, license, languages, latest release, last push,
-  topics, the commit it was read at), `## README`, `## Files` (the first 200 paths, shallow first) and `## Docs`
-  (root markdown like ARCHITECTURE.md and `docs/`, up to a size budget).
+- **Repo** (`github.com/<owner>/<repo>`, also a `/tree/<ref>/<path>` or `/blob/<ref>/<path>` link, which reads the
+  repo at that ref (branch, tag or commit; the header's `commit:` line names it) and that path first: a `/blob`
+  file of any kind, code too, or the markdown in a `/tree` folder): `content.md` has a header (description,
+  stars, license, languages, latest release, last push, topics, the commit it was read at), `## README`,
+  `## Files` (the first 200 paths, shallow first) and `## Docs` (the focus, root markdown like ARCHITECTURE.md
+  and `docs/`, up to a size budget and at most 40 files). A code file is shown with numbered lines; link a line
+  as the `[L<n>](…#L<n>)` pattern given above it.
 - **Issue / pull request / discussion**: a header (state, who opened it, labels, for a PR the branch and diff
   size), the opening post under `## Issue`, `## Pull request` or `## Discussion`, `## Files changed` for a PR, then
   `## Comments`, one line per comment in time order:
@@ -23,13 +26,15 @@ python3 $S/shared/prepare.py "<github url>" [--deep] [--refresh]
 - The API goes through `gh` when it is installed and logged in (5000 requests/hour), else plain HTTPS (60
   requests/hour, or 5000 with `GITHUB_TOKEN` set); the envelope's `api` says which. On a rate-limit error tell the
   user to run `gh auth login`. Discussions need GraphQL: `gh` or `GITHUB_TOKEN`.
-- `--deep` also packs the whole repository with repomix (`npx`, pinned) into `repo-pack.md` next to
-  `content.md`; the envelope's `pack_file` and `pack_words` point at it. Use it when the user asks how the code
+- `--deep` also packs the whole repository with repomix (`npx`, pinned) at the same commit as `content.md` into
+  `repo-pack.md` next to it; the envelope's `pack_file` and `pack_words` point at it (a `--refresh` without
+  `--deep` that lands on a newer commit drops the old pack). Use it when the user asks how the code
   works (architecture, a specific mechanism), not for "what is this repo". It clones the repo: for a big one
   (the script warns) it takes minutes and the pack can exceed what you can read, so read it selectively (search
   it for the files and symbols that matter).
 - An item prepared before is reused (repos by `owner/repo`, threads by `owner/repo#n`); `--refresh` refetches it
-  into the same folder. A repo link with a different focus path is refetched.
+  into the same folder. A repo link with a different ref or focus path is refetched. The id is GitHub's
+  spelling of the repo (a link that differs in case, or an issue since transferred, lands in the same folder).
 - An `/issues/N` link to a pull request is prepared as the pull request.
 
 ## Anchor links
@@ -78,7 +83,7 @@ The page header shows the owner, the date and a link to GitHub; the full `conten
 **Repository** section below the summary. Repos live in `repos/github/<owner>/<repo>/`, threads in
 `repos/github/<owner>/<repo>/<issues|pulls|discussions>/<n>-<title>/`, each with `summary.md`, `summary.html`,
 `content.md`, `metadata.json` (`extras`: stars, license, languages, release, topics, sha, docs, api, pack_file;
-threads: number, state, labels, comments, merged, additions, deletions) and `repo-pack.md` after `--deep`.
+ref, focus_path; threads: number, state, labels, comments, merged, additions, deletions, discussions: upvotes) and `repo-pack.md` after `--deep`.
 
 ## Scripts (`scripts/github/`)
 

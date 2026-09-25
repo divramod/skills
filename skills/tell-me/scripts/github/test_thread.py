@@ -18,6 +18,7 @@ import prepare  # noqa: E402
 import related  # noqa: E402
 import thread  # noqa: E402
 from _common import CONTRACT_KEYS, ENVELOPE_KEYS, SkillError, read_json, write_json  # noqa: E402
+from client import NotFound  # noqa: E402
 from fake_github import REPO, FakeGitHub, load  # noqa: E402
 
 ISSUE, PULL, DISCUSSION = load("issue.api.json"), load("pull.api.json"), load("discussion.api.json")
@@ -71,6 +72,30 @@ class TestIssue(Base):
         dates = re.findall(r"^- \*\*\S+\*\* \[→\]\(\S+#issuecomment-\d+\) \((\S+?)[,)]", content, re.M)
         self.assertEqual(dates, sorted(dates))
 
+    def test_url_case_is_canonicalized_and_kept_as_alias(self):
+        for k in [k for k in ISSUE if k.startswith("repos/kepano/")]:
+            self.gh.answers[k.replace("repos/kepano/defuddle", "repos/Kepano/Defuddle")] = ISSUE[k]
+        first = self.run_main("https://github.com/kepano/defuddle/issues/375")
+        env = self.run_main("https://github.com/Kepano/Defuddle/issues/375", "--refresh")
+        self.assertEqual((env["dir"], env["id"], env["reused"]), (first["dir"], f"{REPO}#375", True))
+        meta = read_json(Path(env["dir"]) / "metadata.json")
+        self.assertEqual((meta["extras"]["repo"], meta["extras"]["aliases"]), (REPO, ["Kepano/Defuddle#375"]))
+        calls = len(self.gh.calls)
+        again = self.run_main("https://github.com/Kepano/Defuddle/issues/375")  # the alias finds it, no fetch
+        self.assertEqual((again["dir"], again["reused"], len(self.gh.calls)), (first["dir"], True, calls))
+        self.assertEqual(len(list((self.root / "repos").rglob("metadata.json"))), 1)
+
+    def test_a_transferred_issue_lives_in_its_new_repo(self):
+        issue = json.loads(json.dumps(ISSUE["repos/kepano/defuddle/issues/375"]))
+        issue |= {"html_url": "https://github.com/obsidianmd/clipper/issues/12", "number": 12,
+                  "repository_url": "https://api.github.com/repos/obsidianmd/clipper"}
+        self.gh.answers = {"repos/kepano/defuddle/issues/375": issue,
+                           "repos/obsidianmd/clipper/issues/12/comments?per_page=100&page=1": []}
+        env = self.run_main("https://github.com/kepano/defuddle/issues/375")
+        self.assertIn("/repos/github/obsidianmd/clipper/issues/12-", env["dir"])
+        meta = read_json(Path(env["dir"]) / "metadata.json")
+        self.assertEqual((meta["id"], meta["extras"]["aliases"]), ("obsidianmd/clipper#12", [f"{REPO}#375"]))
+
     def test_rerun_reuses(self):
         first = self.run_main("https://github.com/kepano/defuddle/issues/375")
         calls = len(self.gh.calls)
@@ -92,6 +117,16 @@ class TestPull(Base):
         self.assertRegex(content, r"#discussion_r\d+\) \(2026-09-24, on crates/uv-bench/benches/uv_pypi_types\.rs:\d+\)")
         self.assertRegex(content, r"#pullrequestreview-\d+\) \([\d-]+, approved\)")
 
+    def test_a_pending_review_is_left_out(self):
+        key = "repos/astral-sh/uv/pulls/21966/reviews?per_page=100&page=1"
+        self.gh.answers[key] = PULL[key] + [{"state": "PENDING", "submitted_at": None, "body": "draft thoughts",
+                                              "user": {"login": "me"}, "html_url": "https://github.com/x#r"}]
+        with mock.patch.object(thread, "log"):
+            t = thread.fetch_issue(self.gh, {"repo": "astral-sh/uv", "number": 21966})
+        self.assertNotIn("draft thoughts", [c["body"] for c in t["comments"]])
+        dates = [c["date"] for c in t["comments"]]
+        self.assertEqual(dates, sorted(dates))
+
     def test_an_issue_link_to_a_pull_request_is_a_pull_request(self):
         env = self.run_main("https://github.com/astral-sh/uv/issues/21966")
         self.assertEqual(env["kind"], "pull")
@@ -103,6 +138,8 @@ class TestDiscussion(Base):
         self.assertEqual((env["kind"], env["comments"]), ("discussion", 3))
         content = Path(env["content_file"]).read_text()
         self.assertIn("- category: Ideas\n", content)
+        self.assertIn("- upvotes: 2\n", content)  # the discussion's upvoteCount, not reactions
+        self.assertNotIn("- reactions:", content)
         self.assertIn("## Discussion\n\n- **d8vjork**", content)
         self.assertIn("## Comments\n\n- **benface** [→](https://github.com/tailwindlabs/tailwindcss/discussions/307"
                       "#discussioncomment-55955) (2019-01-02, 1 upvote): ", content)
@@ -128,7 +165,7 @@ class TestDiscussion(Base):
     def test_missing_discussion(self):
         key = next(k for k in DISCUSSION if k.startswith("graphql:"))
         gh = FakeGitHub({key: {"repository": {"discussion": None}}})
-        with self.assertRaisesRegex(SkillError, "no discussion #307"):
+        with self.assertRaisesRegex(NotFound, "no discussion #307"):
             thread.fetch_discussion(gh, {"repo": "tailwindlabs/tailwindcss", "number": 307})
 
 
@@ -161,6 +198,22 @@ class TestRelated(Base):
         self.assertEqual(found[0], percollate)
         trafilatura = next(f for f in found if f["repo"] == "adbar/trafilatura")
         self.assertGreater(trafilatura["score"], next(f for f in found if f["shared_topics"] == ["cli"])["score"])
+
+    def test_the_library_is_walked_once_and_aliases_count(self):
+        topics = load("repo.json")["topics"]
+        known = self.root / "repos" / "github" / "adbar" / "trafilatura"
+        known.mkdir(parents=True)
+        write_json(known / "metadata.json", {"source": "github", "id": "adbar/Trafilatura-old",
+                                             "extras": {"aliases": ["adbar/trafilatura"]}})
+        (known / "summary.html").write_text("x")
+        folder = self.folder(topics)
+        with mock.patch.object(related, "log"), \
+                mock.patch.object(related, "library_repos", wraps=related.library_repos) as walk:
+            found = related.similar(FakeGitHub(load("search.api.json")), REPO, topics, None, 50, self.root, folder)
+        walk.assert_called_once()
+        self.assertGreater(len(found), 5)
+        hit = next(f for f in found if f["repo"] == "adbar/trafilatura")
+        self.assertEqual(hit["summary"], "../../adbar/trafilatura/summary.html")
 
     def test_no_topics_needs_a_query(self):
         folder = self.folder([])
