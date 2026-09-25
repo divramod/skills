@@ -6,7 +6,7 @@ retry_budget: 3
 tier: large
 tier_source: manual
 auto_downgrade: false
-last_action: '004 shipped (fixes f1caed9); 005 x built+tested (5314c0a), review running; 006 file in build'
+last_action: '005 shipped (fixes 2b8079f); 006 fix agent + 008 review running; 007 fixes cba8a01, SKILL.md notes pending'
 active: true
 targets:
 - skills/tell-me

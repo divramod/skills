@@ -30,8 +30,8 @@ Build the panels on the dispatch hook from 001; each panel is small and reads on
   **Files**: skills/tell-me/scripts/shared/library.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -41,8 +41,8 @@ Build the panels on the dispatch hook from 001; each panel is small and reads on
   **Files**: skills/tell-me/scripts/shared/render_html.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -52,8 +52,8 @@ Build the panels on the dispatch hook from 001; each panel is small and reads on
   **Files**: README.md, .claude-plugin/*, .codex-plugin/*
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
