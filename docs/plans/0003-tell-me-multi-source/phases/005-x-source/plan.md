@@ -30,8 +30,8 @@ Verify the FxTwitter v2 response shape live once and save it as a fixture. The r
   **Files**: skills/tell-me/scripts/x/client.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -41,8 +41,8 @@ Verify the FxTwitter v2 response shape live once and save it as a fixture. The r
   **Files**: skills/tell-me/scripts/x/prepare.py
   **Size**: M
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -52,8 +52,8 @@ Verify the FxTwitter v2 response shape live once and save it as a fixture. The r
   **Files**: skills/tell-me/scripts/x/prepare.py
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -63,8 +63,8 @@ Verify the FxTwitter v2 response shape live once and save it as a fixture. The r
   **Files**: skills/tell-me/scripts/x/*.sh, subskills/x/, templates/x/
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
@@ -74,8 +74,8 @@ Verify the FxTwitter v2 response shape live once and save it as a fixture. The r
   **Files**: –
   **Size**: S
   **State**:
-  - [ ] built
-  - [ ] tested
+  - [x] built
+  - [x] tested
   - [ ] reviewed
   - [ ] shipped
 
