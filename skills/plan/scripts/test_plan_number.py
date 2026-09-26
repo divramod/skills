@@ -73,7 +73,7 @@ class PlanNumberTest(unittest.TestCase):
 
     def test_legacy_docs_plans_on_an_old_branch_still_counts(self):
         git(self.main, "switch", "-q", "-c", "old-layout")
-        legacy = self.main / "plans"
+        legacy = self.main / "docs/plans"
         legacy.mkdir(parents=True)
         (legacy / "0006-before-the-move.md").write_text("# old\n")
         git(self.main, "add", ".")

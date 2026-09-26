@@ -2,7 +2,7 @@
 """Unique, increasing plan numbers across every worktree and branch of a repository.
 
 A plan number is taken when any of these holds a `plans/<NNNN>-...` entry (file or old-style folder; the legacy
-`plans/` location still counts, so unmerged old branches can't cause duplicates):
+`docs/plans/` location still counts, so unmerged old branches can't cause duplicates):
 the working tree of any worktree (main, user or feature worktrees, committed or not), any local branch, any
 remote-tracking branch, or the reservation file in the git common directory, which all worktrees of a clone
 share. `next` takes the highest taken number + 1 and reserves it under a file lock, so two worktrees creating a
@@ -26,7 +26,7 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-PLAN_DIRS = ("plans", "plans")  # plans: legacy location, still counted
+PLAN_DIRS = ("plans", "docs/plans")  # docs/plans: legacy location, still counted
 ENTRY_RE = re.compile(r"^(\d{4})-(.+?)(\.md)?$")
 RESERVATIONS = "plan-numbers.json"
 
