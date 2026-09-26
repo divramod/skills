@@ -1,4 +1,4 @@
-"""commit-handoff.sh commits the handoff file alone and leaves other changes untouched."""
+"""commit-handoff.sh commits exactly the named docs and leaves other changes untouched."""
 import os
 import subprocess
 import tempfile
@@ -38,29 +38,30 @@ class CommitHandoffTest(unittest.TestCase):
         (self.repo / "other.txt").write_text("untracked\n")
         (self.repo / "docs").mkdir()
         (self.repo / "docs/handoff.md").write_text("# Handoff\n")
+        (self.repo / "docs/intent.md").write_text("# Intent\n")
 
-        result = self.commit("docs/handoff.md", "docs: update handoff")
+        result = self.commit("docs: update handoff", "docs/handoff.md", "docs/intent.md")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        files = run(self.repo, "git", "show", "--name-only", "--format=%s", "HEAD").stdout.split()
-        self.assertEqual(files[-1], "docs/handoff.md")
-        self.assertNotIn("code.txt", files)
+        lines = run(self.repo, "git", "show", "--name-only", "--format=%s", "HEAD").stdout.split("\n")
+        self.assertEqual(lines[0], "docs: update handoff")
+        self.assertEqual(sorted(filter(None, lines[1:])), ["docs/handoff.md", "docs/intent.md"])
         status = run(self.repo, "git", "status", "--short").stdout
         self.assertIn("M  code.txt", status)  # still staged, not committed
         self.assertIn("?? other.txt", status)
 
     def test_unchanged_file_is_a_no_op(self):
         (self.repo / "handoff.md").write_text("x\n")
-        self.assertEqual(self.commit("handoff.md").returncode, 0)
+        self.assertEqual(self.commit("msg", "handoff.md").returncode, 0)
         head = run(self.repo, "git", "rev-parse", "HEAD").stdout
-        result = self.commit("handoff.md")
+        result = self.commit("msg", "handoff.md")
         self.assertEqual(result.returncode, 0)
         self.assertIn("nothing to commit", result.stdout)
         self.assertEqual(run(self.repo, "git", "rev-parse", "HEAD").stdout, head)
 
     def test_missing_file_fails(self):
-        result = self.commit("nope.md")
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.commit("msg", "nope.md").returncode, 1)
+        self.assertEqual(self.commit("only-a-message").returncode, 1)
 
 
 if __name__ == "__main__":
