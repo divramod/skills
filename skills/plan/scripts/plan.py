@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Deterministic bookkeeping for single-file plans under docs/plans/.
+"""Deterministic bookkeeping for single-file plans under plans/ at the repository root.
 
-A plan is docs/plans/<NNNN>-<slug>.md with a markdown table whose header has the columns `#`, `Step` and `Status`
-(optionally `Done when`). docs/plans/CURRENT_PLAN holds the slug of the active plan (the Claude statusline shows it).
+A plan is plans/<NNNN>-<slug>.md with a markdown table whose header has the columns `#`, `Step` and `Status`
+(optionally `Done when`). plans/CURRENT_PLAN holds the slug of the active plan (the Claude statusline shows it).
 
   plan.py new "<title>" [--goal "<goal>"] [--no-current] [--fetch]
                                                            create the next plan from the template; its number
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import plan_number
 
-PLANS = Path("docs/plans")
+PLANS = Path("plans")
 POINTER = "CURRENT_PLAN"
 PLAN_RE = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "plan.md"

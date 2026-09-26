@@ -33,7 +33,7 @@ class PlanNumberTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def add_plan(self, tree, name, commit=False):
-        plans = tree / "docs/plans"
+        plans = tree / "plans"
         plans.mkdir(parents=True, exist_ok=True)
         (plans / name).write_text(f"# {name}\n")
         if commit:
@@ -60,7 +60,7 @@ class PlanNumberTest(unittest.TestCase):
         git(self.main, "switch", "-q", "-c", "feature")
         self.add_plan(self.main, "0004-on-feature.md", commit=True)
         git(self.main, "switch", "-q", "main")
-        self.assertFalse((self.main / "docs/plans/0004-on-feature.md").exists())
+        self.assertFalse((self.main / "plans/0004-on-feature.md").exists())
         self.assertEqual(self.next("--no-reserve"), 5)
 
         git(self.main, "switch", "-q", "-c", "elsewhere")
@@ -70,6 +70,16 @@ class PlanNumberTest(unittest.TestCase):
         git(self.main, "branch", "-q", "-D", "elsewhere")
         git(self.main, "update-ref", "refs/remotes/origin/elsewhere", sha)  # only a remote-tracking ref has it
         self.assertEqual(self.next("--no-reserve"), 8)
+
+    def test_legacy_docs_plans_on_an_old_branch_still_counts(self):
+        git(self.main, "switch", "-q", "-c", "old-layout")
+        legacy = self.main / "docs/plans"
+        legacy.mkdir(parents=True)
+        (legacy / "0006-before-the-move.md").write_text("# old\n")
+        git(self.main, "add", ".")
+        git(self.main, "commit", "-qm", "old plan")
+        git(self.main, "switch", "-q", "main")
+        self.assertEqual(self.next("--no-reserve"), 7)
 
     def test_reservations_are_shared_and_idempotent_per_slug(self):
         tree = self.base / "wt-1"

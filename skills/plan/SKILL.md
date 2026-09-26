@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one markdown file per plan in docs/plans/<NNNN>-<slug>.md (goal, context links, a step table with a done-when check and status per step, decisions), with docs/plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, start the next step (offering /grill first when the plan hasn't been grilled), mark steps done, or switch plans. Execution uses the agent's built-ins (plan mode, /goal, subagents), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one markdown file per plan in plans/<NNNN>-<slug>.md (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, start the next step (offering /grill first when the plan hasn't been grilled), mark steps done, or switch plans. Execution uses the agent's built-ins (plan mode, /goal, subagents), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -24,7 +24,7 @@ Never pick a number by hand. Add `--fetch` when other machines may have created 
 lists numbers used by two plans (for example after merging branches from before this rule).
 
 **One home per decision**: decisions that matter only to this plan go under the plan's **Decisions**; decisions
-that outlive it go to the repo's decision record (`docs/intent.md` or equivalent) and the plan links them.
+that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and the plan links them.
 
 ## Pick the action
 
@@ -40,7 +40,7 @@ that outlive it go to the repo's decision record (`docs/intent.md` or equivalent
 
 ## New plan
 
-1. Understand the idea: read `docs/intent.md` (or the repo's decision record) and the code it touches. Settled
+1. Understand the idea: read `INTENT.md` (or the repo's decision record) and the code it touches. Settled
    decisions are not questions. Ask only what you can't find out, with the question tool.
 2. Create the file and make it current:
    ```bash

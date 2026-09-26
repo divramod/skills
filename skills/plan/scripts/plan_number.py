@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Unique, increasing plan numbers across every worktree and branch of a repository.
 
-A plan number is taken when any of these holds a `docs/plans/<NNNN>-...` entry (file or old-style folder):
+A plan number is taken when any of these holds a `plans/<NNNN>-...` entry (file or old-style folder; the legacy
+`docs/plans/` location still counts, so unmerged old branches can't cause duplicates):
 the working tree of any worktree (main, user or feature worktrees, committed or not), any local branch, any
 remote-tracking branch, or the reservation file in the git common directory, which all worktrees of a clone
 share. `next` takes the highest taken number + 1 and reserves it under a file lock, so two worktrees creating a
@@ -25,7 +26,7 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-PLANS = "docs/plans"
+PLAN_DIRS = ("plans", "docs/plans")  # docs/plans: legacy location, still counted
 ENTRY_RE = re.compile(r"^(\d{4})-(.+?)(\.md)?$")
 RESERVATIONS = "plan-numbers.json"
 
@@ -75,13 +76,15 @@ def taken(root: Path) -> dict[int, dict[str, set[str]]]:
             found.setdefault(parsed[0], {}).setdefault(parsed[1], set()).add(place)
 
     for tree in worktree_paths(root):
-        folder = tree / PLANS
-        if folder.is_dir():
-            for entry in folder.iterdir():
-                add(entry.name, f"worktree {tree}")
+        for plans in PLAN_DIRS:
+            folder = tree / plans
+            if folder.is_dir():
+                for entry in folder.iterdir():
+                    add(entry.name, f"worktree {tree}")
     for ref in refs(root):
-        for name in git(root, "ls-tree", "--name-only", f"{ref}:{PLANS}", check=False).splitlines():
-            add(name, ref.removeprefix("refs/heads/").removeprefix("refs/"))
+        for plans in PLAN_DIRS:
+            for name in git(root, "ls-tree", "--name-only", f"{ref}:{plans}", check=False).splitlines():
+                add(name, ref.removeprefix("refs/heads/").removeprefix("refs/"))
     for slug in reservations(root):
         add(slug, "reserved")
     return found

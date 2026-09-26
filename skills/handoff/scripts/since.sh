@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # What changed since a handoff was written: commits after its `written at` sha (ignoring the commit that wrote the
 # handoff) and uncommitted changes.
-# Usage: since.sh [handoff file]   (default docs/handoff.md)
+# Usage: since.sh [handoff file]   (default HANDOFF.md)
 # Exit 0: report printed. Exit 1: no handoff or no stamp. Exit 2: git missing.
 set -euo pipefail
 
@@ -10,7 +10,7 @@ if ! command -v git >/dev/null 2>&1; then
   exit 2
 fi
 
-file="${1:-docs/handoff.md}"
+file="${1:-HANDOFF.md}"
 if [[ ! -f "$file" ]]; then
   echo "since.sh: $file does not exist" >&2
   exit 1

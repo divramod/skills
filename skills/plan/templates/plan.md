@@ -1,6 +1,6 @@
 # Plan {number}: {title}
 
-Created {date}. `docs/plans/CURRENT_PLAN` names the active plan.
+Created {date}. `plans/CURRENT_PLAN` names the active plan.
 
 ## Goal
 

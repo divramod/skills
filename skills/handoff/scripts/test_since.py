@@ -26,8 +26,7 @@ class SinceTest(unittest.TestCase):
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-qm", "init")
         self.sha = git(self.repo, "rev-parse", "--short", "HEAD").strip()
-        (self.repo / "docs").mkdir()
-        self.handoff = self.repo / "docs/handoff.md"
+        self.handoff = self.repo / "HANDOFF.md"
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -37,8 +36,8 @@ class SinceTest(unittest.TestCase):
 
     def write_handoff(self, sha):
         self.handoff.write_text(f"# Handoff\n\nUpdated 2026-09-26, branch `main`, written at `{sha}`.\n")
-        (self.repo / "docs/intent.md").write_text("# Intent\n")  # committed together with the handoff
-        git(self.repo, "add", "docs")
+        (self.repo / "INTENT.md").write_text("# Intent\n")  # committed together with the handoff
+        git(self.repo, "add", "HANDOFF.md", "INTENT.md")
         git(self.repo, "commit", "-qm", "docs: update handoff")
 
     def test_nothing_since(self):

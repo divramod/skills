@@ -13,16 +13,16 @@ the session is self-contained, and decisions are written down so a cleared sessi
 
 | Call | Does |
 |---|---|
-| `/grill` | grill the current plan (`docs/plans/CURRENT_PLAN`) |
+| `/grill` | grill the current plan (`plans/CURRENT_PLAN`) |
 | `/grill <subject>` | grill a plan file, an idea or a decision |
 | `/grill q [<subject>]`, `/grill quick` | [quick](#quick): one round on the top risks, for a single step |
 | `/grill h`, `/grill help` | print this table and stop |
 
 ## Start
 
-1. **Subject.** The argument, or else the current plan (`docs/plans/CURRENT_PLAN` → `docs/plans/<slug>.md`), or
+1. **Subject.** The argument, or else the current plan (`plans/CURRENT_PLAN` → `plans/<slug>.md`), or
    else ask what to grill.
-2. **Already decided.** Read the subject plus the repo's decision records (`docs/intent.md` or equivalent, the plan's
+2. **Already decided.** Read the subject plus the repo's decision records (`INTENT.md` or equivalent, the plan's
    **Decisions** section, `.adr/`). Anything answered there is settled: never ask it again; only reopen it when
    something new contradicts it, and say why.
 3. **Facts.** Read the code and docs the subject touches. Finding facts is your job: when a question needs a fact
@@ -65,7 +65,7 @@ others instead of repeating it:
 
 - the plan's **Decisions** section for decisions that only matter to this plan, one line each:
   `- <decision> (<date>)`; adjust its steps or done-when checks when a decision changes them;
-- the repo's decision log (`docs/intent.md` or equivalent) for decisions that outlive this plan;
+- the repo's decision log (`INTENT.md` or equivalent) for decisions that outlive this plan;
 - an ADR for a new rule the code must follow.
 
 Mark superseded decisions instead of deleting them. Don't commit; the user or `/handoff` does.
