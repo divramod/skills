@@ -20,7 +20,7 @@ freezes everything the later phases share: the router (all six sources are route
 for now), and the per-folder prerequisite rule. After that, every source phase only adds files inside its own
 `subskills/<s>/`, `scripts/<s>/` and `templates/<s>/`, so phases 002, 004, 005, 006 and 007 can run in parallel.
 Phase 003 (hn) reuses the web extractor. Phase 008 finishes the library UI and the docs. See [spec.md](spec.md) and
-[research](../../research/0003-tell-me-multi-source/result.md).
+[research](../../research/0003-tell-me-multi-source/research.md).
 
 ## Phase List
 

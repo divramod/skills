@@ -18,4 +18,4 @@ Wave-02 overlap: edits `shared/prepare.py` and SKILL.md. Keep the diff small and
 
 ## Links
 
-- [spec](../../spec.md) · [masterplan](../../masterplan.md) · [research](../../../../research/0003-tell-me-multi-source/result.md)
+- [spec](../../spec.md) · [masterplan](../../plan.md) · [research](../../../../research/0003-tell-me-multi-source/research.md)

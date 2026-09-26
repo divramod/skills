@@ -18,4 +18,4 @@ Import breakage after `git mv`, and the shared→video coupling in serve_library
 
 ## Links
 
-- [spec](../../spec.md) · [masterplan](../../masterplan.md) · [research](../../../../research/0003-tell-me-multi-source/result.md)
+- [spec](../../spec.md) · [masterplan](../../plan.md) · [research](../../../../research/0003-tell-me-multi-source/research.md)

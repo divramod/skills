@@ -18,4 +18,4 @@ defuddle calls itself a work in progress; Jina rate limit (20/min); text fragmen
 
 ## Links
 
-- [spec](../../spec.md) · [masterplan](../../masterplan.md) · [research](../../../../research/0003-tell-me-multi-source/result.md)
+- [spec](../../spec.md) · [masterplan](../../plan.md) · [research](../../../../research/0003-tell-me-multi-source/research.md)

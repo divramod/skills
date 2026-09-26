@@ -17,7 +17,7 @@ thread), a hackernews post (article + discussion), or a document on the local fi
 same treatment the videos get today: a folder in the library with `summary.md`, `summary.html`, the extracted
 content, `metadata.json`, the links section with dates, and an entry in the library sidebar.
 
-Shot 9 of `shotfiles/main.md`. Research: `research/0003-tell-me-multi-source/result.md`.
+Shot 9 of `shotfiles/main.md`. Research: `research/0003-tell-me-multi-source/research.md`.
 
 ## Goals
 

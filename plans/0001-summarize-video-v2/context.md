@@ -22,4 +22,4 @@ description: Files, patterns and gotchas for summarize-video-v2.
 
 ## Links
 
-- research/0002-summarize-video/result.md
+- research/0002-summarize-video/research.md

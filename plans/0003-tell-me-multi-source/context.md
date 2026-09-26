@@ -10,7 +10,7 @@ description: Files, patterns and gotchas for implementing the tell-me multi-sour
 - `skills/tell-me/scripts/{prepare_video,save_summary,render_html,library,serve_library,check_links,link_dates}.py`
 - `skills/tell-me/templates/*.md`
 - `scripts/check-plugins.py`, `CLAUDE.md`, `AGENTS.md` (the skill script rules)
-- `research/0003-tell-me-multi-source/result.md`: API endpoints and extractor choices
+- `research/0003-tell-me-multi-source/research.md`: API endpoints and extractor choices
 
 ## Patterns
 
