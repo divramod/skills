@@ -29,6 +29,9 @@ is lost. `S=<skill-dir>/scripts`.
    It lists commits after the handoff's `written at` stamp (another session may have worked meanwhile) and
    uncommitted changes. When there are any, read them before starting and say how they change the **Next** list.
 3. Tell the user in two or three lines where things stand and what you start with, then do the first **Next** task.
+   When the handoff continues a plan (**Plan** links one with steps left), the plan was already approved: keep
+   running it as the `plan` skill's "Run the plan" says (step after step without asking, a commit after every
+   step, the context check after each one) instead of stopping after the first task.
 
 If there is no handoff file, say so and ask what to work on.
 

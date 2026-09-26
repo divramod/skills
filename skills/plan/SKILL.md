@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, start the next step (offering /grill first when the plan hasn't been grilled), mark steps done, or switch plans. Execution uses the agent's built-ins (plan mode, /goal, subagents), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step and stops for a /handoff when the context window is 40% full), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -33,7 +33,7 @@ that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and
 |---|---|---|
 | `/plan new <idea>` | | [create a plan](#new-plan) and make it current |
 | `/plan`, `/plan status` | `/plan s` | [show where the current plan stands](#status) |
-| `/plan next` | `/plan n` | [start the next step](#start-the-next-step), offering `/grill` first |
+| `/plan next` | `/plan n` | [run the plan](#run-the-plan) from its next step to the end, offering `/grill` first |
 | `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
 | `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
 | `/plan check` | `/plan c` | `python3 $S/plan.py check`: report plan numbers used twice |
@@ -50,7 +50,8 @@ that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and
 3. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. Record
    decisions taken so far in their one home.
 4. Show the plan in a few lines, then ask with the question tool: grill it now with `/grill` (recommended for
-   anything beyond a small change), start step 1, or stop here.
+   anything beyond a small change), [run it](#run-the-plan) from step 1 (it then runs to the end on its own), or
+   stop here.
 
 ## Status
 
@@ -61,31 +62,50 @@ python3 $S/plan.py current      # or: list
 Report the plan title, `done/total`, the next step and its done-when check, and whether it was grilled. If there is
 no current plan, list the plans and ask which one to use.
 
-## Start the next step
+## Run the plan
 
-1. `python3 $S/plan.py current`, then offer grilling with the question tool, proportionate to the risk:
+**Once a plan is started it runs to the end on its own.** The user approves the plan once, when it starts (the
+grill offer below); after that, work through the steps one after another without asking for approval, without plan
+mode and without per-step grill offers. Ask the user only for
+
+- a decision that is genuinely theirs and not settled by the plan, the decision record (`INTENT.md`), the ADRs or
+  the repo's rules for choosing between options (decide those yourself and record them in their one home);
+- an outward-facing or irreversible action (pushing, publishing, deleting data that is not the plan's own);
+- a step whose done-when check still fails after reasonable attempts: stop and report what fails.
+
+1. `python3 $S/plan.py current`, then offer grilling with the question tool, once, proportionate to the risk:
    - plan not grilled yet (`grilled` empty): `/grill` the whole plan first (recommended), or start anyway;
-   - plan grilled, step non-trivial: `/grill q` on this step (one round, top risks), or start;
-   - small, clear step: just start.
+   - plan grilled: just start (offer `/grill q` only when the next step is risky and was never discussed).
 
    On a grill, continue only after it confirms shared understanding.
-2. Detail the step: the files it touches, the approach, the tests. For anything non-trivial use plan mode
-   (Codex: `/plan`) and let the user approve.
-3. Implement. When the done-when is a runnable check, offer to run the step as
-   `/goal "<done-when> passes"` so the agent keeps going until it does; use subagents (with worktree isolation)
-   for independent parallel parts.
-4. When the done-when check passes, [finish the step](#finish-a-step).
+2. For each step, starting with the one marked `next`:
+   1. Detail it for yourself: the files it touches, the approach, the tests. Use subagents (with worktree
+      isolation) for independent parallel parts.
+   2. Implement it until its done-when check passes.
+   3. [Finish the step](#finish-a-step): table, notes, commit, context check. Stop when the context check says so,
+      otherwise go on with the next step.
+3. When every step is done, say so and ask whether to set another plan current.
 
 ## Finish a step
 
 1. Run the step's done-when check yourself and show the result; a step is done only when it passes.
 2. Update the step table right away, marking the step and naming the next one:
    ```bash
-   python3 $S/plan.py status <step> "done (<short sha>, check passed)"
+   python3 $S/plan.py status <step> done
    python3 $S/plan.py status <next step> next
    ```
 3. Record what the step taught under **Notes**, and adjust later steps when reality changed them (say what and
    why; decisions go to their one home).
-4. When every step is done, say so and ask whether to set another plan current.
-
-Don't commit or push on your own; `/handoff` commits plan and handoff together before a `/clear`.
+4. **Commit the step**: one commit with the step's changes and the updated plan, message
+   `<type>(<scope>): <what> (plan <NNNN> step <n>)`. Stage only the files this step changed (other uncommitted
+   work in the tree stays as it was). Never push without the user's consent.
+5. **Check the context window**:
+   ```bash
+   python3 $S/context.py            # --threshold 40 by default
+   ```
+   - `stop` is true (40% or more used): stop the plan here. Run `/handoff` (it records decisions, writes
+     `HANDOFF.md` with the plan's next step and commits it), then tell the user to run `/clear` and then
+     `/handoff c` to continue.
+   - `stop` is false: continue with the next step.
+   - `known` is false (not Claude Code, no transcript): judge the fill level yourself and say so; when in doubt,
+     stop and hand off.
