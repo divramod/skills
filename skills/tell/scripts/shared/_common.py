@@ -24,6 +24,7 @@ INSTALL_HINTS = {
     "yt-dlp": "brew install yt-dlp",
     "ffmpeg": "brew install ffmpeg",
     "ffprobe": "brew install ffmpeg",
+    "uv": "brew install uv",
     "uvx": "brew install uv",
     "npx": "brew install node",
     "gh": "brew install gh",

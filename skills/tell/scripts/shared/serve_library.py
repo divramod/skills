@@ -10,6 +10,9 @@ It also lets a summary page download its video (same file and quality as video/p
   GET  /api/status?path=<folder rel. to root>  -> {status: none|running|failed|done, progress, stream, error}
   POST /api/download  {"path": "<folder>"}      -> starts video/download_video.py in the background
   POST /api/delete-video {"path": "<folder>"}   -> deletes video.<ext>, refreshes summary.md/.html
+and read its note aloud (speech/speak.py: local text-to-speech into summary.m4a next to the note):
+  GET  /api/speech?path=<folder>                -> {status: none|running|failed|done|stale, progress, audio, error}
+  POST /api/speak {"path": "<folder>"}          -> starts speech/speak.py in the background
 The API only answers requests for this host (no DNS rebinding), and POST needs the X-Tell header (pages rendered
 before the renames send X-Tell-Me or X-DM-Summarize, also accepted), which other sites can't send cross-origin
 without a CORS preflight that this server never grants. The video URL always comes from the folder's metadata.json.
@@ -45,7 +48,8 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
     """SimpleHTTPRequestHandler + single-range `Range: bytes=a-b` requests (206)."""
 
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
-                      ".mkv": "video/x-matroska", ".webm": "video/webm", ".mp4": "video/mp4", ".js": "text/javascript"}
+                      ".mkv": "video/x-matroska", ".webm": "video/webm", ".mp4": "video/mp4", ".js": "text/javascript",
+                      ".m4a": "audio/mp4", ".wav": "audio/wav"}
 
     def log_message(self, format, *args):  # noqa: A002 (quiet)
         pass
@@ -109,8 +113,8 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _folder(self, rel: str | None) -> Path | None:
-        """A video folder inside the served root, or None."""
+    def _folder(self, rel: str | None, video: bool = True) -> Path | None:
+        """A library folder inside the served root with a video (video=False: with a note), or None."""
         if not rel:
             return None
         root = Path(self.directory).resolve()
@@ -120,6 +124,8 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         except ValueError:
             return None
         meta = read_json(folder / "metadata.json")
+        if not video:
+            return folder if meta and ((folder / "summary.md").exists() or (folder / "digest.md").exists()) else None
         return folder if meta and meta.get("kind") != "digest" and video_source(meta)[0] else None
 
     def _api(self, method: str) -> None:
@@ -129,7 +135,10 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         if method == "GET" and route == "/api/status":
             folder = self._folder(parse_qs(urlsplit(self.path).query).get("path", [None])[0])
             return self._json(200, video_state(folder)) if folder else self._json(404, {"error": "unknown folder"})
-        if method == "POST" and route in ("/api/download", "/api/delete-video"):
+        if method == "GET" and route == "/api/speech":
+            folder = self._folder(parse_qs(urlsplit(self.path).query).get("path", [None])[0], video=False)
+            return self._json(200, speech_state(folder)) if folder else self._json(404, {"error": "unknown folder"})
+        if method == "POST" and route in ("/api/download", "/api/delete-video", "/api/speak"):
             if "1" not in (self.headers.get(h) for h in HEADERS):
                 return self._json(403, {"error": "missing X-Tell header"})
             try:
@@ -137,9 +146,11 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
                 rel = json.loads(self.rfile.read(length) or b"{}").get("path")
             except (ValueError, AttributeError):
                 return self._json(400, {"error": "bad request"})
-            folder = self._folder(rel)
+            folder = self._folder(rel, video=route != "/api/speak")
             if not folder:
                 return self._json(404, {"error": "unknown folder"})
+            if route == "/api/speak":
+                return self._json(202, start_speech(folder))
             if route == "/api/delete-video":
                 return self._json(200, remove_video(folder))
             return self._json(202, start_download(folder))
@@ -160,23 +171,41 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-# The video steps live in scripts/video/; shared code never imports them, it runs their CLI.
+# The video and speech steps live in scripts/video/ and scripts/speech/; shared code never imports them, it runs
+# their CLI.
 VIDEO_CLI = Path(__file__).resolve().parent.parent / "video" / "download_video.py"
+SPEECH_CLI = Path(__file__).resolve().parent.parent / "speech" / "speak.py"
 
 
-def video_cli(folder: Path, *args: str) -> tuple[int, object]:
-    """Run `video/download_video.py <folder> <args>`: (exit code, parsed JSON stdout) or (non-zero, error text)."""
+def run_cli(script: Path, folder: Path, *args: str) -> tuple[int, object]:
+    """Run `<script> <folder> <args>`: (exit code, parsed JSON stdout) or (non-zero, error text)."""
     try:
-        p = subprocess.run([sys.executable, str(VIDEO_CLI), str(folder), *args], capture_output=True, text=True,
+        p = subprocess.run([sys.executable, str(script), str(folder), *args], capture_output=True, text=True,
                            timeout=60)
     except subprocess.TimeoutExpired:
-        return 1, f"{VIDEO_CLI.name} {' '.join(args)} timed out"
+        return 1, f"{script.name} {' '.join(args)} timed out"
     if p.returncode != 0:
         return p.returncode, (p.stderr.strip().splitlines() or ["failed"])[-1].removeprefix("[tell] ")
     try:
         return 0, json.loads(p.stdout or "null")
     except json.JSONDecodeError:
-        return 1, f"{VIDEO_CLI.name} {' '.join(args)} printed no JSON"
+        return 1, f"{script.name} {' '.join(args)} printed no JSON"
+
+
+def video_cli(folder: Path, *args: str) -> tuple[int, object]:
+    return run_cli(VIDEO_CLI, folder, *args)
+
+
+def speech_state(folder: Path) -> dict:
+    """The folder's recording: speech/speak.py --status."""
+    code, out = run_cli(SPEECH_CLI, folder, "--status")
+    return out if code == 0 and isinstance(out, dict) else {"status": "failed", "error": str(out)}
+
+
+def start_speech(folder: Path) -> dict:
+    """Record the note in the background (speak.py returns the running state, or done when it is current)."""
+    code, out = run_cli(SPEECH_CLI, folder, "--background")
+    return out if code == 0 and isinstance(out, dict) else {"status": "failed", "error": str(out)}
 
 
 def video_state(folder: Path) -> dict:

@@ -113,6 +113,11 @@ EOF
   opens the page. The page has a sidebar with every summary (folder tree / date / title / author, each ascending or
   descending), the source's header panel (e.g. the video player), the summary and the full content file. Every
   link opens in a new tab; the sidebar links navigate in place.
+- The page's **🔊 Read aloud** button reads the summary out loud with a local text-to-speech engine (Supertonic-3,
+  CPU, 31 languages incl. English and German, picked from the note's `lang`): playback starts with the first
+  paragraph while the rest is recorded into `summary.m4a` next to the note. When the user asks to have a summary
+  read or to prepare the audio, run `python3 $S/speech/speak.py "<dir>"` (`--voice F1-F5|M1-M5`, `$TELL_VOICE`);
+  exit code 2: run `$S/speech/install-prerequisites.sh` (it also downloads the ~385 MB voice model once).
 - **Don't paste the summary into the chat.** Reply with the TL;DR, the path to `summary.html`, and one line for
   anything still running in the background (e.g. a video download).
 
@@ -140,7 +145,11 @@ shape, and only save the answer when the user asks.
 | `link_dates.py` | how current a link is: publish date, release + last commit, package version, book year, wiki edit |
 | `render_html.py` | `summary.md` → `summary.html` (sidebar, header panel, content file); `--open` |
 | `library.py` | rebuild `<root>/library.js`; `--pages` re-renders every page; `--open-last` opens the latest summary |
-| `serve_library.py` | local http server for the library (embeds, video seeking, download button); `--ensure`, `--stop` |
+| `serve_library.py` | local http server for the library (embeds, video seeking, download and read-aloud buttons); `--ensure`, `--stop` |
+| `speech_text.py` | a note as the plain text that is read aloud (no links sections, URLs or anchor links) |
+
+`scripts/speech/speak.py` records a note aloud (`--background`, `--status`, `--text`, `--warm`), with
+`tts_supertonic.py` as the engine (run via `uv run --script`; model in `<root>/.models/supertonic-3`).
 
 Each source's own scripts are listed in its subskill. Every `scripts/<source>/` that calls external tools has
 `check-prerequisites.sh` and `install-prerequisites.sh`; `$S/check-prerequisites.sh` / `$S/install-prerequisites.sh

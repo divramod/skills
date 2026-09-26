@@ -133,6 +133,20 @@ class TestPage(unittest.TestCase):
         self.assertIn('<details class="content"><summary>Article</summary>', page)
         self.assertIn('href="https://a.b/post"', page)
 
+    def test_read_aloud_bar(self):
+        from speech_text import speech_text, text_hash
+        self.write(META)
+        page = build(self.dir)
+        self.assertIn('<div class="speech">', page)
+        self.assertIn("🔊 Read aloud", page)
+        self.assertNotIn("<audio", page)  # no recording yet: only the button (unhidden over http)
+        current = text_hash(speech_text((self.dir / "summary.md").read_text()))
+        (self.dir / "summary.m4a").write_bytes(b"")
+        self.write(META | {"speech_file": "summary.m4a", "speech_hash": current})
+        self.assertIn('<audio controls preload="none" src="summary.m4a">', build(self.dir))
+        self.write(META | {"speech_file": "summary.m4a", "speech_hash": "old"})  # the note changed since
+        self.assertNotIn("<audio", build(self.dir))
+
     def test_body_starting_like_info_line_is_kept_without_header_info(self):
         meta = {"id": "abc", "title": "T"}
         self.write(meta, body="first line\n\nsecond")

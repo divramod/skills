@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Render a library folder's summary.md (or digest.md) as a self-contained summary.html.
 
-The page holds a library sidebar (library.py), the summary, the source's header panel
+The page holds a library sidebar (library.py), a read-aloud bar (the recording by speech/speak.py; without a
+current one a button that makes it via serve_library.py), the summary, the source's header panel
 (HEADER_PANELS), keyframes (when extracted) and the full content file in a collapsed section.
 Video's panel is a player: the local video when downloaded, else the YouTube embed (served over
 http by serve_library.py; from file:// a thumbnail that opens YouTube). Timestamp links seek
@@ -24,6 +25,7 @@ from pathlib import Path
 from _common import SkillError, contract, log, read_json, run_main
 from library import INDEX_FILE, SIDEBAR_CSS, SIDEBAR_JS, root_of, sidebar_html, write_index
 from panels import CSS as PANELS_CSS, PANELS
+from speech_text import speech_text, text_hash
 
 # ---------------------------------------------------------------- markdown
 
@@ -223,6 +225,9 @@ header h1{font-size:2rem;line-height:1.2;margin:0 0 .4rem;letter-spacing:-.01em}
 .dl button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
 .dl button:disabled{cursor:default;opacity:.6}
 .dl progress{width:140px;accent-color:var(--accent)}
+.speech{margin-top:12px}
+.speech audio{width:100%;height:40px;display:block}
+.speech .dl{margin-top:0}
 .player.playing{position:sticky;top:0;z-index:2}
 video{width:100%;max-height:60vh;border-radius:10px;background:#000;display:block;transition:max-height .2s}
 .player.playing video{max-height:32vh}
@@ -264,7 +269,7 @@ if(yt&&location.protocol.startsWith('http')){
   yt.replaceChildren(ytf);document.querySelector('.player .hint')?.remove();
 }
 // Download the video into this folder via the library server, then reload to play it locally.
-const dl=document.querySelector('.dl:not(.rm)'),rm=document.querySelector('.dl.rm'),self=document.body.dataset.self;
+const dl=document.querySelector('.player .dl:not(.rm)'),rm=document.querySelector('.player .dl.rm'),self=document.body.dataset.self;
 const post=(p,b)=>fetch(p,{method:'POST',headers:{'X-Tell':'1','Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());
 if(rm&&self&&location.protocol.startsWith('http')){
   rm.hidden=false;
@@ -294,6 +299,52 @@ if(dl&&self&&location.protocol.startsWith('http')){
   };
   btn.addEventListener('click',()=>{btn.disabled=true;api('POST','/api/download',{path:self}).then(show).catch(e=>{btn.disabled=false;out.textContent='Server not reachable: '+e;});});
   api('GET','/api/status?path='+encodeURIComponent(self)).then(s=>{dl.hidden=false;show(s);}).catch(()=>{});
+}
+// Read aloud: record the note with the local text-to-speech engine via the library server. Playback starts with the
+// first finished paragraph (.speech-parts/<i>.wav) and moves to the whole recording, at the same spot, once it is done.
+const sp=document.querySelector('.speech');
+if(sp&&self&&location.protocol.startsWith('http')){
+  const bar=sp.querySelector('.dl'),btn=bar.querySelector('button'),out=bar.querySelector('.dl-status');
+  const api=(m,p,b)=>fetch(p,{method:m,headers:{'X-Tell':'1','Content-Type':'application/json'},body:b&&JSON.stringify(b)}).then(r=>r.json());
+  const status=()=>api('GET','/api/speech?path='+encodeURIComponent(self));
+  let audio=sp.querySelector('audio'),timer=null,wanted=false,live=false,idle=false,part=0,ready=0,dir='',played=0;
+  const player=()=>{
+    if(audio)return audio;
+    audio=document.createElement('audio');audio.controls=true;sp.prepend(audio);
+    // a paragraph ended: the next one; a paragraph gone (the recording just finished): ask for the whole file
+    audio.addEventListener('ended',()=>{if(live){played+=audio.duration||0;next();}});
+    audio.addEventListener('error',()=>{if(live)status().then(show).catch(()=>{});});
+    return audio;
+  };
+  const next=()=>{  // the next finished paragraph, or wait for it
+    if(part>=ready){idle=true;return;}
+    part++;idle=false;player().src=`${dir}/${part}.wav`;audio.play().catch(()=>{});
+  };
+  const whole=(src,play)=>{  // the finished recording, from where the paragraphs got to
+    const t=live?played+(idle?0:audio.currentTime||0):0,go=live?idle||!audio.paused:play;
+    live=idle=false;player().src=src+'?v='+Date.now();
+    if(t)audio.addEventListener('loadedmetadata',()=>{audio.currentTime=t;},{once:true});
+    if(go)audio.play().catch(()=>{});
+  };
+  const show=s=>{
+    if(s.status==='running'){
+      bar.hidden=false;dir=s.parts_dir;ready=s.parts||0;
+      btn.disabled=wanted;btn.textContent=wanted?'Recording…':'▶ Listen while recording';
+      const pct=s.progress!=null?`<progress max="100" value="${s.progress}"></progress> ${s.progress.toFixed(0)}%`:'loading the voice (the first time downloads it)';
+      out.innerHTML=pct+(live&&idle?' · waiting for the next paragraph':live?' · playing what is ready':wanted?' · playback starts with the first paragraph':'');
+      if(wanted&&!live&&ready){live=true;part=played=0;next();}
+      else if(live&&idle)next();
+      if(!timer)timer=setInterval(()=>status().then(show).catch(()=>{}),1500);
+      return;
+    }
+    clearInterval(timer);timer=null;btn.disabled=false;
+    if(s.status==='done'){bar.hidden=true;if(live||wanted||!audio)whole(s.audio,wanted);wanted=false;return;}
+    live=wanted=false;bar.hidden=false;btn.textContent='🔊 Read aloud';
+    if(s.status==='failed'){btn.textContent='🔊 Retry reading aloud';out.textContent='Failed: '+(s.error||'').split('\\n')[0];}
+    else if(s.status==='stale')out.textContent='The summary changed since the last recording: record it again.';
+  };
+  btn.addEventListener('click',()=>{wanted=true;btn.disabled=true;api('POST','/api/speak',{path:self}).then(show).catch(e=>{wanted=false;btn.disabled=false;out.textContent='Server not reachable: '+e;});});
+  if(!audio)status().then(show).catch(()=>{});
 }
 const ytc=(func,args=[])=>ytf.contentWindow.postMessage(JSON.stringify({event:'command',func,args}),'*');
 document.addEventListener('click',e=>{
@@ -340,6 +391,17 @@ def player_html(folder: Path, meta: dict, url: str | None) -> str:
             f'<p>Timestamps play here; Cmd/Ctrl-click opens them on the site.</p>{hint}{dl}</div>')
 
 
+def speech_html(folder: Path, meta: dict, note_text: str) -> str:
+    """Read-aloud bar: the recording when it matches the note, else a "Read aloud" button (it needs the library
+    server, so the script unhides it over http)."""
+    audio = meta.get("speech_file")
+    current = bool(audio and (folder / audio).exists() and meta.get("speech_hash") == text_hash(speech_text(note_text)))
+    player = f'<audio controls preload="none" src="{html.escape(audio, quote=True)}"></audio>' if current else ""
+    button = ('<div class="dl" hidden><button type="button">🔊 Read aloud</button>'
+              '<span class="dl-status" role="status">Local text-to-speech, saved in this summary’s folder.</span></div>')
+    return f'<div class="speech">{player}{button}</div>'
+
+
 # Per-source panel under the page header: fn(folder, metadata, url) -> html. Sources without one get none.
 HEADER_PANELS = PANELS | {
     "video": player_html,
@@ -357,7 +419,8 @@ def build(folder: Path) -> str:
     note = folder / ("digest.md" if meta.get("kind") == "digest" else "summary.md")
     if not note.exists():
         raise SkillError(f"{note} missing: save the summary first")
-    front, body = split_frontmatter(note.read_text(encoding="utf-8"))
+    note_text = note.read_text(encoding="utf-8")
+    front, body = split_frontmatter(note_text)
     title = front.get("title") or meta.get("title") or "Untitled"
     # save_summary.py writes "# title\n\ninfo line\n\n" before the body; the page renders its own header.
     c = contract(meta)
@@ -418,6 +481,7 @@ def build(folder: Path) -> str:
 <h1>{html.escape(title)}</h1>
 <p class="meta">{meta_line}</p>
 <ul class="chips">{chips_html}</ul>
+{speech_html(folder, meta, note_text)}
 </header>
 {panel_html}
 <article>

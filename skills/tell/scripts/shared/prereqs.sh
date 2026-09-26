@@ -12,7 +12,7 @@ hint() {
     yt-dlp) echo "brew install yt-dlp" ;;
     ffmpeg|ffprobe) echo "brew install ffmpeg" ;;
     python3) echo "brew install python" ;;
-    uvx) echo "brew install uv" ;;
+    uv|uvx) echo "brew install uv" ;;
     gh) echo "brew install gh && gh auth login" ;;
     npx|node) echo "brew install node" ;;
     pdftotext) echo "brew install poppler" ;;
@@ -88,7 +88,7 @@ install_main() {
       case " ${brew_pkgs[*]-} " in *" $pkg "*) ;; *) brew_pkgs+=("$pkg") ;; esac
     else
       case "$t" in
-        uvx) need_uv=1 ;;
+        uv|uvx) need_uv=1 ;;
         yt-dlp) need_ytdlp=1 ;;
         *) pkg="$(apt_pkg "$t")"; [ -n "$pkg" ] && apt_pkgs+=($pkg) ;;
       esac
