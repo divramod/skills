@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write or refresh the repo's docs/handoff.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in the repo's durable intent/decision doc, then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse, reading the handoff and its plan and carrying on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped.
+description: Write or refresh the repo's docs/handoff.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in the repo's durable intent/decision doc, then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse, reading the handoff and its plan and carrying on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff c` continues, `/handoff h` shows help.
 ---
 
 # handoff
@@ -11,7 +11,15 @@ rewritten every time, so nothing may live only there: decisions go to a durable 
 handoff: a cleared session never has to ask the user something they already answered, and nothing the user said
 is lost. `S=<skill-dir>/scripts`.
 
-## Continue (argument `continue` or `resume`)
+## Usage
+
+| Call | Short | Does |
+|---|---|---|
+| `/handoff` | | [write](#write): record decisions, rewrite `docs/handoff.md`, commit |
+| `/handoff continue`, `/handoff resume` | `/handoff c` | [continue](#continue) in a fresh session |
+| `/handoff help` | `/handoff h` | print this table and stop |
+
+## Continue
 
 1. Read `docs/handoff.md` and every file its **Read first** and **Plan** sections link to.
 2. Check it against reality: `git log --oneline -5`, `git status --short`. Say briefly what differs, if anything.

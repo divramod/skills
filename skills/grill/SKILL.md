@@ -1,13 +1,21 @@
 ---
-name: grill-me
-description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds via the question tool, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in the repo's plan and intent doc so nothing is asked twice. Use when the user says grill me / stress-test / poke holes, or when /plan offers it before implementing a plan.
+name: grill
+description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds via the question tool, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in the repo's plan and intent doc so nothing is asked twice. Use when the user says grill (me) / stress-test / poke holes, or when /plan offers it before implementing a plan. `/grill h` shows help.
 ---
 
-# grill-me
+# grill
 
 Adapted from Matt Pocock's `grill-me` / `grilling` skills
 ([mattpocock/skills](https://github.com/mattpocock/skills), MIT). Changes: questions go through the question tool,
 the session is self-contained, and decisions are written down so a cleared session never re-asks them.
+
+## Usage
+
+| Call | Does |
+|---|---|
+| `/grill` | grill the current plan (`docs/plans/CURRENT_PLAN`) |
+| `/grill <subject>` | grill a plan file, an idea or a decision |
+| `/grill h`, `/grill help` | print this table and stop |
 
 ## Start
 

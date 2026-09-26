@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one markdown file per plan in docs/plans/<NNNN>-<slug>.md (goal, context links, a step table with a done-when check and status per step, decisions), with docs/plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, start the next step (offering /grill-me first when the plan hasn't been grilled), mark steps done, or switch plans. Execution uses the agent's built-ins (plan mode, /goal, subagents), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step.
+description: Lean planning for a repo — one markdown file per plan in docs/plans/<NNNN>-<slug>.md (goal, context links, a step table with a done-when check and status per step, decisions), with docs/plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, start the next step (offering /grill first when the plan hasn't been grilled), mark steps done, or switch plans. Execution uses the agent's built-ins (plan mode, /goal, subagents), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -13,13 +13,14 @@ Ask every question with the question tool, recommended option first.
 
 ## Pick the action
 
-| Argument | Action |
-|---|---|
-| `new <idea>` | [New plan](#new-plan) |
-| none, `status` | [Status](#status) |
-| `next`, `start` | [Start the next step](#start-the-next-step) |
-| `done [<step>]` | [Finish a step](#finish-a-step) |
-| `use <slug or number>` | `python3 $S/plan.py use <ref>`, then Status |
+| Call | Short | Does |
+|---|---|---|
+| `/plan new <idea>` | | [create a plan](#new-plan) and make it current |
+| `/plan`, `/plan status` | `/plan s` | [show where the current plan stands](#status) |
+| `/plan next` | `/plan n` | [start the next step](#start-the-next-step), offering `/grill` first |
+| `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
+| `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
+| `/plan help` | `/plan h` | print this table and stop |
 
 ## New plan
 
@@ -31,7 +32,7 @@ Ask every question with the question tool, recommended option first.
    ```
 3. Fill it in: **Context** links, 3–10 **Steps**, each with a concrete **Done when** check (a command, a test, an
    observable behaviour), first step `next`, the rest empty. Record decisions taken so far under **Decisions**.
-4. Show the plan in a few lines, then ask with the question tool: grill it now with `/grill-me` (recommended for
+4. Show the plan in a few lines, then ask with the question tool: grill it now with `/grill` (recommended for
    anything beyond a small change), start step 1, or stop here.
 
 ## Status
@@ -45,8 +46,8 @@ no current plan, list the plans and ask which one to use.
 
 ## Start the next step
 
-1. `python3 $S/plan.py current`. If `grilled` is empty, ask first (question tool): grill the plan with `/grill-me`
-   before implementing (recommended), or start anyway. On "grill", run `/grill-me` on the plan and continue only
+1. `python3 $S/plan.py current`. If `grilled` is empty, ask first (question tool): grill the plan with `/grill`
+   before implementing (recommended), or start anyway. On "grill", run `/grill` on the plan and continue only
    after it confirms shared understanding.
 2. Detail the step: the files it touches, the approach, the tests. For anything non-trivial use plan mode
    (Codex: `/plan`) and let the user approve.
