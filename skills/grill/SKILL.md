@@ -1,6 +1,6 @@
 ---
 name: grill
-description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds via the question tool, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in the repo's plan and intent doc so nothing is asked twice. Use when the user says grill (me) / stress-test / poke holes, or when /plan offers it before implementing a plan. `/grill h` shows help.
+description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds via the question tool, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in its one home (plan, intent doc or ADR) so nothing is asked twice; `/grill q` asks a single round for one step. Use when the user says grill (me) / stress-test / poke holes, or when /plan offers it before implementing a plan. `/grill h` shows help.
 ---
 
 # grill
@@ -15,6 +15,7 @@ the session is self-contained, and decisions are written down so a cleared sessi
 |---|---|
 | `/grill` | grill the current plan (`docs/plans/CURRENT_PLAN`) |
 | `/grill <subject>` | grill a plan file, an idea or a decision |
+| `/grill q [<subject>]`, `/grill quick` | [quick](#quick): one round on the top risks, for a single step |
 | `/grill h`, `/grill help` | print this table and stop |
 
 ## Start
@@ -50,12 +51,20 @@ thought or should be cut. When a question can't be settled by talking (how somet
 and suggest a throwaway prototype instead of guessing. If the tree grows huge, propose splitting the subject and
 grilling the pieces.
 
+## Quick
+
+For one step of an already grilled plan (default subject: the plan's next step). Do the **Start** reading, then
+ask a single round of at most 4 questions: the decisions most likely to make this step fail or be redone. Record
+and finish as below, but don't mark the plan grilled. If the answers open deeper branches, say so and offer the
+full grill.
+
 ## Record
 
-After every round, write the decisions down so they survive `/clear`:
+After every round, write each decision down in exactly **one home** so it survives `/clear`, and link from the
+others instead of repeating it:
 
-- the plan's **Decisions** section (when grilling a plan), one line each: `- <decision> (<date>)`, and adjust its
-  steps or done-when checks when a decision changes them;
+- the plan's **Decisions** section for decisions that only matter to this plan, one line each:
+  `- <decision> (<date>)`; adjust its steps or done-when checks when a decision changes them;
 - the repo's decision log (`docs/intent.md` or equivalent) for decisions that outlive this plan;
 - an ADR for a new rule the code must follow.
 

@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write or refresh the repo's docs/handoff.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in the repo's durable intent/decision doc, then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse, reading the handoff and its plan and carrying on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff c` continues, `/handoff h` shows help.
+description: Write or refresh the repo's docs/handoff.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff c` continues, `/handoff h` shows help.
 ---
 
 # handoff
@@ -22,7 +22,12 @@ is lost. `S=<skill-dir>/scripts`.
 ## Continue
 
 1. Read `docs/handoff.md` and every file its **Read first** and **Plan** sections link to.
-2. Check it against reality: `git log --oneline -5`, `git status --short`. Say briefly what differs, if anything.
+2. Check for drift since it was written:
+   ```bash
+   bash $S/since.sh
+   ```
+   It lists commits after the handoff's `written at` stamp (another session may have worked meanwhile) and
+   uncommitted changes. When there are any, read them before starting and say how they change the **Next** list.
 3. Tell the user in two or three lines where things stand and what you start with, then do the first **Next** task.
 
 If there is no handoff file, say so and ask what to work on.
@@ -33,13 +38,15 @@ If there is no handoff file, say so and ask what to work on.
 
 Before anything else, go through the whole conversation and list every answer, decision, preference and piece of
 intent the user gave (choices from question prompts, "do X, not Y", naming, scope, what to drop, how they like to
-work). For each, check whether a durable doc already records it correctly:
+work). Each fact has exactly **one home**; other docs link to it, never repeat it:
 
+- **The plan's Decisions section** for decisions that only matter to the current plan.
 - **The intent doc**: `docs/intent.md`, or whatever the repo uses for purpose and decisions (a decision log,
   `docs/decisions.md`, a README section). Add missing entries to its decision log with the date; when a decision
   replaced an earlier one, mark the old entry superseded instead of deleting it. If the repo has no such doc and
   the conversation holds decisions, create `docs/intent.md` (purpose, scope, decision log, working agreements) and
   link it from `AGENTS.md`.
+  for decisions that outlive the plan.
 - **ADRs** (`.adr/`, `docs/adr/`): a new rule the code must follow gets an ADR, the intent doc links it.
 - **Preferences about how the user works with agents** (not about this repo) go to the agent's memory instead,
   if it has one.
@@ -55,9 +62,12 @@ Fix entries that the conversation contradicts. Only then write the handoff.
   content names the active plan); a plan linked from the existing handoff; a plan named in this conversation; plan
   files in the repo (`docs/plan.md`, `docs/plans/`, `PLAN.md`, `docs/**/plan*.md`, a spec or research doc with a
   numbered step list). When `CURRENT_PLAN` points at a finished or missing plan, do not link it as current: list
-  it under **Open** as stale, with a suggestion (update or delete it). A plan exists only if it is a file; a plan that lives only in this conversation gets written
-  into the handoff's **Next** section instead. If several candidates exist and the conversation doesn't settle it,
-  ask the user which one.
+  it under **Open** as stale, with a suggestion (update or delete it). A plan exists only if it is a file; a plan
+  that lives only in this conversation gets written into the handoff's **Next** section instead. If several
+  candidates exist and the conversation doesn't settle it, ask the user which one.
+- **Plan status comes from the plan, not from memory**: for a `docs/plans/<NNNN>-<slug>.md` plan run
+  `python3 <plan-skill-dir>/scripts/plan.py current` (the `plan` skill next to this one) and take title,
+  `done/total` and the next step from its JSON. Make sure the step table itself is up to date first.
 - Test and build state: state only what you ran in this session. Otherwise write "not run".
 
 ### 3. Write `docs/handoff.md`
@@ -68,13 +78,13 @@ nothing to say:
 ```markdown
 # Handoff
 
-Updated <YYYY-MM-DD>, branch `<branch>`, last commit `<sha> <subject>`.
+Updated <YYYY-MM-DD>, branch `<branch>`, written at `<short sha of HEAD before this handoff commit>`.
 
 ## Goal
 <one or two sentences: what this line of work is for>
 
 ## Plan
-[<plan title>](<relative path>): currently at <step / phase name>, <n of m> done.
+[<plan title>](<relative path>): <done>/<total> done, next: step <n> <step>.
 <one line on anything in the plan that changed or is known to be outdated>
 
 ## Read first
@@ -107,20 +117,21 @@ Rules:
   files that exist.
 - **Next** is specific enough that a session without this conversation can start: name files, commands, and the
   first task.
-- Decisions belong in the intent doc (step 1), not only here; **Done** may mention them with a link.
+- Decisions live in their one home (step 1); the handoff links them, it never holds the only copy.
+- **Next** for plan work is the current step's tasks only; the step list itself stays in the plan.
 - No secrets, no tool-call logs, no restating of the plan's content.
 
 ### 4. Commit only the handoff docs
 
 ```bash
-bash $S/commit-handoff.sh "docs: update handoff" docs/handoff.md [docs/intent.md .adr/<new>.md AGENTS.md ...]
+bash $S/commit-handoff.sh "docs: update handoff" docs/handoff.md [docs/intent.md docs/plans/<plan>.md .adr/<new>.md ...]
 ```
 
 It commits exactly the files you name (the handoff plus the docs you changed in step 1), leaving everything else
-staged or unstaged as it was, and prints the new commit. It never pushes. If it exits 2 with a missing-tool error, run `bash $S/install-prerequisites.sh`.
+staged or unstaged as it was, and prints the new commit. It never pushes. If a script exits 2 with a
+missing-tool error, run `bash $S/install-prerequisites.sh`.
 
 ### 5. Report
 
 Tell the user the commit, which decisions you added to the intent doc, the plan it links (or that there is none),
-and the prompt from **Start the next session
-with**, so they can `/clear` and paste it.
+and the prompt from **Start the next session with**, so they can `/clear` and paste it.

@@ -38,6 +38,16 @@ codex plugin add divramod-skills@divramod
 grok plugin install divramod/skills
 ```
 
+### From a local clone: links
+
+For working on the skills themselves: link every skill into Claude Code (`~/.claude/skills`) and into the shared
+folder Codex and other agents read (`~/.agents/skills`). Edits in the clone are live; renamed or removed skills
+are unlinked; anything that isn't a link into the clone is left alone.
+
+```bash
+python3 scripts/install-skills.py            # --dry-run to preview, --target DIR for other folders
+```
+
 ### OpenCode, and any other agent: skills.sh
 
 OpenCode has no plugin route for skills. [skills.sh](https://skills.sh) copies the skill files into the agent's skills directory:

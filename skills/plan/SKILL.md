@@ -11,6 +11,15 @@ plan as JSON (`slug`, `path`, `grilled`, `done`, `total`, `next`, `steps`).
 
 Ask every question with the question tool, recommended option first.
 
+**The step table is the plan's state.** `/plan`, `/handoff` and the statusline all read it; nothing else tracks
+progress. Update it the moment a step's check passes, never later.
+
+**Good steps** fit one session (split a step that doesn't) and have a **Done when** that is a runnable command
+where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise one observable behaviour.
+
+**One home per decision**: decisions that matter only to this plan go under the plan's **Decisions**; decisions
+that outlive it go to the repo's decision record (`docs/intent.md` or equivalent) and the plan links them.
+
 ## Pick the action
 
 | Call | Short | Does |
@@ -30,8 +39,8 @@ Ask every question with the question tool, recommended option first.
    ```bash
    python3 $S/plan.py new "<title>" --goal "<goal>"
    ```
-3. Fill it in: **Context** links, 3–10 **Steps**, each with a concrete **Done when** check (a command, a test, an
-   observable behaviour), first step `next`, the rest empty. Record decisions taken so far under **Decisions**.
+3. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. Record
+   decisions taken so far in their one home.
 4. Show the plan in a few lines, then ask with the question tool: grill it now with `/grill` (recommended for
    anything beyond a small change), start step 1, or stop here.
 
@@ -46,25 +55,29 @@ no current plan, list the plans and ask which one to use.
 
 ## Start the next step
 
-1. `python3 $S/plan.py current`. If `grilled` is empty, ask first (question tool): grill the plan with `/grill`
-   before implementing (recommended), or start anyway. On "grill", run `/grill` on the plan and continue only
-   after it confirms shared understanding.
+1. `python3 $S/plan.py current`, then offer grilling with the question tool, proportionate to the risk:
+   - plan not grilled yet (`grilled` empty): `/grill` the whole plan first (recommended), or start anyway;
+   - plan grilled, step non-trivial: `/grill q` on this step (one round, top risks), or start;
+   - small, clear step: just start.
+
+   On a grill, continue only after it confirms shared understanding.
 2. Detail the step: the files it touches, the approach, the tests. For anything non-trivial use plan mode
    (Codex: `/plan`) and let the user approve.
-3. Implement. For a longer step, suggest running it with `/goal "<the step's done-when>"`; use subagents (with
-   worktree isolation) for independent parallel parts.
+3. Implement. When the done-when is a runnable check, offer to run the step as
+   `/goal "<done-when> passes"` so the agent keeps going until it does; use subagents (with worktree isolation)
+   for independent parallel parts.
 4. When the done-when check passes, [finish the step](#finish-a-step).
 
 ## Finish a step
 
 1. Run the step's done-when check yourself and show the result; a step is done only when it passes.
-2. Mark it and name the next one:
+2. Update the step table right away, marking the step and naming the next one:
    ```bash
-   python3 $S/plan.py status <step> "done (<short sha>)"
+   python3 $S/plan.py status <step> "done (<short sha>, check passed)"
    python3 $S/plan.py status <next step> next
    ```
 3. Record what the step taught under **Notes**, and adjust later steps when reality changed them (say what and
-   why; decisions go under **Decisions** and, if they outlive the plan, into the repo's decision record).
+   why; decisions go to their one home).
 4. When every step is done, say so and ask whether to set another plan current.
 
 Don't commit or push on your own; `/handoff` commits plan and handoff together before a `/clear`.
