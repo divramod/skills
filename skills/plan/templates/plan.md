@@ -1,6 +1,6 @@
 # Plan {number}: {title}
 
-Created {date}. `plans/CURRENT_PLAN` names the active plan.
+Created {date}. `plans/CURRENT_PLAN` names the active plan; helper files for this plan live next to this file.
 
 ## Goal
 

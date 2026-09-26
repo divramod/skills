@@ -1,11 +1,12 @@
 ---
 name: plan
-description: Lean planning for a repo — one markdown file per plan in plans/<NNNN>-<slug>.md (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, start the next step (offering /grill first when the plan hasn't been grilled), mark steps done, or switch plans. Execution uses the agent's built-ins (plan mode, /goal, subagents), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, start the next step (offering /grill first when the plan hasn't been grilled), mark steps done, or switch plans. Execution uses the agent's built-ins (plan mode, /goal, subagents), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
 
-One file per plan, nothing else: no phase folders, no state files, no gap sub-plans. The plan says *what* and
+One folder per plan, `plans/<NNNN>-<slug>/`: `plan.md` plus any helper file that belongs to the plan (scripts,
+notes, data), so the folder is self-contained; no phase folders, no state files, no gap sub-plans. The plan says *what* and
 *in which order*; each step is detailed only when it is next. `S=<skill-dir>/scripts`; every command prints the
 plan as JSON (`slug`, `path`, `grilled`, `done`, `total`, `next`, `steps`).
 
@@ -42,7 +43,7 @@ that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and
 
 1. Understand the idea: read `INTENT.md` (or the repo's decision record) and the code it touches. Settled
    decisions are not questions. Ask only what you can't find out, with the question tool.
-2. Create the file and make it current:
+2. Create the plan folder with its `plan.md` and make it current:
    ```bash
    python3 $S/plan.py new "<title>" --goal "<goal>"
    ```

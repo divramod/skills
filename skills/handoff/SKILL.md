@@ -64,7 +64,7 @@ Fix entries that the conversation contradicts. Only then write the handoff.
   it under **Open** as stale, with a suggestion (update or delete it). A plan exists only if it is a file; a plan
   that lives only in this conversation gets written into the handoff's **Next** section instead. If several
   candidates exist and the conversation doesn't settle it, ask the user which one.
-- **Plan status comes from the plan, not from memory**: for a `plans/<NNNN>-<slug>.md` plan run
+- **Plan status comes from the plan, not from memory**: for a `plans/<NNNN>-<slug>/plan.md` plan run
   `python3 <plan-skill-dir>/scripts/plan.py current` (the `plan` skill next to this one) and take title,
   `done/total` and the next step from its JSON. Make sure the step table itself is up to date first.
 - Test and build state: state only what you ran in this session. Otherwise write "not run".
@@ -112,7 +112,7 @@ Done when: <a check the next session can run>
 
 Rules:
 
-- Links are relative to the repo root (e.g. `AGENTS.md`, `research/0001-analysis.md`) and must point at files
+- Links are relative to the repo root (e.g. `AGENTS.md`, `research/0001-analysis/research.md`) and must point at files
   that exist.
 - **Next** is specific enough that a session without this conversation can start: name files, commands, and the
   first task.
@@ -123,7 +123,7 @@ Rules:
 ### 4. Commit only the handoff docs
 
 ```bash
-bash $S/commit-handoff.sh "docs: update handoff" HANDOFF.md [INTENT.md plans/<plan>.md .adr/<new>.md ...]
+bash $S/commit-handoff.sh "docs: update handoff" HANDOFF.md [INTENT.md plans/<plan>/plan.md .adr/<new>.md ...]
 ```
 
 It commits exactly the files you name (the handoff plus the docs you changed in step 1), leaving everything else

@@ -20,7 +20,7 @@ the session is self-contained, and decisions are written down so a cleared sessi
 
 ## Start
 
-1. **Subject.** The argument, or else the current plan (`plans/CURRENT_PLAN` → `plans/<slug>.md`), or
+1. **Subject.** The argument, or else the current plan (`plans/CURRENT_PLAN` → `plans/<slug>/plan.md`), or
    else ask what to grill.
 2. **Already decided.** Read the subject plus the repo's decision records (`INTENT.md` or equivalent, the plan's
    **Decisions** section, `.adr/`). Anything answered there is settled: never ask it again; only reopen it when

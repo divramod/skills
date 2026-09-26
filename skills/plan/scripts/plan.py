@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic bookkeeping for single-file plans under plans/ at the repository root.
+"""Deterministic bookkeeping for plans under plans/ at the repository root.
 
-A plan is plans/<NNNN>-<slug>.md with a markdown table whose header has the columns `#`, `Step` and `Status`
+A plan is a folder plans/<NNNN>-<slug>/ holding plan.md and the plan's helper files; plan.md has a markdown table whose header has the columns `#`, `Step` and `Status`
 (optionally `Done when`). plans/CURRENT_PLAN holds the slug of the active plan (the Claude statusline shows it).
+A flat plans/<NNNN>-<slug>.md from before the folder layout is still read and updated.
 
   plan.py new "<title>" [--goal "<goal>"] [--no-current] [--fetch]
                                                            create the next plan from the template; its number
@@ -28,7 +29,8 @@ import plan_number
 
 PLANS = Path("plans")
 POINTER = "CURRENT_PLAN"
-PLAN_RE = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
+PLAN_RE = re.compile(r"^(\d{4})-[a-z0-9-]+$")
+MAIN = "plan.md"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "plan.md"
 
 
@@ -50,19 +52,27 @@ def slugify(title: str) -> str:
     return slug[:60].rstrip("-")
 
 
+def slug_of(path: Path) -> str:
+    """`0002-foo` for plans/0002-foo/plan.md (and for a flat plans/0002-foo.md)."""
+    return path.parent.name if path.name == MAIN else path.stem
+
+
 def plan_files(root: Path) -> list[Path]:
+    """Every plan's markdown file: plans/<slug>/plan.md, or a flat plans/<slug>.md."""
     folder = root / PLANS
     if not folder.is_dir():
         return []
-    return sorted(p for p in folder.iterdir() if p.is_file() and PLAN_RE.match(p.name))
+    found = [p / MAIN for p in folder.iterdir() if p.is_dir() and PLAN_RE.match(p.name) and (p / MAIN).is_file()]
+    found += [p for p in folder.iterdir() if p.is_file() and p.suffix == ".md" and PLAN_RE.match(p.stem)]
+    return sorted(found, key=slug_of)
 
 
 def resolve(root: Path, ref: str) -> Path:
     """A plan by slug (`0002-foo`), file name, or bare number (`2`, `0002`)."""
-    ref = ref.strip().removesuffix(".md")
+    ref = ref.strip().removesuffix(".md").removesuffix("/" + MAIN).rstrip("/")
     for path in plan_files(root):
-        number = path.name[:4]
-        if path.stem == ref or (ref.isdigit() and int(ref) == int(number)):
+        slug = slug_of(path)
+        if slug == ref or (ref.isdigit() and int(ref) == int(slug[:4])):
             return path
     raise PlanError(f"no plan matches '{ref}' in {PLANS}")
 
@@ -75,7 +85,7 @@ def current_path(root: Path) -> Path:
 
 
 def set_current(root: Path, path: Path) -> None:
-    (root / PLANS / POINTER).write_text(path.stem + "\n")
+    (root / PLANS / POINTER).write_text(slug_of(path) + "\n")
 
 
 def split_row(line: str) -> list[str]:
@@ -115,15 +125,15 @@ def read_steps(text: str) -> list[dict]:
 def describe(root: Path, path: Path) -> dict:
     text = path.read_text()
     steps = read_steps(text)
-    title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), path.stem)
+    title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), slug_of(path))
     grilled = next((l.split(":", 1)[1].strip() for l in text.splitlines() if l.startswith("Grilled:")), "")
     open_steps = [s for s in steps if not s["status"].lower().startswith("done")]
     pointer = root / PLANS / POINTER
     return {
-        "slug": path.stem,
+        "slug": slug_of(path),
         "path": str(path.relative_to(root)),
         "title": title,
-        "current": pointer.is_file() and pointer.read_text().strip() == path.stem,
+        "current": pointer.is_file() and pointer.read_text().strip() == slug_of(path),
         "grilled": grilled,
         "done": len(steps) - len(open_steps),
         "total": len(steps),
@@ -140,7 +150,7 @@ def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool 
         number = plan_number.next_number(root, slug)
     except plan_number.NumberError as error:
         raise PlanError(str(error)) from error
-    path = root / PLANS / f"{number:04d}-{slug}.md"
+    path = root / PLANS / f"{number:04d}-{slug}" / MAIN
     path.parent.mkdir(parents=True, exist_ok=True)
     text = TEMPLATE.read_text().format(
         number=f"{number:04d}", title=title, goal=goal or "<one or two sentences>",
@@ -164,7 +174,7 @@ def set_status(path: Path, step: str, status: str) -> None:
             lines[i] = "| " + " | ".join(cells) + " |\n"
             path.write_text("".join(lines))
             return
-    raise PlanError(f"no step '{step}' in {path.name}")
+    raise PlanError(f"no step '{step}' in {slug_of(path)}")
 
 
 def set_grilled(path: Path) -> None:
