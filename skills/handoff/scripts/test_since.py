@@ -37,7 +37,8 @@ class SinceTest(unittest.TestCase):
 
     def write_handoff(self, sha):
         self.handoff.write_text(f"# Handoff\n\nUpdated 2026-09-26, branch `main`, written at `{sha}`.\n")
-        git(self.repo, "add", "docs/handoff.md")
+        (self.repo / "docs/intent.md").write_text("# Intent\n")  # committed together with the handoff
+        git(self.repo, "add", "docs")
         git(self.repo, "commit", "-qm", "docs: update handoff")
 
     def test_nothing_since(self):

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# What changed since a handoff was written: commits after its `Written at` sha (ignoring commits that touch only
-# the handoff file itself) and uncommitted changes.
+# What changed since a handoff was written: commits after its `written at` sha (ignoring the commit that wrote the
+# handoff) and uncommitted changes.
 # Usage: since.sh [handoff file]   (default docs/handoff.md)
 # Exit 0: report printed. Exit 1: no handoff or no stamp. Exit 2: git missing.
 set -euo pipefail
@@ -25,7 +25,9 @@ if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
   exit 0
 fi
 
-commits="$(git log --oneline "$sha..HEAD" -- . ":(exclude)$file")"
+# The commit that wrote the handoff (maybe together with other docs) is part of the handoff, not drift.
+own="$(git log -1 --format=%h -- "$file")"
+commits="$(git log --oneline "$sha..HEAD" | grep -v "^$own " || true)"
 changes="$(git status --short)"
 echo "written at $sha"
 if [[ -z "$commits" ]]; then
