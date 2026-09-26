@@ -37,15 +37,15 @@ class CommitHandoffTest(unittest.TestCase):
         run(self.repo, "git", "add", "code.txt")
         (self.repo / "other.txt").write_text("untracked\n")
         (self.repo / "docs").mkdir()
-        (self.repo / "docs/handoff.md").write_text("# Handoff\n")
-        (self.repo / "docs/intent.md").write_text("# Intent\n")
+        (self.repo / "HANDOFF.md").write_text("# Handoff\n")
+        (self.repo / "INTENT.md").write_text("# Intent\n")
 
-        result = self.commit("docs: update handoff", "docs/handoff.md", "docs/intent.md")
+        result = self.commit("docs: update handoff", "HANDOFF.md", "INTENT.md")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = run(self.repo, "git", "show", "--name-only", "--format=%s", "HEAD").stdout.split("\n")
         self.assertEqual(lines[0], "docs: update handoff")
-        self.assertEqual(sorted(filter(None, lines[1:])), ["docs/handoff.md", "docs/intent.md"])
+        self.assertEqual(sorted(filter(None, lines[1:])), ["HANDOFF.md", "INTENT.md"])
         status = run(self.repo, "git", "status", "--short").stdout
         self.assertIn("M  code.txt", status)  # still staged, not committed
         self.assertIn("?? other.txt", status)

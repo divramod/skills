@@ -17,7 +17,7 @@ thread), a hackernews post (article + discussion), or a document on the local fi
 same treatment the videos get today: a folder in the library with `summary.md`, `summary.html`, the extracted
 content, `metadata.json`, the links section with dates, and an entry in the library sidebar.
 
-Shot 9 of `docs/shotfiles/main.md`. Research: `docs/research/0003-tell-me-multi-source/result.md`.
+Shot 9 of `shotfiles/main.md`. Research: `research/0003-tell-me-multi-source/result.md`.
 
 ## Goals
 
@@ -179,7 +179,7 @@ short imperative prose, no duplication of what SKILL.md or `subskills/shared/` a
 - **Always:** keep deterministic work in scripts; keep SKILL.md < 500 lines and each SUBSKILL.md < 150; copy
   anchor links from the content file; one commit per phase.
 - **Ask first:** adding a required tool to a source; changing the video folder layout; network in tests.
-- **Never:** nested files named `SKILL.md`/`skill.md`; paid/login APIs; edit `docs/shotfiles/main.md`.
+- **Never:** nested files named `SKILL.md`/`skill.md`; paid/login APIs; edit `shotfiles/main.md`.
 
 ## Success Criteria
 

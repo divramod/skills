@@ -120,7 +120,7 @@ Restructure without new behaviour. Afterwards the video flow works exactly as be
 - [x] **T009** — Update spec success-criteria test command to the per-folder loop; e2e: summarize one real YouTube video end to end on a temp root
   **Acceptance**: summary.html opens in the library with the player, content.md, links with dates
   **Verify**: manual e2e + `hal plan spec render-verify`
-  **Files**: docs/plans/0003-tell-me-multi-source/spec.md
+  **Files**: plans/0003-tell-me-multi-source/spec.md
   **Size**: S
   **State**:
   - [x] built

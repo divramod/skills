@@ -1,6 +1,6 @@
 # Migration Notes
 
-Plan dir: `/Users/mod/a/skills/docs/plans/0001-summarize-video-v2`
+Plan dir: `/Users/mod/a/skills/plans/0001-summarize-video-v2`
 
 Layout detected: `Schema0`
 
@@ -8,5 +8,5 @@ Some required H2 sections had no extractable legacy content; stubs reference thi
 
 ## Source files inspected
 
-- `/Users/mod/a/skills/docs/plans/0001-summarize-video-v2/masterplan.md`
+- `/Users/mod/a/skills/plans/0001-summarize-video-v2/masterplan.md`
 

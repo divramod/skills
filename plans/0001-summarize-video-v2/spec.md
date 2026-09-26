@@ -111,7 +111,7 @@ Match the existing script: stdlib, type hints, small pure helpers above the side
 
 - Always: check tools before use; keep writes inside the resolved video folder; keep scripts stdlib-only.
 - Ask first: deleting an existing summary folder; installing tools system-wide (the install script is explicit and user-run).
-- Never: call paid APIs; write outside `DM_SUMMARIZE_VIDEO_ROOT` (except `uvx` model caches); edit `docs/shotfiles/`.
+- Never: call paid APIs; write outside `DM_SUMMARIZE_VIDEO_ROOT` (except `uvx` model caches); edit `shotfiles/`.
 
 ## Success Criteria
 
