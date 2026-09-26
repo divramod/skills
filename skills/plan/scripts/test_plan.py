@@ -22,7 +22,7 @@ class PlanTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        (self.root / ".git").mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.root, check=True)
         self.plans = self.root / "docs/plans"
 
     def tearDown(self):

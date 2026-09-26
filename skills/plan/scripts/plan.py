@@ -4,12 +4,16 @@
 A plan is docs/plans/<NNNN>-<slug>.md with a markdown table whose header has the columns `#`, `Step` and `Status`
 (optionally `Done when`). docs/plans/CURRENT_PLAN holds the slug of the active plan (the Claude statusline shows it).
 
-  plan.py new "<title>" [--goal "<goal>"] [--no-current]   create the next plan from the template
+  plan.py new "<title>" [--goal "<goal>"] [--no-current] [--fetch]
+                                                           create the next plan from the template; its number
+                                                           is unique across all worktrees and branches
+                                                           (plan_number.py; --fetch sees other clones too)
   plan.py current                                          print the current plan as JSON
   plan.py list                                             print every plan as JSON
   plan.py use <slug-or-number>                             make a plan current
   plan.py status <step> "<status>" [--plan <slug>]         set one step's Status cell
   plan.py grilled [--plan <slug>]                          set the plan's `Grilled:` line to today
+  plan.py check                                            exit 1 when a plan number is used twice
 
 Run from anywhere inside the repo, or pass --root. Prints JSON on stdout; exits 1 with a message on stderr.
 """
@@ -19,6 +23,8 @@ import json
 import re
 import sys
 from pathlib import Path
+
+import plan_number
 
 PLANS = Path("docs/plans")
 POINTER = "CURRENT_PLAN"
@@ -126,10 +132,15 @@ def describe(root: Path, path: Path) -> dict:
     }
 
 
-def new_plan(root: Path, title: str, goal: str, make_current: bool) -> Path:
-    numbers = [int(p.name[:4]) for p in plan_files(root)]
-    number = max(numbers, default=0) + 1
-    path = root / PLANS / f"{number:04d}-{slugify(title)}.md"
+def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool = False) -> Path:
+    slug = slugify(title)
+    if fetch:
+        plan_number.git(root, "fetch", "--all", "--quiet")
+    try:
+        number = plan_number.next_number(root, slug)
+    except plan_number.NumberError as error:
+        raise PlanError(str(error)) from error
+    path = root / PLANS / f"{number:04d}-{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     text = TEMPLATE.read_text().format(
         number=f"{number:04d}", title=title, goal=goal or "<one or two sentences>",
@@ -177,6 +188,7 @@ def main(argv: list[str]) -> int:
     p_new.add_argument("title")
     p_new.add_argument("--goal", default="")
     p_new.add_argument("--no-current", action="store_true")
+    p_new.add_argument("--fetch", action="store_true")
     sub.add_parser("current")
     sub.add_parser("list")
     p_use = sub.add_parser("use")
@@ -187,12 +199,15 @@ def main(argv: list[str]) -> int:
     p_status.add_argument("--plan")
     p_grilled = sub.add_parser("grilled")
     p_grilled.add_argument("--plan")
+    sub.add_parser("check")
     args = parser.parse_args(argv)
 
     try:
         root = args.root.resolve() if args.root else find_root(Path.cwd())
+        if args.command == "check":
+            return plan_number.main(["--root", str(root), "check"])
         if args.command == "new":
-            result = describe(root, new_plan(root, args.title, args.goal, not args.no_current))
+            result = describe(root, new_plan(root, args.title, args.goal, not args.no_current, args.fetch))
         elif args.command == "current":
             result = describe(root, current_path(root))
         elif args.command == "list":

@@ -17,6 +17,12 @@ progress. Update it the moment a step's check passes, never later.
 **Good steps** fit one session (split a step that doesn't) and have a **Done when** that is a runnable command
 where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise one observable behaviour.
 
+**Plan numbers are unique across the whole repository**: `plan.py new` takes the number from
+`scripts/plan_number.py`, which looks at every worktree (committed or not), every local and remote-tracking
+branch, and a reservation file shared by all worktrees of the clone, and reserves the number under a file lock.
+Never pick a number by hand. Add `--fetch` when other machines may have created plans. `python3 $S/plan.py check`
+lists numbers used by two plans (for example after merging branches from before this rule).
+
 **One home per decision**: decisions that matter only to this plan go under the plan's **Decisions**; decisions
 that outlive it go to the repo's decision record (`docs/intent.md` or equivalent) and the plan links them.
 
@@ -29,6 +35,7 @@ that outlive it go to the repo's decision record (`docs/intent.md` or equivalent
 | `/plan next` | `/plan n` | [start the next step](#start-the-next-step), offering `/grill` first |
 | `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
 | `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
+| `/plan check` | `/plan c` | `python3 $S/plan.py check`: report plan numbers used twice |
 | `/plan help` | `/plan h` | print this table and stop |
 
 ## New plan
