@@ -49,13 +49,15 @@ class ContextTest(unittest.TestCase):
         result = self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})
         self.assertEqual(result["used"], 80_000)
         self.assertEqual(result["window"], 200_000)
-        self.assertEqual(result["percent"], 40.0)
+        # 80k of the usable 167k (200k minus the auto-compact buffer).
+        self.assertEqual(result["raw_percent"], 40.0)
+        self.assertEqual(result["percent"], 47.9)
         self.assertTrue(result["stop"])
 
     def test_threshold_and_window_arguments(self):
         path = self.transcript(assistant(0, cache_read=100_000))
         result = self.run_context("--transcript", str(path), "--window", "1000000", "--threshold", "40")
-        self.assertEqual(result["percent"], 10.0)
+        self.assertEqual(result["percent"], 12.0)
         self.assertFalse(result["stop"])
 
     def test_window_from_a_1m_model_setting_or_the_environment(self):
@@ -63,13 +65,21 @@ class ContextTest(unittest.TestCase):
         (self.home / ".claude" / "settings.json").write_text(json.dumps({"model": "opus[1m]"}))
         self.assertEqual(self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})["window"], 1_000_000)
         env = {"CLAUDE_CODE_SESSION_ID": "s1", "CLAUDE_CONTEXT_WINDOW": "500000"}
-        self.assertEqual(self.run_context(env=env)["percent"], 20.0)
+        self.assertEqual(self.run_context(env=env)["raw_percent"], 20.0)
 
     def test_more_used_than_the_default_window_means_the_large_one(self):
         self.transcript(assistant(0, cache_read=300_000))
         result = self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})
         self.assertEqual(result["window"], 1_000_000)
-        self.assertEqual(result["percent"], 30.0)
+        self.assertEqual(result["raw_percent"], 30.0)
+        self.assertEqual(result["percent"], 35.9)
+
+    def test_matches_the_statusline_formula(self):
+        # The statusline showed 46% at 381,685 tokens of a 1M window.
+        path = self.transcript(assistant(0, cache_read=381_685))
+        result = self.run_context("--transcript", str(path), "--window", "1000000")
+        self.assertEqual(round(result["percent"]), 46)
+        self.assertTrue(result["stop"])
 
     def test_unknown_without_session_or_usage(self):
         result = self.run_context()

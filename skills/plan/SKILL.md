@@ -101,7 +101,7 @@ mode and without per-step grill offers. Ask the user only for
    work in the tree stays as it was). Never push without the user's consent.
 5. **Check the context window**:
    ```bash
-   python3 $S/context.py            # --threshold 40 by default
+   python3 $S/context.py            # --threshold 40 by default; percent as the statusline shows it
    ```
    - `stop` is true (40% or more used): stop the plan here. Run `/handoff` (it records decisions, writes
      `HANDOFF.md` with the plan's next step and commits it), then tell the user to run `/clear` and then

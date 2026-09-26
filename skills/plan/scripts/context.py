@@ -9,7 +9,10 @@ output, which is what the next call starts from. The window comes from --window,
 else 1,000,000 when the model setting in ~/.claude/settings.json ends in `[1m]`, else 200,000; when more tokens
 are in use than that, the window must be the 1M one.
 
-Prints JSON: {"known", "used", "window", "percent", "threshold", "stop", "source"}. `stop` is true when
+`percent` is measured against the usable window, i.e. without Claude Code's auto-compact buffer (16.5% of the
+window), exactly like the Claude Code statusline shows it; `raw_percent` is against the whole window.
+
+Prints JSON: {"known", "used", "window", "percent", "raw_percent", "threshold", "stop", "source"}. `stop` is true when
 percent >= threshold. When nothing can be measured (another agent, no transcript yet) `known` is false and
 `stop` is null: the agent judges for itself. Always exits 0 unless the arguments are wrong.
 """
@@ -22,6 +25,8 @@ from pathlib import Path
 DEFAULT_WINDOW = 200_000
 LARGE_WINDOW = 1_000_000
 DEFAULT_THRESHOLD = 40.0
+# Share of the window Claude Code keeps free for auto-compaction; the statusline leaves it out.
+AUTO_COMPACT_BUFFER = 0.165
 
 
 def find_transcript(session: str, projects: Path) -> Path | None:
@@ -60,7 +65,7 @@ def configured_window(settings: Path) -> int:
 
 
 def measure(args: argparse.Namespace, home: Path) -> dict:
-    result = {"known": False, "used": None, "window": None, "percent": None,
+    result = {"known": False, "used": None, "window": None, "percent": None, "raw_percent": None,
               "threshold": args.threshold, "stop": None, "source": None}
     transcript = Path(args.transcript) if args.transcript else None
     if transcript is None:
@@ -83,8 +88,9 @@ def measure(args: argparse.Namespace, home: Path) -> dict:
     window = args.window or configured_window(home / ".claude" / "settings.json")
     if used > window:
         window = max(window, LARGE_WINDOW)
-    percent = round(100 * used / window, 1)
+    percent = round(min(100.0, 100 * used / (window * (1 - AUTO_COMPACT_BUFFER))), 1)
     result.update(known=True, used=used, window=window, percent=percent,
+                  raw_percent=round(100 * used / window, 1),
                   stop=percent >= args.threshold, source=str(transcript))
     return result
 
