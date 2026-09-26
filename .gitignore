@@ -1,6 +1,6 @@
 .hal/events/
 .hal/git/
 .hal/util/
-docs/shotfiles/
+shotfiles/
 __pycache__/
-docs/plans/CURRENT_PLAN
+plans/CURRENT_PLAN
