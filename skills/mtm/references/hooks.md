@@ -159,12 +159,13 @@ open "$app"
 hal_log "restarted $app"
 ```
 
-`parts/hal2-cli-git/main-post-commit.sh`: an install that runs when the code changed, and also when the installed
-binary did not come from the main checkout, so a failed install or one made from a worktree is repaired:
+`parts/hal2-cli-git/main-post-commit.sh`: an install that runs when the code changed (a change to integration tests
+only does not count), and also when the installed binary did not come from the main checkout, so a failed install or one made from a worktree is repaired:
 
 ```bash
 source_dir="$(pwd -P)/code/rust/apps/hal2-cli-git"
-if ! hal_changed && cargo install --list | grep -F "($source_dir):" | grep -q "^hal2-cli-git v"; then
+if ! hal_changed ':(exclude,glob)code/rust/**/tests/**' &&
+   cargo install --list | grep -F "($source_dir):" | grep -q "^hal2-cli-git v"; then
   hal_log "unchanged and installed from $source_dir, skipped"
   exit 0
 fi
@@ -199,3 +200,24 @@ way: `hal2-macos-paths.sh` became `parts/hal2-macos/paths`.
 tried too. `--all-changed` runs every part, `--part a,b` only those; `main-post-commit` needs `--yes` because it
 does real work (installs from the throwaway worktree: the next real landing installs from the main checkout
 again). `--keep` keeps the throwaway worktree for a look.
+
+## Rehearsing landings
+
+`try` runs one phase. To test the whole chain (the real `hal2-cli-git`, the merge lock, the push, change
+detection across phases), rehearse in a sandbox clone; its main checkout gets its own lock
+(`~/.hal/git/worktree/<name>/`) because the lock is keyed by the checkout's folder name:
+
+```bash
+git clone -q --bare <repo> sbx/origin.git && git clone -q sbx/origin.git sbx/<repo>-sbx
+git -C sbx/<repo>-sbx remote set-head origin main && git -C sbx/<repo>-sbx worktree add -q -b wt ../wt
+# per scenario: commit a change in sbx/wt, then
+(cd sbx/wt && hal2-cli-git worktree merge-to-main --json)
+```
+
+Scenarios worth one landing each: a change to one app only (only its parts run), a change to shared code (every
+dependent part runs, version bump, delivery), a test-only change (gates run, no bump, no delivery; one new test
+per app also proves each gate runs that app's tests), a failing gate (exit 4, main unchanged), a failing
+`main-pre-commit` part (merge aborted, main clean) and a failing `main-post-commit` part (landed, pushed, a
+warning; a throwaway `parts/zz-test/` does both). Post phases deliver for real from the sandbox (installs,
+restarts): ask first; the next real landing delivers from the main checkout again. Remove `sbx/` and
+`~/.hal/git/worktree/<repo>-sbx/` afterwards.

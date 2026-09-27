@@ -70,7 +70,9 @@ purpose in its first lines.
      path or name (an app named after its worktree); their first real landing is the test.
    - Without `--all-changed`, try shows the change detection: commit first, then only parts whose `paths` the
      branch touched run.
-3. Commit the hooks (`.hal/hooks/` is tracked) with a message in the repo's style.
+3. When the user asks for a deep test: rehearse real landings in a sandbox clone, one per scenario (reference:
+   *Rehearsing landings*).
+4. Commit the hooks (`.hal/hooks/` is tracked) with a message in the repo's style.
 
 ## 4. Report
 
