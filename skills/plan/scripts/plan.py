@@ -81,7 +81,12 @@ def current_path(root: Path) -> Path:
     pointer = root / PLANS / POINTER
     if not pointer.is_file() or not pointer.read_text().strip():
         raise PlanError(f"no current plan: {PLANS / POINTER} is missing or empty")
-    return resolve(root, pointer.read_text().strip())
+    ref = pointer.read_text().strip()
+    try:
+        return resolve(root, ref)
+    except PlanError:
+        # A shot (`<shotfile>/<n>`) or a task name: current work, but no plan.
+        raise PlanError(f"no current plan: {PLANS / POINTER} names '{ref}', which is not a plan") from None
 
 
 def set_current(root: Path, path: Path) -> None:

@@ -21,7 +21,10 @@ is lost. `S=<skill-dir>/scripts`.
 
 ## Continue
 
-1. Read `HANDOFF.md` and every file its **Read first** and **Plan** sections link to.
+1. Read `HANDOFF.md` and every file its **Read first** and **Plan** sections link to. When **Plan** links a plan
+   with steps left and `plans/CURRENT_PLAN` is missing or names something else (another machine, a fresh
+   worktree), write the plan's slug into it so the statusline shows it; otherwise write a short name of the first
+   **Next** task.
 2. Check for drift since it was written:
    ```bash
    bash $S/since.sh
@@ -63,7 +66,7 @@ Fix entries that the conversation contradicts. Only then write the handoff.
 - The existing `HANDOFF.md`, if any: keep what is still true, drop what is done or stale.
 - **The plan.** Look for one, in this order: a `CURRENT_PLAN` pointer file (`plans/CURRENT_PLAN`, whose
   content names the active plan); a plan linked from the existing handoff; a plan named in this conversation; plan
-  files in the repo (`plans/`, `PLAN.md`, a spec or research doc with a numbered step list). When `CURRENT_PLAN` points at a finished or missing plan, do not link it as current: list
+  files in the repo (`plans/`, `PLAN.md`, a spec or research doc with a numbered step list). `CURRENT_PLAN` is gitignored per-worktree state and may name a shot (`<shotfile>/<n>`) or a task instead of a plan: then take the plan from the other sources. When `CURRENT_PLAN` points at a finished or missing plan, do not link it as current: list
   it under **Open** as stale, with a suggestion (update or delete it). A plan exists only if it is a file; a plan
   that lives only in this conversation gets written into the handoff's **Next** section instead. If several
   candidates exist and the conversation doesn't settle it, ask the user which one.

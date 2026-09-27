@@ -12,6 +12,11 @@ plan as JSON (`slug`, `path`, `grilled`, `done`, `total`, `next`, `steps`).
 
 Ask every question with the question tool, recommended option first.
 
+**`plans/CURRENT_PLAN` names what the worktree works on**, so the statusline shows it: `new` and `use` write the
+plan's slug into it. Other work writes it too (a shot `<shotfile>/<n>`, a task name); then `current` fails with
+"not a plan": list the plans and ask, as in Status. The file is gitignored per-worktree state: never stage or
+commit it (untrack and gitignore it when the repo still tracks it); `/mtm` deletes it once a finished plan has landed.
+
 **The step table is the plan's state.** `/plan`, `/handoff` and the statusline all read it; nothing else tracks
 progress. Update it the moment a step's check passes, never later.
 

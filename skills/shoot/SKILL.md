@@ -70,6 +70,9 @@ recommended), plus `none`. The user can type any other id. `none`: stop.
    - It is shot `<number>` of the feature `<file>` in this repository. Read the shotfile (`path`) only when you
      need more context on what was prompted before.
    - In a git worktree, run `/mfm` (merge-from-main) before starting.
+   - Unless you create a plan for it with `/plan` (which names the plan instead), write `<file>/<number>`
+     (`shooter/1`) into `plans/CURRENT_PLAN` at the worktree root before starting, so the statusline shows the
+     shot. The file is gitignored runtime state, never committed; `/mtm` deletes it once the shot has landed.
    - Do not implement the shotfile's other shots, and do not change the shotfile beyond the mark from step 1.
 
 The mark is written straight into the shotfile, without renumbering: hal2-nvim renumbers on its next send. An open

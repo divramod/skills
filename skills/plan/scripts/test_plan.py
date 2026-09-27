@@ -107,6 +107,13 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(self.run_plan("status", "7", "x", "--plan", "2").returncode, 1)
         self.assertEqual(self.run_plan("new", "!!!").returncode, 1)
 
+    def test_current_names_a_shot_not_a_plan(self):
+        self.write_plan()
+        (self.plans / "CURRENT_PLAN").write_text("shooter/1\n")
+        result = self.run_plan("current")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("names 'shooter/1', which is not a plan", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
