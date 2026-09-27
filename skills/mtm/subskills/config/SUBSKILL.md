@@ -50,8 +50,9 @@ recommended set first; the reference's recipes are the defaults per stack. Typic
 | `main-post-commit` | delivery after the landing (a failure only warns) | install the CLI, rebuild and restart the app |
 
 Write the chosen parts: `paths` with the app's files and the crates or libs it builds from, `**/*.md` excluded
-unless docs feed the build; scripts start with `hal_skip_unless_changed` unless they must run on every landing
-(say why in a comment, like a self-healing install). Follow the repo's shell style and comment each script's
+unless docs feed the build; every script runs only when the part's code changed (`hal_skip_unless_changed`);
+delivery may also run when the installed thing did not come from the main checkout (see the reference's
+hal2-cli-git example), never unconditionally on every landing. Follow the repo's shell style and comment each script's
 purpose in its first lines.
 
 ## 3. Verify

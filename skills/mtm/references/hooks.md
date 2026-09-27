@@ -79,7 +79,7 @@ Defaults to propose; adapt the commands to what the repo's README, CLAUDE.md or 
 
 | Stack | `worktree-pre-merge` | `main-post-commit` |
 |---|---|---|
-| Cargo workspace (one part for the workspace) | `cargo fmt --all --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked` | per installed binary (one part per app): `cargo install --locked --quiet --path apps/<app>` |
+| Cargo workspace (one part for the workspace) | `cargo fmt --all --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked` | per installed binary (one part per app): `cargo install --locked --quiet --path apps/<app>` when changed or installed from elsewhere |
 | bun / npm / pnpm | `bun install --frozen-lockfile` (`npm ci`, `pnpm i --frozen-lockfile`), then the package's `test`, `lint`, `typecheck`, `build` scripts | a global CLI: `bun link` / `npm i -g .`; run from the checkout: nothing |
 | SwiftPM library | `xcrun swift test --package-path <dir>` | nothing: apps that link it rebuild |
 | Xcode / XcodeGen app | the repo's build script with tests (`build.sh`), or `xcodebuild test` | build release, install to `~/Applications`, restart (see hal2-macos) |
@@ -93,8 +93,10 @@ changelog line. Keep its edits deterministic: it runs on the staged merge in the
 Rules of thumb:
 
 - Gate in `worktree-pre-merge`, never in `main-post-commit`: a post failure no longer stops anything.
-- Skip unless changed, except where re-running is cheap and repairs drift (an install that cargo makes a no-op when
-  nothing changed): say so in the script's comment.
+- Every script runs only when its part's code changed. The one addition: delivery also runs when what is
+  installed did not come from the main checkout at the current code (installed from a worktree, a failed
+  install); check that cheaply (`cargo install --list`, a commit stamped into the build) instead of reinstalling
+  on every landing.
 - Delivery from a hook only installs locally; publishing (a release, a registry push, a deploy) needs the user's
   explicit wish.
 - Output of gates (build folders, `node_modules`) must be gitignored, or the pre phase fails for leaving changes.
@@ -107,7 +109,7 @@ statusline and a Neovim plugin:
 | Part | `paths` | `worktree-pre-merge` | `main-pre-commit` | `main-post-commit` |
 |---|---|---|---|---|
 | `rust-workspace` | `code/rust/**` | fmt, clippy `-D warnings`, test | | |
-| `hal2-cli`, `hal2-cli-git`, `hal2-cli-shooter`, `hal2-cli-tmux` | the app + its libs + Cargo.toml/lock | | | `cargo install --path` (always) |
+| `hal2-cli`, `hal2-cli-git`, `hal2-cli-shooter`, `hal2-cli-tmux` | the app + its libs + Cargo.toml/lock | | | `cargo install --path` when changed or installed from elsewhere |
 | `hal2-macos` | swift app, Hal2Kit, swift scripts, rust libs, bindgen, logos | `build.sh` (debug build + tests) | bump patch version + build number | rebuild, install, restart when changed since the installed build |
 | `hal2-statusline` | the app | bun install, test, biome | | (runs from the checkout) |
 | `hal2-nvim` | the app | plenary specs | | (lazy.nvim `dir =` the checkout) |
@@ -157,14 +159,17 @@ open "$app"
 hal_log "restarted $app"
 ```
 
-`parts/hal2-cli-git/main-post-commit.sh`: an install that runs on every landing on purpose:
+`parts/hal2-cli-git/main-post-commit.sh`: an install that runs when the code changed, and also when the installed
+binary did not come from the main checkout, so a failed install or one made from a worktree is repaired:
 
 ```bash
-# Not skipped when unchanged: cargo rebuilds only what changed (well under a
-# second when nothing did) and this repairs a failed install or one made from
-# a worktree.
+source_dir="$(pwd -P)/code/rust/apps/hal2-cli-git"
+if ! hal_changed && cargo install --list | grep -F "($source_dir):" | grep -q "^hal2-cli-git v"; then
+  hal_log "unchanged and installed from $source_dir, skipped"
+  exit 0
+fi
 cd code/rust
-cargo install --locked --quiet --path apps/hal2-cli-git
+cargo install --locked --quiet --path "apps/hal2-cli-git"
 hal_log "installed $(command -v hal2-cli-git || echo hal2-cli-git)"
 ```
 
