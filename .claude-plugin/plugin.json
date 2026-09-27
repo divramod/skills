@@ -13,6 +13,7 @@
   "skills": [
     "./skills/grill",
     "./skills/handoff",
+    "./skills/mfm",
     "./skills/plan",
     "./skills/tell"
   ]
