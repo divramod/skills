@@ -16,6 +16,7 @@
     "./skills/mfm",
     "./skills/mtm",
     "./skills/plan",
+    "./skills/shoot",
     "./skills/tell"
   ]
 }
