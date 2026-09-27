@@ -3,15 +3,17 @@
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if ! command -v git >/dev/null 2>&1; then
-  if command -v brew >/dev/null 2>&1; then
-    brew install git
-  elif command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get install -y git
-  else
-    echo "install git manually: neither brew nor apt-get is available" >&2
+for tool in git bash python3; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    if command -v brew >/dev/null 2>&1; then
+      brew install "$tool"
+    elif command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get install -y "$tool"
+    else
+      echo "install $tool manually: neither brew nor apt-get is available" >&2
+    fi
   fi
-fi
+done
 
 if ! command -v hal2-cli-git >/dev/null 2>&1 || ! hal2-cli-git --help | grep -q 'merge-to-main .*--json'; then
   if ! command -v cargo >/dev/null 2>&1; then

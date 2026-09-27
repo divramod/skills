@@ -1,6 +1,6 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Commits all work first (gitignores junk, never commits secrets, asks about unclear files), merges the latest default branch in, runs the repo's `.hal/hooks/merge-to-main/` hooks, lands one --no-ff merge commit, pushes and resets the worktree to the new default branch; resolves conflicts and fixes failing hooks itself. Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main". `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Commits all work first (gitignores junk, never commits secrets, asks about unclear files), merges the latest default branch in, runs the repo's `.hal/hooks/merge-to-main/` hooks, lands one --no-ff merge commit, pushes and resets the worktree to the new default branch; resolves conflicts and fixes failing hooks itself. `/mtm config` sets up those hooks per app of the repo (tests and lint before landing, version bumps in the merge commit, installs after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
 ---
 
 # mtm
@@ -14,6 +14,7 @@ tool, recommended option first.
 | Call | Does |
 |---|---|
 | `/mtm [<slot>]` | land the current worktree (or hal slot `<slot>`) |
+| `/mtm config [<app>]` | configure the repo's merge-to-main hooks, app by app: read [subskills/config/SUBSKILL.md](subskills/config/SUBSKILL.md) and follow it instead of the steps below |
 | `/mtm h`, `/mtm help` | print this table and stop |
 
 ## 1. Commit everything
@@ -46,7 +47,7 @@ Run in the worktree; if it is the main checkout on the default branch, stop: `/m
 |---|---|---|
 | 0 | `ok` | [clear the current task](#3-clear-the-current-task), then [report](#4-report) |
 | 3 | `conflict` | merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
-| 4 | `hook_failed` | fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. The default branch is unchanged: a failed `main-pre-commit` was undone, so fix its cause here too |
+| 4 | `hook_failed` | fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. The default branch is unchanged: a failed `main-pre-commit` was undone, so fix its cause here too. With managed hooks the output names the failing part (`<phase>[<part>]: failed`): its script is `.hal/hooks/merge-to-main/parts/<part>/<phase>.sh` |
 | 1 | `error` | uncommitted changes: back to [step 1](#1-commit-everything). Anything else (main checkout dirty or not on the default branch, default branch diverged from origin, lock held too long): report the `message` and stop. Never touch the main checkout yourself |
 
 Stop after **3 runs in a row that fail the same way** (same hook and error, or the same conflict): report what
