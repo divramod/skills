@@ -139,8 +139,28 @@ class TestRoute(unittest.TestCase):
             (Path(tmp) / "doc.docx").write_bytes(b"")
             self.assertEqual(route("~/doc.docx")["path"], str((Path(tmp) / "doc.docx").resolve()))
 
+    def test_topics(self):
+        for text, query in (("okf", "okf"), ("open  knowledge format", "open knowledge format"),
+                            ("rust: the book", "rust: the book"), ("topic:example.com", "example.com"),
+                            ("TOPIC: notes.pdf", "notes.pdf")):
+            with self.subTest(text):
+                r = route(text)
+                self.assertEqual((r["source"], r["kind"], r["query"]), ("topic", "topic", query))
+        self.assertEqual(route("open knowledge format")["id"], "open-knowledge-format")
+        self.assertEqual(route("example.com")["source"], "web")  # a host stays a URL without topic:
+
+    def test_folder_name_is_a_topic_but_a_file_name_a_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp).resolve()
+            (tmp / "skills").mkdir()
+            (tmp / "notes").write_text("x")
+            self.assertEqual(route("skills", cwd=tmp)["source"], "topic")
+            self.assertEqual(route("notes", cwd=tmp)["path"], str(tmp / "notes"))
+            with self.assertRaisesRegex(SkillError, "is a folder"):
+                route("./skills", cwd=tmp)
+
     def test_rejects(self):
-        for text in ("", "ftp://example.com/x", "mailto:a@b.c", "https://x.com/jack", "just some words",
+        for text in ("", "ftp://example.com/x", "mailto:a@b.c", "https://x.com/jack", "?!",
                      "https://www.reddit.com/r/programming/", "https://www.reddit.com/user/bob"):
             with self.subTest(text):
                 with self.assertRaises(SkillError):

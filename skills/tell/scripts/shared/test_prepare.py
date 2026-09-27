@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from _common import CONTRACT_KEYS, ENVELOPE_KEYS, SkillError, contract, envelope
@@ -82,6 +83,55 @@ class TestDispatch(unittest.TestCase):
         self.assertEqual(Path(out["digest_dir"]), digest)
         self.assertTrue(out["digest_exists"])
         self.assertEqual(json.loads((digest / "metadata.json").read_text())["summary"], {"mode": "digest"})
+
+    def test_digest_dir_holds_a_topic_digest_from_one_item_on(self):
+        self.argparse_source("web", [])
+        topic = self.dir / "lib" / "topics" / "okf"
+        topic.mkdir(parents=True)
+        (topic / "metadata.json").write_text(json.dumps({"source": "topic", "kind": "digest", "title": "okf",
+                                                         "queries": ["okf"], "items": []}))
+        from prepare import prepare_many
+        code, out = prepare_many(["https://example.com/a"], [], self.dir, root=self.dir / "lib", into=topic)
+        self.assertEqual((code, out["digest_dir"]), (0, str(topic)))
+        self.assertTrue(out["template"].endswith("templates/topic/template.md"))
+        meta = json.loads((topic / "metadata.json").read_text())
+        self.assertEqual((meta["title"], meta["source"], meta["queries"], [i["source"] for i in meta["items"]]),
+                         ("okf", "topic", ["okf"], ["web"]))
+
+    def test_items_a_topic_creates_are_marked_and_a_direct_prepare_unmarks_them(self):
+        from prepare import mark_items, topic_rel
+        lib = self.dir / "lib"
+        folders = {}
+        for name, summarized in (("new", False), ("old", True)):
+            folders[name] = lib / "articles" / name
+            folders[name].mkdir(parents=True)
+            (folders[name] / "metadata.json").write_text(json.dumps({"source": "web", "id": name}))
+        envs = [{"dir": str(folders["new"]), "kind": "page", "summary_exists": False},
+                {"dir": str(folders["old"]), "kind": "page", "summary_exists": True}]
+        topic = topic_rel(lib / "topics" / "okf", lib)
+        self.assertEqual(topic, "topics/okf")
+        self.assertIsNone(topic_rel(self.dir / "elsewhere", lib))
+        mark_items(envs, topic)
+        meta = lambda n: json.loads((folders[n] / "metadata.json").read_text())
+        self.assertEqual((meta("new").get("topic_only"), meta("old").get("topic_only")), ("topics/okf", None))
+        mark_items(envs[:1], "topics/other")  # a second topic doesn't take it over
+        self.assertEqual(meta("new")["topic_only"], "topics/okf")
+        with mock.patch("sys.stderr"):
+            mark_items(envs[:1], None)  # the user prepared it directly
+        self.assertNotIn("topic_only", meta("new"))
+        self.assertEqual(meta("new")["id"], "new")
+
+    def test_digest_dir_flag_is_taken_out_of_the_source_flags(self):
+        import argparse
+        from prepare import take_digest_dir
+        ap = argparse.ArgumentParser()
+        (self.dir / "metadata.json").write_text("{}")
+        self.assertEqual(take_digest_dir(["--refresh", "--digest-dir", str(self.dir), "--lang", "de"], ap),
+                         (["--refresh", "--lang", "de"], self.dir))
+        self.assertEqual(take_digest_dir([f"--digest-dir={self.dir}"], ap), ([], self.dir))
+        self.assertEqual(take_digest_dir(["--refresh"], ap), (["--refresh"], None))
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr"):
+            take_digest_dir(["--digest-dir", str(self.dir / "nope")], ap)
 
     def test_a_failing_input_does_not_stop_the_others(self):
         self.argparse_source("web", [])

@@ -11,9 +11,11 @@
   github  github.com/<owner>/<repo>[/tree|blob/…]; /issues/N, /pull/N, /discussions/N
   file    a local path (absolute, ~, relative, file://) or a document URL (.pdf, .docx, .epub, …)
   web     any other http(s) URL
+  topic   anything else: words that are neither a URL nor a path ("okf", "open knowledge format"), or
+          `topic:<words>` to force it (a topic that looks like a host or a file name)
 
-Prints one JSON object: {source, kind, id, url} (or `path` instead of `url` for local files).
-`id` is the dedupe key inside the source. Unknown schemes and missing local files exit 1.
+Prints one JSON object: {source, kind, id, url} (or `path` instead of `url` for local files, `query` for a
+topic). `id` is the dedupe key inside the source. Unknown schemes and missing local files exit 1.
 
 Usage: route.py "<url-or-path>"
 """
@@ -25,9 +27,9 @@ import re
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 
-from _common import SkillError, run_main
+from _common import SkillError, run_main, slugify
 
-SOURCES = ("video", "web", "github", "x", "hn", "reddit", "file")
+SOURCES = ("video", "web", "github", "x", "hn", "reddit", "file", "topic")
 
 # Hosts whose pages are videos/audio for yt-dlp (matched with any subdomain).
 VIDEO_HOSTS = (
@@ -212,25 +214,36 @@ def looks_local(text: str, cwd: Path) -> bool:
         return True
     if "://" in text:
         return False
-    if (cwd / text).expanduser().exists():
+    if (cwd / text).expanduser().is_file():  # a bare folder name ("skills") is a topic, not a path
         return True
     # "notes.pdf" is a (missing) file; "example.com/paper.pdf" is a URL without a scheme.
     return Path(text).suffix.lower() in DOC_EXT | MEDIA_EXT and ("/" not in text or not _BARE_HOST_RE.match(text))
 
 
+def topic(text: str) -> dict:
+    query = " ".join(text.split())
+    if not re.search(r"\w", query):
+        raise SkillError(f"unsupported input {text!r}: pass an http(s) URL, a local file path or a topic")
+    return {"source": "topic", "kind": "topic", "id": slugify(query), "query": query}
+
+
 def route(text: str, cwd: Path | None = None) -> dict:
-    """{source, kind, id, url|path, ...} for one input; SkillError when it can't be classified."""
+    """{source, kind, id, url|path|query, ...} for one input; SkillError when it can't be classified."""
     text = text.strip().strip("<>\"'")
     cwd = cwd or Path.cwd()
     if not text:
         raise SkillError("empty input")
+    if text.lower().startswith("topic:"):
+        return topic(text[6:])
     if looks_local(text, cwd):
         return local_file(text, cwd)
     if "://" not in text and _BARE_HOST_RE.match(text):
         text = "https://" + text
+    if "://" not in text and not re.fullmatch(r"[a-z][\w+.-]*:\S+", text, re.I):  # mailto:a@b.c is no topic
+        return topic(text)
     parts = urlsplit(text)
     if parts.scheme not in ("http", "https"):
-        raise SkillError(f"unsupported input {text!r}: pass an http(s) URL or a local file path")
+        raise SkillError(f"unsupported input {text!r}: pass an http(s) URL, a local file path or a topic")
     host, path = host_of(text), parts.path
     query = parse_qs(parts.query)
     segs = [s for s in path.split("/") if s]
@@ -257,7 +270,7 @@ def route(text: str, cwd: Path | None = None) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("input", help="URL or local file path")
+    ap.add_argument("input", help="URL, local file path or topic")
     args = ap.parse_args(argv)
     print(json.dumps(route(args.input), ensure_ascii=False))
     return 0

@@ -1,6 +1,6 @@
 ---
 name: tell
-description: Summarize anything from a URL or a path into a markdown note and an HTML page in ~/skills/tell — a video, playlist or channel (YouTube, TikTok, X, Vimeo, podcasts, any yt-dlp site), a blog post or web page, a GitHub repo, issue, pull request or discussion, an X post or thread with its replies, a Hacker News thread or a Reddit post (article + discussion), or a local document (PDF, DOCX, PPTX, EPUB, Markdown). Several inputs at once get a digest across them. Each summary has anchor links back into the source, a links section (books, Wikipedia terms, repos, further reading, each with its date) and related items; modes tldr/summary/detailed/wisdom/qa (+ chapters for videos). Use when the user pastes a link or a file path and wants a summary, the gist, notes, or answers about it; called without input it opens the last summary in the browser.
+description: Summarize anything from a URL or a path into a markdown note and an HTML page in ~/skills/tell — a video, playlist or channel (YouTube, TikTok, X, Vimeo, podcasts, any yt-dlp site), a blog post or web page, a GitHub repo, issue, pull request or discussion, an X post or thread with its replies, a Hacker News thread or a Reddit post (article + discussion), or a local document (PDF, DOCX, PPTX, EPUB, Markdown). A topic instead of a link ("/tell okf", "/tell open knowledge format") finds videos, articles, repos, X posts, HN threads and local documents about it, summarizes the relevant ones and writes a digest. Several inputs at once get a digest across them. Each summary has anchor links back into the source, a links section (books, Wikipedia terms, repos, further reading, each with its date) and related items; modes tldr/summary/detailed/wisdom/qa (+ chapters for videos). Use when the user pastes a link or a file path, or names a topic, and wants a summary, the gist, notes, or answers about it; called without input it opens the last summary in the browser.
 ---
 
 # tell
@@ -22,7 +22,7 @@ Tell the user what opened (the printed path) and its URL. If there are no summar
 ## 1. Prepare
 
 ```bash
-python3 $S/shared/prepare.py "<url-or-path>" ["<url-or-path>" …] [source flags]
+python3 $S/shared/prepare.py "<url-path-or-topic>" ["<url-or-path>" …] [source flags]
 ```
 
 It routes the input to exactly one source, runs `scripts/<source>/prepare.py`, and prints the envelope:
@@ -39,6 +39,7 @@ subskill lists them.
 | hn | `news.ycombinator.com/item?id=<id>` | [subskills/hn/SUBSKILL.md](subskills/hn/SUBSKILL.md) |
 | reddit | `reddit.com/r/<sub>/comments/<id>/…` (www, old, new), `redd.it/<id>`, share links `…/r/<sub>/s/<code>` | [subskills/reddit/SUBSKILL.md](subskills/reddit/SUBSKILL.md) |
 | file | a local path (`~/…`, `./…`, `file://…`) or a document URL (`.pdf`, `.docx`, `.epub`, …) | [subskills/file/SUBSKILL.md](subskills/file/SUBSKILL.md) |
+| topic | anything else: words that are no URL and no path (`okf`, `"open knowledge format"`, one quoted argument), or `topic:<words>` | [subskills/topic/SUBSKILL.md](subskills/topic/SUBSKILL.md) |
 
 `python3 $S/shared/route.py "<input>"` shows the routing without fetching anything.
 
@@ -51,6 +52,9 @@ subskill lists them.
   `changed: true` (the source has a new version: summarize it).
 - A playlist or channel (`kind: playlist|channel`) prints a list of items instead: prepare every item where
   `summary_exists` is false (parallel subagents when there are more than 3), then write the digest (step 7).
+- A topic (`kind: topic`) prints search results by kind (`candidates`) instead: choose the relevant ones, prepare
+  them into the topic's folder (`--digest-dir <dir>`), summarize each and write the topic's digest. The library
+  shows the topic as one entry with its items nested under it. Its subskill says how.
 - **Several inputs** in one call print `kind: inputs` with one envelope per input in `items` (or `{input, error,
   exit_code}` for one that failed: tell the user, the others go on) and a `digest_dir` when at least two worked.
   An item with `exit_code: 2` is a missing tool: run that source's `install-prerequisites.sh` (the error names
@@ -124,7 +128,8 @@ EOF
 ## 7. Digest (playlists, channels, several inputs)
 
 Read each item's `summary.md` and write `templates/shared/digest.md`: rank the items by how worth the user's time
-they are, and pull out the themes they share and where they disagree. Across sources (a video, an article, a
+they are, and pull out the themes they share and where they disagree (a topic: the envelope's `template`,
+`templates/topic/template.md`). Across sources (a video, an article, a
 thread), name what each kind adds: the source's own claim, the evidence, the reactions. Save it with
 `python3 $S/shared/save_summary.py "<digest_dir>" --mode digest --model <your model id> --open <<'EOF' ... EOF`.
 
@@ -157,7 +162,8 @@ Each source's own scripts are listed in its subskill. Every `scripts/<source>/` 
 
 The library root is `~/skills/tell` (`TELL_ROOT` overrides it): `videos/<platform>/<channel>/<title>/`,
 `articles/<site>/<title>/`, `repos/github/<owner>/<repo>/`, `posts/x/<user>/<words>-<id>/`,
-`discussions/hn/<title>-<id>/`, `discussions/reddit/<subreddit>/<title>-<id>/`, `documents/<folder>/<file>/`.
+`discussions/hn/<title>-<id>/`, `discussions/reddit/<subreddit>/<title>-<id>/`, `documents/<folder>/<file>/`,
+`topics/<topic>/` and `digests/<date>-<titles>/`.
 A library still at an old root (`~/skills/tell-me`, `~/me/summaries`) stops every script with the `mv` command that
 moves it: tell the user, don't move it yourself. The skill was called `tell-me`: its `TELL_ME_*` variables still
 work. A video library from before this layout is migrated once with

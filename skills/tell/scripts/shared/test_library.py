@@ -57,6 +57,25 @@ class TestLibrary(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
+    def test_a_topic_nests_its_items(self):
+        web = {"source": "web", "id": "u", "url": "https://e.com/a", "title": "A"}
+        own = make(self.root, "articles/e/a", web | {"topic_only": "topics/okf"})
+        before = make(self.root, "articles/e/b", web | {"id": "v", "title": "B"})  # in the library before the topic
+        orphan = make(self.root, "articles/e/c", web | {"id": "w", "title": "C", "topic_only": "topics/gone"})
+        topic = self.root / "topics" / "okf"
+        topic.mkdir(parents=True)
+        (topic / "metadata.json").write_text(json.dumps({
+            "source": "topic", "kind": "digest", "title": "okf",
+            "items": [{"dir": str(own)}, {"dir": str(before)}, {"dir": "/elsewhere/x"}]}))
+        (topic / "digest.html").write_text("")
+        by = {e["path"]: e for e in entries(self.root)}
+        self.assertEqual(by["topics/okf"]["children"], ["articles/e/a", "articles/e/b"])
+        self.assertEqual(by["articles/e/a"]["parent"], "topics/okf")
+        self.assertNotIn("parent", by["articles/e/b"])
+        self.assertNotIn("parent", by["articles/e/c"])  # its topic has no page: listed on its own
+        self.assertTrue(all("topic_only" not in e for e in by.values()))
+        self.assertTrue(orphan.exists())
+
     def test_entries_only_folders_with_pages(self):
         make(self.root, "videos/youtube/chan/zeta-talk", META)
         make(self.root, "videos/youtube/chan/unsummarized", META | {"id": "x"}, page=False)

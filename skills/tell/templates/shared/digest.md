@@ -17,4 +17,4 @@
 
 ## Per item
 ### [<title>](<url>)
-<the TL;DR from its summary.md> ([summary](<relative path to summary.md>))
+<the TL;DR from its summary.md> ([summary](<relative path to its summary.html>))

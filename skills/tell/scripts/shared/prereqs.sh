@@ -17,6 +17,7 @@ hint() {
     npx|node) echo "brew install node" ;;
     pdftotext) echo "brew install poppler" ;;
     pandoc) echo "brew install pandoc" ;;
+    rg) echo "brew install ripgrep" ;;
     *) echo "install $1 and put it on PATH" ;;
   esac
 }
@@ -25,13 +26,15 @@ hint() {
 brew_pkg() {
   case "$1" in
     ffprobe) echo ffmpeg ;; python3) echo python ;; uvx) echo uv ;; npx) echo node ;; pdftotext) echo poppler ;;
+    rg) echo ripgrep ;;
     *) echo "$1" ;;
   esac
 }
 apt_pkg() {
   case "$1" in
     ffmpeg|ffprobe) echo ffmpeg ;; python3) echo python3 ;; npx|node) echo "nodejs npm" ;;
-    pdftotext) echo poppler-utils ;; pandoc) echo pandoc ;; gh) echo gh ;; *) echo "" ;;
+    pdftotext) echo poppler-utils ;; pandoc) echo pandoc ;; gh) echo gh ;; rg) echo ripgrep ;;
+    *) echo "" ;;
   esac
 }
 

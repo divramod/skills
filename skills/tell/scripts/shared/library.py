@@ -91,8 +91,10 @@ def group_of(rel: str, source: str | None, c: dict) -> tuple[str, str]:
 
 
 def entries(root: Path) -> list[dict]:
-    """One entry per folder under root that has an HTML page."""
-    out = []
+    """One entry per folder under root that has an HTML page. A topic's entry lists its items' paths in `children`
+    (the sidebar nests them under it); an item the topic created (`topic_only`) gets `parent` and is left out of
+    the top level, unless that topic has no page yet."""
+    out, members = [], {}
     for meta_path in sorted(root.rglob("metadata.json")):
         folder = meta_path.parent
         meta = read_json(meta_path)
@@ -118,7 +120,26 @@ def entries(root: Path) -> list[dict]:
             "mode": (meta.get("summary") or {}).get("mode", ""),
             "summarized": summarized_at(folder, meta),
         })
+        if meta.get("topic_only"):
+            out[-1]["topic_only"] = meta["topic_only"]
+        if digest and c["source"] == "topic":
+            members[rel] = [item_path(i.get("dir"), root) for i in meta.get("items") or []]
+    by_path = {e["path"]: e for e in out}
+    for topic, paths in members.items():
+        by_path[topic]["children"] = [p for p in paths if p in by_path and p != topic]
+    for e in out:
+        owner = e.pop("topic_only", None)
+        if owner and e["path"] in by_path.get(owner, {}).get("children", []):
+            e["parent"] = owner
     return out
+
+
+def item_path(folder: str | None, root: Path) -> str | None:
+    """A digest item's folder relative to the library root, or None when it is elsewhere."""
+    try:
+        return Path(folder).resolve().relative_to(root.resolve()).as_posix() if folder else None
+    except ValueError:
+        return None
 
 
 def write_index(root: Path) -> Path:
@@ -170,6 +191,8 @@ body.has-lib main{flex:1 1 auto;min-width:0;margin:0 auto}
 #lib summary::before{content:"\\25B8";font-size:.7rem;color:var(--muted);transition:transform .15s}
 #lib details[open]>summary::before{transform:rotate(90deg)}
 #lib summary:hover{background:var(--code)}
+#lib details.kids>summary{font-size:.76rem;font-weight:400;color:var(--muted);padding:1px 8px 3px 26px}
+#lib details.kids>ul{margin-left:14px}
 #lib .group{margin:10px 8px 2px;font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 #lib .tech{font-weight:400;color:var(--muted);font-size:.9em;text-transform:none;letter-spacing:0;margin-left:4px}
 #lib .empty{padding:10px;color:var(--muted)}
@@ -232,7 +255,19 @@ const TYPES={video:['▶','Videos'],web:['¶','Articles'],github:['⌥','GitHub'
   reddit:['r/','Reddit'],file:['▤','Documents'],digest:['≡','Digests']};
 const typeOf=it=>it.type||(it.kind==='digest'?'digest':it.source)||'';
 const ico=it=>{const t=TYPES[typeOf(it)];return t?`<span class="ico" title="${esc(t[1])}" aria-hidden="true">${t[0]}</span>`:'';};
-const link=(it,sub)=>`<li><a href="${esc(ROOT+'/'+it.page)}"${it.path===SELF?' class="current" aria-current="page"':''} title="${esc(it.path)}">${ico(it)}${esc(it.title)}${sub?`<small>${esc(sub)}</small>`:''}</a></li>`;
+// a topic's items: nested under its entry (the ones the topic created are not listed on their own: `parent`)
+const byPath={};for(const it of L.items)byPath[it.path]=it;
+const kidsOf=it=>(it.children||[]).map(p=>byPath[p]).filter(Boolean);
+let match=()=>true, filtering=false;  // set by render()
+const anchor=(it,sub)=>`<a href="${esc(ROOT+'/'+it.page)}"${it.path===SELF?' class="current" aria-current="page"':''} title="${esc(it.path)}">${ico(it)}${esc(it.title)}${sub?`<small>${esc(sub)}</small>`:''}</a>`;
+const link=(it,sub)=>{
+  const kids=kidsOf(it);if(!kids.length)return `<li>${anchor(it,sub)}</li>`;
+  // while filtering, a topic that matches only through its items shows just those items
+  const shown=filtering&&!match(it)?kids.filter(match):kids;
+  const open=it.path===SELF||kids.some(k=>k.path===SELF)||(filtering&&shown.length<kids.length)?' open':'';
+  return `<li>${anchor(it,sub)}<details class="kids"${open}><summary>${kids.length} item${kids.length>1?'s':''}${shown.length<kids.length?` · ${shown.length} match`:''}</summary><ul>${
+    shown.map(k=>`<li>${anchor(k,[k.author,day(k.date)].filter(Boolean).join(' · '))}</li>`).join('')}</ul></details></li>`;
+};
 const chips=aside.querySelector('.types');
 function renderChips(){
   const n={};for(const it of L.items){const t=typeOf(it);n[t]=(n[t]||0)+1;}
@@ -263,7 +298,10 @@ function tree(items,d){
 function render(){
   const f=q.value.trim().toLowerCase();
   const types=st.types;  // an item of a type without a chip (an unknown source) is never filtered out
-  const items=L.items.filter(it=>(!types.length||types.includes(typeOf(it))||!TYPES[typeOf(it)])&&(!f||(it.title+' '+it.author+' '+it.path).toLowerCase().includes(f)));
+  match=it=>(!types.length||types.includes(typeOf(it))||!TYPES[typeOf(it)])&&(!f||(it.title+' '+it.author+' '+it.path).toLowerCase().includes(f));
+  filtering=!!(f||types.length);
+  // top level: everything but a topic's own items; a topic stays when one of its items matches
+  const items=L.items.filter(it=>!(it.parent&&byPath[it.parent])&&(match(it)||kidsOf(it).some(match)));
   const d=st.dir[st.view];
   let h='';
   if(!items.length)h='<p class="empty">No summaries match.</p>';

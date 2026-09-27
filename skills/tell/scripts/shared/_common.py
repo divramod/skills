@@ -30,6 +30,7 @@ INSTALL_HINTS = {
     "gh": "brew install gh",
     "pdftotext": "brew install poppler",
     "pandoc": "brew install pandoc",
+    "rg": "brew install ripgrep",
 }
 BOT_HINT = (
     "YouTube bot check / rate limit hit. Retry with --cookies-from-browser chrome "
@@ -52,7 +53,7 @@ def log(msg: str) -> None:
 
 # Top-level library folder per source.
 KIND_DIRS = {"video": "videos", "web": "articles", "github": "repos", "x": "posts", "hn": "discussions",
-             "reddit": "discussions", "file": "documents"}
+             "reddit": "discussions", "file": "documents", "topic": "topics"}
 
 
 def env(*names: str) -> str | None:
@@ -168,6 +169,7 @@ def dir_for(meta: dict, root: Path | None = None) -> Path:
     x       posts/x/<user>/<first-words>-<id>            hn     discussions/hn/<title>-<id>
     reddit  discussions/reddit/<subreddit>/<title>-<id>
     file    documents/<parent-folder>/<file-stem> (a URL: documents/<host>/<file-stem>)
+    topic   topics/<topic> (a digest folder: the topic's candidates, then the digest across the chosen ones)
     """
     source = meta.get("source") or "video"
     base = source_root(source, root)
@@ -196,6 +198,8 @@ def dir_for(meta: dict, root: Path | None = None) -> Path:
             return base / slugify(path.parent.name or "root") / slugify(path.stem)
         name = extras.get("file_name") or url.split("?")[0].rstrip("/").rsplit("/", 1)[-1]
         return base / slugify(host_slug(url)) / slugify(Path(name).stem or name)
+    if source == "topic":
+        return base / slugify(title, 60)
     raise ValueError(f"unknown source {source!r}")
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare any input for summarizing: route it to its source, run scripts/<source>/prepare.py.
 
-route.py picks the source (video, web, github, x, hn, reddit, file); the source script fetches the content
+route.py picks the source (video, web, github, x, hn, reddit, file, topic); the source script fetches the content
 into its library folder (content file with anchor links + metadata.json) and prints the envelope.
 This script checks the envelope and prints it unchanged, so the agent reads `subskill` and
 `template` next. Every flag after the input goes to the source script (e.g. --skip-download,
@@ -13,7 +13,12 @@ the flags its script knows. A failing input doesn't stop the others. It prints {
 envelope per input, or {input, error, exit_code}], digest_dir}: the digest folder <root>/digests/<date>-<slug>/
 is made when at least two inputs worked. Exit 0 when at least one input worked.
 
-Usage: prepare.py "<url-or-path>" ["<url-or-path>" ...] [source flags]
+--digest-dir <folder> puts the digest into that folder instead (a topic's folder from topic/prepare.py, which
+keeps its title), made from one working input on. An item a topic creates (not summarized before) is marked
+`topic_only: topics/<topic>` in its metadata.json: the library lists it under the topic, not on its own. Preparing
+it without a topic (directly, or with other inputs) removes the mark.
+
+Usage: prepare.py "<url-path-or-topic>" ["<url-or-path>" ...] [--digest-dir <folder>] [source flags]
 """
 from __future__ import annotations
 
@@ -27,11 +32,12 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from _common import ENVELOPE_KEYS, SkillError, digest_dir, is_legacy, log, read_json, run_main, source_root
+from _common import (ENVELOPE_KEYS, SkillError, digest_dir, is_legacy, library_root, log, read_json, run_main,
+                     source_root, update_json)
 from route import route
 
 SOURCES_DIR = Path(__file__).resolve().parent.parent  # scripts/
-LIST_KINDS = ("playlist", "channel")
+LIST_KINDS = ("playlist", "channel", "topic")  # envelopes that list items to prepare instead of content
 
 
 def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR,
@@ -49,7 +55,7 @@ def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR,
         log(f"source '{r['source']}' not supported yet: trying the video source (yt-dlp)")
         r, script = r | {"source": "video"}, video
     log(f"source: {r['source']} ({r['kind']}) -> {script.relative_to(sources_dir)}")
-    p = run_teeing([sys.executable, str(script), r.get("url") or r["path"], *flags],
+    p = run_teeing([sys.executable, str(script), r.get("url") or r.get("path") or r["query"], *flags],
                    errors if errors is not None else [])
     if p.returncode != 0:
         return (1 if p.returncode == 2 and p.stderr == "usage" else p.returncode), None
@@ -57,7 +63,7 @@ def dispatch(text: str, flags: list[str], sources_dir: Path = SOURCES_DIR,
         env = json.loads(p.stdout)
     except json.JSONDecodeError as e:
         raise SkillError(f"{script} printed no JSON envelope: {e}")
-    # A playlist/channel lists its items (each prepared on its own) instead of having content.
+    # A playlist/channel/topic lists its items (each prepared on its own) instead of having content.
     required = ("source", "kind", "dir", "title", "subskill") if env.get("kind") in LIST_KINDS else ENVELOPE_KEYS
     missing = [k for k in required if k not in env]
     if missing:
@@ -136,9 +142,9 @@ def script_of(text: str, sources_dir: Path = SOURCES_DIR) -> Path:
 
 
 def prepare_many(inputs: list[str], flags: list[str], sources_dir: Path = SOURCES_DIR,
-                 root: Path | None = None) -> tuple[int, dict]:
+                 root: Path | None = None, into: Path | None = None) -> tuple[int, dict]:
     """(exit code, {kind: inputs, items, digest_dir, digest_exists, template}). The same input twice is
-    prepared once."""
+    prepared once. `into`: the digest folder (a topic's), kept with its title and template from one item on."""
     inputs = list(dict.fromkeys(inputs))
     scripts = {}
     for text in inputs:
@@ -168,14 +174,60 @@ def prepare_many(inputs: list[str], flags: list[str], sources_dir: Path = SOURCE
         items.append(env if env is not None else {"input": text, "error": errors[-1] if errors else "failed",
                                                   "exit_code": code})
     ok = [i for i in items if "error" not in i]
-    folder = None
-    if len(ok) >= 2:
+    folder, template = None, SOURCES_DIR.parent / "templates" / "shared" / "digest.md"
+    own = read_json(into / "metadata.json") if into else {}
+    mark_items(ok, topic_rel(into, root) if own.get("source") == "topic" else None)
+    if len(ok) >= (1 if into else 2):
+        if own.get("source") == "topic":
+            template = SOURCES_DIR.parent / "templates" / "topic" / "template.md"
         folder = digest_dir([{k: i.get(k) for k in ("source", "kind", "title", "url", "dir", "summary_exists")}
-                             for i in ok], date.today().isoformat(), root)
+                             for i in ok], date.today().isoformat(), root, into,
+                            **({"title": own["title"]} if own.get("title") else {}))
     code = 0 if ok else max(codes)
     return code, {"kind": "inputs", "items": items, "digest_dir": str(folder) if folder else None,
                   "digest_exists": (folder / "digest.md").exists() if folder else None,
-                  "template": str(SOURCES_DIR.parent / "templates" / "shared" / "digest.md") if folder else None}
+                  "template": str(template) if folder else None}
+
+
+def topic_rel(folder: Path, root: Path | None = None) -> str | None:
+    """A topic folder's path below the library root (`topics/okf`), or None when it is not below it."""
+    try:
+        return folder.resolve().relative_to((root or library_root()).resolve()).as_posix()
+    except ValueError:
+        return None
+
+
+def mark_items(envs: list[dict], topic: str | None) -> None:
+    """With a topic: mark each item it created (no summary yet, no mark from another topic) `topic_only`, so the
+    library nests it under the topic. Without one: the user asked for these items themselves, so drop the mark."""
+    for env in envs:
+        meta_path = Path(env.get("dir") or "") / "metadata.json"
+        if env.get("kind") in LIST_KINDS or not meta_path.is_file():
+            continue
+        meta = read_json(meta_path)
+        if topic and not env.get("summary_exists") and not meta.get("topic_only"):
+            update_json(meta_path, {"topic_only": topic})
+        elif not topic and meta.get("topic_only"):
+            update_json(meta_path, {}, drop=("topic_only",))
+            log(f"{env.get('title') or env['dir']}: now listed on its own, not only under {meta['topic_only']}")
+
+
+def take_digest_dir(flags: list[str], ap: argparse.ArgumentParser) -> tuple[list[str], Path | None]:
+    """(the source flags, the --digest-dir folder or None): the one flag this script keeps for itself."""
+    rest, into, i = [], None, 0
+    while i < len(flags):
+        name, eq, value = flags[i].partition("=")
+        if name != "--digest-dir":
+            rest.append(flags[i])
+        elif eq or i + 1 < len(flags):
+            into = Path(value if eq else flags[i + 1]).expanduser()
+            i += 0 if eq else 1
+        else:
+            ap.error("--digest-dir needs a folder")
+        i += 1
+    if into and not (into / "metadata.json").is_file():
+        ap.error(f"--digest-dir {into}: no metadata.json there (pass the topic's `dir`)")
+    return rest, into
 
 
 def warn_legacy() -> None:
@@ -189,7 +241,8 @@ def warn_legacy() -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("input", nargs="+", help="URL or local file path (several: a digest across them)")
+    ap.add_argument("input", nargs="+", help="URL, local file path or topic (several: a digest across them)")
+    ap.add_argument("--digest-dir", type=Path, help="the digest's folder (a topic's folder)")
     raw = sys.argv[1:] if argv is None else argv
     if raw and raw[0].startswith("-") and raw[0] not in ("-h", "--help"):
         ap.error(f"put the URL or path first, then the source flags (got {raw[0]!r} first)")
@@ -198,14 +251,16 @@ def main(argv=None) -> int:
     first_flag = next((i for i, a in enumerate(raw) if a.startswith("-")), len(raw))
     inputs, flags = raw[:first_flag], raw[first_flag:]
     if not inputs:
-        ap.error("give at least one URL or path")
+        ap.error("give at least one URL, path or topic")
+    flags, into = take_digest_dir(flags, ap)
     warn_legacy()
-    if len(inputs) > 1:
-        code, out = prepare_many(inputs, flags)
+    if len(inputs) > 1 or into:
+        code, out = prepare_many(inputs, flags, into=into)
         print(json.dumps(out, indent=2, ensure_ascii=False))
         return code
     code, env = dispatch(inputs[0], flags)
     if env is not None:
+        mark_items([env], None)
         print(json.dumps(env, indent=2, ensure_ascii=False))
     return code
 

@@ -1,0 +1,84 @@
+{
+ "hits": [
+  {
+   "objectID": "48517735",
+   "title": "Google proposes Open Knowledge Format based on Markdown",
+   "url": "https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/",
+   "author": "itherseed",
+   "points": 87,
+   "num_comments": 15,
+   "created_at": "2026-06-13T14:33:40Z",
+   "story_text": null
+  },
+  {
+   "objectID": "48701771",
+   "title": "Show HN: Kiso, an open-source publishing engine for Open Knowledge Format",
+   "url": "https://oak-invest.github.io/kiso/",
+   "author": "straumat",
+   "points": 21,
+   "num_comments": 3,
+   "created_at": "2026-06-27T21:08:03Z",
+   "story_text": null
+  },
+  {
+   "objectID": "49059889",
+   "title": "Open Knowledge format v0.2 tackles agentic trust",
+   "url": "https://cloud.google.com/blog/products/data-analytics/okf-v0-2-adds-trust-signals",
+   "author": "alwillis",
+   "points": 7,
+   "num_comments": 2,
+   "created_at": "2026-07-26T16:47:58Z",
+   "story_text": null
+  },
+  {
+   "objectID": "48504118",
+   "title": "Open Knowledge Format",
+   "url": "https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/",
+   "author": "berlianta",
+   "points": 4,
+   "num_comments": 0,
+   "created_at": "2026-06-12T13:55:28Z",
+   "story_text": null
+  },
+  {
+   "objectID": "48655785",
+   "title": "How to Apply Google's Open Knowledge Format (OKF) on Enterprise Level",
+   "url": "https://community.obsidian.md/plugins/vault-operator",
+   "author": "pssah4",
+   "points": 3,
+   "num_comments": 1,
+   "created_at": "2026-06-24T06:06:27Z",
+   "story_text": null
+  },
+  {
+   "objectID": "49391130",
+   "title": "Open-source plugin for Open Knowledge Format wikis",
+   "url": "https://openknowledge.ai/blog/open-knowledge-format-okf-plugin-linter",
+   "author": "engomez",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-08-21T17:16:04Z",
+   "story_text": null
+  },
+  {
+   "objectID": "49296632",
+   "title": "Open knowledge compiler: a compiler for the open knowledge format",
+   "url": "https://towardsdev.com/announcing-open-knowledge-compiler-a-compiler-for-the-open-knowledge-format-7b699fee9b81",
+   "author": "deepmem",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-08-14T09:56:18Z",
+   "story_text": null
+  },
+  {
+   "objectID": "48643541",
+   "title": "Linter for Open Knowledge Format (OKF) \u2013 Google's Take on Karpathy's LLM Wiki",
+   "url": "https://github.com/thisismydesign/okf-lint",
+   "author": "thisismydesign",
+   "points": 2,
+   "num_comments": 0,
+   "created_at": "2026-06-23T11:46:37Z",
+   "story_text": null
+  }
+ ]
+}
