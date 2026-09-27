@@ -57,7 +57,7 @@ fails and what you tried.
 After a successful landing, read `plans/CURRENT_PLAN` in the worktree (the landing's reset keeps it, it is
 gitignored). Delete the file when the landed work is finished:
 
-- it names a shot (`<shotfile>/<n>`) or a task name: the work has landed, delete it;
+- it names a shot (`<shotfile>/<n>/<title-slug>`) or a task name: the work has landed, delete it;
 - it names a plan (`<NNNN>-<slug>`): delete it when every step is done (`python3 <plan-skill-dir>/scripts/plan.py
   current` shows `done` equal to `total`, the `plan` skill next to this one); a plan with open steps keeps it;
 - missing or empty: nothing to do.

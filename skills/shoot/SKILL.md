@@ -82,8 +82,9 @@ unknown id: say so and stop), before marking any: ids refer to that list.
    - It is shot `<number>` of the feature `<file>` in this repository. Read the shotfile (`path`) only when you
      need more context on what was prompted before.
    - In a git worktree, run `/mfm` (merge-from-main) once before starting the first shot.
-   - Unless you create a plan for it with `/plan` (which names the plan instead), write `<file>/<number>`
-     (`shooter/1`; with several shots the one being worked on) into `plans/CURRENT_PLAN` at the worktree root
+   - Unless you create a plan for it with `/plan` (which names the plan instead), write
+     `<file>/<number>/<title-slug>` (`shooter/1/current-plan-should-show-shot`, the title in kebab case; just
+     `<file>/<number>` for a shot without a title; with several shots the one being worked on) into `plans/CURRENT_PLAN` at the worktree root
      before starting, so the statusline shows the shot. The file is gitignored runtime state, never committed;
      `/mtm` deletes it once the shot has landed.
    - Do not implement shots that were not picked, and do not change the shotfiles beyond the marks from step 1.
