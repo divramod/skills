@@ -15,14 +15,23 @@ for tool in git bash python3; do
   fi
 done
 
-if ! command -v hal2-cli-git >/dev/null 2>&1 || ! hal2-cli-git --help | grep -q 'merge-to-main .*--json'; then
+install_hal2() {
   if ! command -v cargo >/dev/null 2>&1; then
     echo "install Rust first (https://rustup.rs), then rerun this script" >&2
-  elif [ -d "$HOME/a/hal2/code/rust/apps/hal2-cli-git" ]; then
-    cargo install --path "$HOME/a/hal2/code/rust/apps/hal2-cli-git"
+  elif [ -d "$HOME/a/hal2/code/rust/apps/$1" ]; then
+    cargo install --locked --path "$HOME/a/hal2/code/rust/apps/$1"
   else
-    cargo install --git https://github.com/divramod/hal2 hal2-cli-git
+    cargo install --locked --git https://github.com/divramod/hal2 "$1"
   fi
+}
+
+# hal2-cli-git with the declarative hooks (merge-to-main --json lists `tasks`).
+if ! command -v hal2-cli-git >/dev/null 2>&1 || ! hal2-cli-git --help | grep -q 'merge-to-main .*--json' ||
+  ! command -v hal2-cli-hooks >/dev/null 2>&1; then
+  install_hal2 hal2-cli-git
+fi
+if ! command -v hal2-cli-hooks >/dev/null 2>&1 || ! hal2-cli-hooks --help | grep -q 'stamp'; then
+  install_hal2 hal2-cli-hooks
 fi
 
 bash "$here/check-prerequisites.sh"

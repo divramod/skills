@@ -1,80 +1,66 @@
 # mtm config
 
-Sets up a repository's merge-to-main hooks, app by app. `hal2-cli-git worktree merge-to-main` runs
-`.hal/hooks/merge-to-main/<phase>.sh`; `/mtm config` installs a managed dispatcher there that runs one folder per
-**part** (an app, or a workspace several apps share): `parts/<part>/paths` (the part's files as git pathspecs) and
-any of `worktree-pre-merge.sh`, `main-pre-commit.sh`, `main-post-commit.sh`. The layout, the helpers and worked
-examples are in [references/hooks.md](../../references/hooks.md): read it before proposing hooks.
+Sets up what a repository's landings and merges run, app by app: tasks in `.hal/hooks.toml` (setup, format,
+lint, build, test, version, install, deploy), run by `hal2-cli-git` only for changed code and managed with
+`hal2-cli-hooks`. The model, the commands, recipes and hal2's configuration are in
+[references/hooks.md](../../references/hooks.md): read it before proposing tasks.
 
-`H=<skill-dir>/scripts/hooks.py` (all subcommands take `--repo <dir>`, default: the current checkout). Run it in
-the worktree; hook changes land with the next `/mtm` like any other work (calling `/mtm config` is no consent to
+Run `hal2-cli-hooks` in the worktree (`H=hal2-cli-hooks`; missing? `bash <skill-dir>/scripts/install-prerequisites.sh`).
+`hooks.toml` changes land with the next `/mtm` like any other work (calling `/mtm config` is no consent to
 land). Ask every question with the question tool, recommended option first.
 
 | Call | Does |
 |---|---|
-| `/mtm config` | walk every app of the repo and configure its hooks |
-| `/mtm config <app>` | only that app (a name from `hooks.py apps`) |
+| `/mtm config` | walk every app of the repo and configure its tasks |
+| `/mtm config <app>` | only that app (a row from `hal2-cli-hooks list`) |
 
 ## 1. Inventory
 
-1. `python3 $H apps`: the apps and libs (`code/<language>/{apps,libs}/<name>`, or the repo itself as one app when
-   it has no such folders), each with its `stack` (cargo, bun, swiftpm, xcodegen, plenary, ...), `scripts` (a
-   package.json's), `workspace` (a Cargo workspace it belongs to) and the `parts` already covering it; `managed`
-   says whether the dispatcher is installed.
-2. Not managed and phase files exist? They are hand-written hooks: move each one's work into a part (its path
-   list into `parts/<part>/paths`, its body into `parts/<part>/<phase>.sh`, see the reference's *Migrating*),
-   `git rm` the old files, then continue.
-3. `python3 $H init` installs or updates the dispatcher (`lib.sh` and the three phase files). A `conflict` means a
-   hand-written phase file is still there: back to 2 (`--force` replaces it once its work lives in a part).
+1. `$H list --json`: every row (`code/<language>/apps/<name>`, shared workspaces, libs no workspace covers, or
+   the repo itself as one app), its `stacks`, `workspace`, `members` and the tasks already configured.
+2. Script hooks in `.hal/hooks/merge-to-main/` (hand-written, or a `lib.sh` + `parts/` dispatcher)? Migrate them
+   first (reference: *Migrating script hooks*), including stamps for deliveries that are already current.
+3. `$H suggest`: what the presets propose per row. It is the starting point, not the answer.
 
 ## 2. Per app
 
-Go through the apps one by one (skip libs: they are covered through the apps and workspaces that build them).
-For each, find out before asking, from the app's files, its README and the repo's CLAUDE.md/INTENT.md:
+Go through the apps one by one (libs and workspaces with the apps that build from them). For each, find out
+before asking, from the app's files, its README and the repo's CLAUDE.md/INTENT.md:
 
-- **how it is checked**: its test, lint, format and build commands, and how long they take (run them once: a gate
-  that takes minutes still belongs in `worktree-pre-merge` when nothing cheaper covers it, but say so);
-- **how it is delivered**: installed from the main checkout (`cargo install --path`, an app bundle, a
-  launchd service), run straight from the main checkout (nothing to do), or published elsewhere (never publish
-  from a hook without the user asking for it);
-- **what it shares**: a workspace whose checks cover several apps at once becomes one part of its own
-  (`rust-workspace`), checked once instead of once per app.
+- **how it is set up and checked**: its install, format, lint, build and test commands, and how long they take
+  (run them once: a gate that takes minutes still belongs before the landing when nothing cheaper covers it,
+  but say so);
+- **how it is delivered**: installed from the main checkout (`cargo install --path`, an app bundle, a launchd
+  service), run straight from the main checkout (no install), or published elsewhere (never publish from a task
+  without the user asking for it);
+- **what it is built from**: shared libs, build scripts, assets, pages it bundles: they go into the row's
+  `paths` (cargo path dependencies are added automatically);
+- **what it shares**: a workspace whose checks cover several apps keeps them on its `workspaces.<name>` row,
+  checked once (`$H gates <workspace> per-app` only when the apps need different gates).
 
-Then propose the app's parts in one question per app: what each phase would run and when (its `paths`), with the
-recommended set first; the reference's recipes are the defaults per stack. Typical:
-
-| Phase | For | Examples |
-|---|---|---|
-| `worktree-pre-merge` | gates: the landing stops when they fail, main untouched | tests, lint, format check, a debug build |
-| `main-pre-commit` | changes that belong in the merge commit | version bump, a generated file, a changelog entry |
-| `main-post-commit` | delivery after the landing (a failure only warns) | install the CLI, rebuild and restart the app |
-
-Write the chosen parts: `paths` with the app's files and the crates or libs it builds from, `**/*.md` excluded
-unless docs feed the build; every script runs only when the part's code changed (`hal_skip_unless_changed`);
-delivery may also run when the installed thing did not come from the main checkout (see the reference's
-hal2-cli-git example), never unconditionally on every landing. Follow the repo's shell style and comment each script's
-purpose in its first lines.
+Then propose the app's tasks in one question per app: each kind with its command, `cwd`, `ignore` (tests don't
+trigger installs or bumps) and whether it is on, recommended set first. Write the chosen ones with
+`$H set <row> <kind> --run ... [--cwd] [--paths] [--ignore] [--timeout]`, row `paths` by editing
+`.hal/hooks.toml` (comments survive every `hal2-cli-hooks` edit). A version bump or anything longer than a command
+line goes into a commented script under `.hal/hooks/scripts/`. A delivery that is already current on this
+machine gets a stamp (`$H stamp <row> install --set <commit>`), so the next landing does not redeliver it.
 
 ## 3. Verify
 
-1. `python3 $H check`: no errors (bad syntax, a missing `paths`, a pathspec that matches nothing) and no warnings
-   (an app in no part, a stray file in a part) you cannot explain.
-2. Try every new or changed part:
-   - `python3 $H try worktree-pre-merge --all-changed --part <parts>`: the gates run for real in this worktree;
-     they must pass on the current code and leave `git status` unchanged (a gate that writes files fails the
-     landing: gitignore its output).
-   - `python3 $H try main-pre-commit --all-changed --part <parts>`: runs in a throwaway worktree of the default
-     branch with this branch merged in (removed afterwards); check what it changed in its output.
-   - `main-post-commit` does what a landing does (installs, restarts) from the throwaway worktree: ask before
-     `python3 $H try main-post-commit --yes --part <parts>`, and skip parts whose result depends on the checkout's
-     path or name (an app named after its worktree); their first real landing is the test.
-   - Without `--all-changed`, try shows the change detection: commit first, then only parts whose `paths` the
-     branch touched run.
+1. `$H check`: no errors, and no warnings you cannot explain.
+2. Try every new or changed task:
+   - gates: `$H run --phase worktree-pre-merge --all` (or `$H run <row> <kind>` per task) in this worktree; they
+     must pass on the current code and leave `git status` unchanged (a gate that writes files fails the
+     landing: gitignore its output). Without `--all` it shows the change detection: only rows the branch
+     touched run.
+   - setup: `$H run <row> setup`.
+   - version: `$H run <row> version` edits files in this worktree: check the diff, then `git checkout` it.
+   - install and deploy do what a landing does (installs, restarts): ask before `$H run <row> install`.
 3. When the user asks for a deep test: rehearse real landings in a sandbox clone, one per scenario (reference:
    *Rehearsing landings*).
-4. Commit the hooks (`.hal/hooks/` is tracked) with a message in the repo's style.
+4. Commit `.hal/hooks.toml` and any scripts in the worktree with a message in the repo's style.
 
 ## 4. Report
 
-A table of the apps and their parts (phase, what it runs, when), what `try` ran and its result, what was not
-tried and why, and anything left open (an app without a gate, a slow gate).
+A table of the rows and their tasks (kind, what it runs, on or off), stamps recorded, what was tried and its
+result, what was not tried and why, and anything left open (an app without a gate, a slow gate).

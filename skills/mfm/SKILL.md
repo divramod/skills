@@ -1,12 +1,12 @@
 ---
 name: mfm
-description: merge-from-main — merge the latest default branch (main, master, ...) into the current git worktree, in any repository and on any branch, then run the repo's `.hal/hooks/merge-from-main/post-merge.sh`; resolves merge conflicts and fixes a failing hook itself. Use when the user says /mfm, "merge from main", "update the worktree with main", or a prompt says to run merge-from-main before starting. `/mfm h` shows help.
+description: merge-from-main — merge the latest default branch (main, master, ...) into the current git worktree, in any repository and on any branch, then run the repo's setup tasks (`.hal/hooks.toml`) and `.hal/hooks/merge-from-main/post-merge.sh`; resolves merge conflicts and fixes a failing setup or hook itself. Use when the user says /mfm, "merge from main", "update the worktree with main", or a prompt says to run merge-from-main before starting. `/mfm h` shows help.
 ---
 
 # mfm
 
 Brings the default branch into the current worktree. `hal2-cli-git` does the git work (fetch, stash around the
-merge, the hook, the push); this skill does what needs judgment: conflicts, a failing hook and the report.
+merge, the setup tasks and the hook, the push); this skill does what needs judgment: conflicts, a failing hook and the report.
 `S=<skill-dir>/scripts`. Ask every question with the question tool, recommended option first.
 
 | Call | Does |
@@ -24,7 +24,7 @@ merge, the hook, the push); this skill does what needs judgment: conflicts, a fa
 |---|---|---|
 | 0 | `ok` | [report](#report) |
 | 3 | `conflict` | [resolve](#conflicts) the listed `files`, commit, rerun |
-| 4 | `hook_failed` | [fix the hook's cause](#failing-hook), commit, rerun |
+| 4 | `task_failed`, `hook_failed` | [fix the cause](#failing-hook), commit, rerun |
 | 1 | `error` | report the `message`, stop. On the default branch itself there is nothing to do: /mfm is for worktrees |
 
 ## Conflicts
@@ -43,7 +43,9 @@ worktree), `:3:<f>` (the default branch), and `git log --oneline -3 <side> -- <f
 
 ## Failing hook
 
-The JSON names the `script`, its `exit_code` and the tail of its `output`. Fix the cause in this worktree (the
+The JSON names the failed task (`task_failed`: `phase`, `row`, `kind`, i.e. `[<row>.<kind>]` in
+`.hal/hooks.toml`; `hal2-cli-hooks run <row> <kind>` reruns it alone) or the `script` (`hook_failed`), its
+`exit_code` and the tail of its `output`. Fix the cause in this worktree (the
 code, a test, a missing setup step), not the hook: change the hook only when the hook itself is wrong, and say
 so. `left_changes: true` means the hook passed but changed files (formatting, generated code): review and commit
 them. Commit each fix with a real message in the repo's style, then rerun.
@@ -52,7 +54,7 @@ Stop after **3 runs in a row that fail the same hook with the same error**: repo
 
 ## Report
 
-One short block: merged from (`from`, whether it `changed`), `pushed`, the `hooks` that ran, conflicts resolved
+One short block: merged from (`from`, whether it `changed`), `pushed`, the `tasks` (skip `unchanged` ones) and `hooks` that ran, conflicts resolved
 (file and how), fixes committed (hash and subject).
 
 Never touch the main checkout or other worktrees (the merge only changes this worktree), and never push anything

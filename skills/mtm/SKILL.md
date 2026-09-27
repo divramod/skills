@@ -1,12 +1,13 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Commits all work first (gitignores junk, never commits secrets, asks about unclear files), merges the latest default branch in, runs the repo's `.hal/hooks/merge-to-main/` hooks, lands one --no-ff merge commit, pushes and resets the worktree to the new default branch; resolves conflicts and fixes failing hooks itself. `/mtm config` sets up those hooks per app of the repo (tests and lint before landing, version bumps in the merge commit, installs after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Commits all work first (gitignores junk, never commits secrets, asks about unclear files), merges the latest default branch in, runs the repo's hooks (per-app tasks in `.hal/hooks.toml`, scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes and resets the worktree to the new default branch; resolves conflicts and fixes failing hooks itself. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, format, lint, build and test before landing, version bumps in the merge commit, installs after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
 ---
 
 # mtm
 
 Lands this worktree on the default branch. `hal2-cli-git` does the git work under a per-repo merge lock (merge
-the default branch in, the hooks, the merge, the push, the reset; see `.adr/merge-hooks.md` in hal2); this skill
+the default branch in, the hooks, the merge, the push, the reset; see `.adr/declarative-hooks.md` and
+`.adr/merge-hooks.md` in hal2); this skill
 commits the work first and handles what needs judgment. Calling `/mtm` is the user's consent to commit in this
 worktree, land on the default branch and push it. `S=<skill-dir>/scripts`. Ask every question with the question
 tool, recommended option first.
@@ -14,7 +15,7 @@ tool, recommended option first.
 | Call | Does |
 |---|---|
 | `/mtm [<slot>]` | land the current worktree (or hal slot `<slot>`) |
-| `/mtm config [<app>]` | configure the repo's merge-to-main hooks, app by app: read [subskills/config/SUBSKILL.md](subskills/config/SUBSKILL.md) and follow it instead of the steps below |
+| `/mtm config [<app>]` | configure the repo's hooks, app by app: read [subskills/config/SUBSKILL.md](subskills/config/SUBSKILL.md) and follow it instead of the steps below |
 | `/mtm h`, `/mtm help` | print this table and stop |
 
 ## 1. Commit everything
@@ -47,7 +48,7 @@ Run in the worktree; if it is the main checkout on the default branch, stop: `/m
 |---|---|---|
 | 0 | `ok` | [clear the current task](#3-clear-the-current-task), then [report](#4-report) |
 | 3 | `conflict` | merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
-| 4 | `hook_failed` | fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. The default branch is unchanged: a failed `main-pre-commit` was undone, so fix its cause here too. With managed hooks the output names the failing part (`<phase>[<part>]: failed`): its script is `.hal/hooks/merge-to-main/parts/<part>/<phase>.sh` |
+| 4 | `task_failed`, `hook_failed` | fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. The default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the task is `[<row>.<kind>]` in `.hal/hooks.toml`; `hal2-cli-hooks run <row> <kind>` reruns it alone), `hook_failed` the `script` |
 | 1 | `error` | uncommitted changes: back to [step 1](#1-commit-everything). Anything else (main checkout dirty or not on the default branch, default branch diverged from origin, lock held too long): report the `message` and stop. Never touch the main checkout yourself |
 
 Stop after **3 runs in a row that fail the same way** (same hook and error, or the same conflict): report what
@@ -66,6 +67,6 @@ gitignored). Delete the file when the landed work is finished:
 ## 4. Report
 
 One short block: commits landed (`commits`) and the merge commit (`git -C <main checkout> log --oneline -1`),
-`pushed`, the `hooks` that ran, `warnings` (a failed `main-post-commit` hook does not undo the landing: show its
-output), whether `plans/CURRENT_PLAN` was deleted (and what it named), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
+`pushed`, the `tasks` that ran (skip `unchanged` ones) and the `hooks`, `warnings` (a failed install, deploy or
+`main-post-commit` hook does not undo the landing: show its output), whether `plans/CURRENT_PLAN` was deleted (and what it named), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
 committed. The worktree now equals the new default branch and is ready for the next task.

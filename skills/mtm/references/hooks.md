@@ -1,211 +1,137 @@
 # merge-to-main hooks: reference
 
-What `/mtm config` builds and what `/mtm` runs. The contract of the hooks themselves is hal2's
-[merge-hooks ADR](https://github.com/divramod/hal2/blob/main/.adr/merge-hooks.md); this file adds the managed
-per-part layout on top of it, the helpers and worked examples from hal2.
+What `/mtm config` builds and what `/mtm` and `/mfm` run. The rules are hal2's
+[declarative-hooks ADR](https://github.com/divramod/hal2/blob/main/.adr/declarative-hooks.md) (per-app tasks in
+`.hal/hooks.toml`) and [merge-hooks ADR](https://github.com/divramod/hal2/blob/main/.adr/merge-hooks.md) (the phase
+scripts that stay as escape hatch); this file adds the commands, recipes and hal2's own configuration as example.
 
-## The phases
+## The files
 
-`hal2-cli-git worktree merge-to-main` runs these scripts with `bash` when they exist, from the copy in the merged
-tree (a branch that changes a hook uses it in the same landing), with `HAL_HOOK_WORKTREE`, `HAL_HOOK_BRANCH`,
-`HAL_HOOK_MAIN_ROOT` and `HAL_HOOK_DEFAULT_BRANCH` set:
+| File | Tracked | Holds |
+|---|---|---|
+| `.hal/hooks.toml` | yes | one row per app, lib or shared workspace, one task per kind |
+| `.hal/hooks.machine.toml` | no (gitignored, main checkout only) | `enabled = true/false` per task, for this machine |
+| `.hal/hooks/<flow>/<phase>.sh` | yes | optional scripts for what a command line can't say; run after the phase's tasks |
+| `.hal/hooks/scripts/*.sh` | yes | helper scripts a task's `run` calls (a version bump) |
 
-| Phase | Runs in | When | Failure |
-|---|---|---|---|
-| `worktree-pre-merge` | the worktree | after the default branch was merged in | landing stops, main untouched |
-| `main-pre-commit` | the main checkout | after `git merge --no-ff --no-commit`; changed files go into the merge commit | merge aborted, main unchanged |
-| `main-post-commit` | the main checkout | after the merge commit was made and pushed | warning only, the landing stays |
+```toml
+version = 1
 
-A pre phase that exits 0 but leaves `git status` changed in the worktree fails too: gates must not write tracked
-or unignored files.
+[workspaces.rust]                    # checks shared by every crate
+path = "code/rust"
+format = { run = "cargo fmt --all --check", cwd = "code/rust" }
 
-## The managed layout
+[apps.hal2-macos]                    # a row: code/<lang>/apps/<name>
+paths = ["code/swift/libs"]          # extra files it is built from
 
-```
-.hal/hooks/merge-to-main/
-  lib.sh                      dispatcher + helpers (managed: hooks.py init writes and updates it)
-  worktree-pre-merge.sh       managed: `source lib.sh; hal_run_parts worktree-pre-merge`
-  main-pre-commit.sh          managed
-  main-post-commit.sh         managed
-  parts/<part>/
-    paths                     the part's files: one git pathspec per line, `#` comments
-    worktree-pre-merge.sh     any of the three phases, all optional
-    main-pre-commit.sh
-    main-post-commit.sh
+[apps.hal2-macos.version]            # one task per kind
+run = ".hal/hooks/scripts/hal2-macos-bump.sh"
+cwd = "."                            # relative to the checkout root (default)
+ignore = ["**/Tests/**"]             # never counts as a change
+timeout = "10m"                      # optional
+enabled = true                       # default
 ```
 
-- A **part** is one app (`hal2-macos`) or one workspace several apps share (`rust-workspace`: fmt, clippy and
-  tests run once for every crate). Parts run in name order.
-- A part script is **sourced** by `bash -euo pipefail` from the root of the checkout the phase runs in, with
-  `HAL_PHASE`, `HAL_PART` and `HAL_PART_DIR` set and the helpers loaded; no shebang or `set` line needed. `exit 0`
-  ends the part.
-- A failing part stops `worktree-pre-merge` and `main-pre-commit` at once; in `main-post-commit` the other parts
-  still run and the phase fails at the end.
-- `HAL_HOOK_FORCE_CHANGED=1` counts every part as changed, `HAL_HOOK_ONLY_PART=a,b` runs only those parts
-  (`hooks.py try` sets them). Written for bash 3.2 too (macOS's `/bin/bash`).
+A row's files are its folder, for Rust apps and libs also the crates they depend on (`cargo metadata`) and the
+workspace's `Cargo.toml`/`Cargo.lock`, plus its `paths`; `**/*.md` never counts. A task's own `paths` replace the
+row's. An unknown key, kind or section fails `check` and the landing, so a typo never silently disables a gate.
 
-### Helpers
+## Kinds and phases
 
-| Helper | Does |
+| Kind | Runs | Runs when |
+|---|---|---|
+| setup | after `/mfm`, on a new worktree slot, before a landing's gates (worktree), after a landing (main) | the row's manifests + lockfiles changed since its last setup in that checkout |
+| format, lint, build, test | `worktree-pre-merge`: in the worktree, after the default branch was merged in | the branch changed the row (`merge-base..HEAD`) |
+| version | `main-pre-commit`: on the staged merge in the main checkout; its edits go into the merge commit | the staged merge changes the row |
+| install, deploy | `main-post-commit`: after the merge commit was pushed | the row changed since the task's delivery stamp (no stamp: changed) |
+
+- A phase runs its kinds in this order, each kind across all rows (every format, then every lint, ...), then the
+  phase's script when there is one.
+- A failing setup, gate or version task stops the landing (exit 4, `status: "task_failed"` with `phase`, `row`,
+  `kind`, `exit_code`, `output`): main stays untouched, a failed version task aborts the merge. A failing
+  install or deploy only warns; the landing stays.
+- A setup, gate or version task in a worktree that exits 0 but changes `git status` fails too: gates must not
+  write tracked or unignored files (gitignore build output).
+- A **delivery stamp** is the commit an install or deploy last delivered successfully on this machine
+  (`~/.local/state/hal2/hooks/`). A failed or never-run delivery reruns on the next landing, an unchanged one is
+  skipped. `hal2-cli-hooks stamp <row> install` shows it, `--set <commit>` records one (after installing by hand,
+  or when migrating hooks whose installs are already current).
+- Tasks run as `bash -c <run>` from `cwd` in the login-shell environment with `HAL_HOOK_WORKTREE`,
+  `HAL_HOOK_BRANCH`, `HAL_HOOK_MAIN_ROOT`, `HAL_HOOK_DEFAULT_BRANCH`, `HAL_APP`, `HAL_APP_DIR`, `HAL_TASK`,
+  `HAL_PHASE`. Every outcome (`passed`, `failed`, `unchanged`, `disabled` with its layer, `timed-out`) is in the
+  merges' `--json` under `tasks`.
+
+## hal2-cli-hooks
+
+`hal2-cli-hooks <command> [--json] [--repo <dir>]`, from the checkout whose `hooks.toml` it edits (a worktree;
+`--machine` always edits the main checkout's machine layer). `<row>` is `apps.<name>`, `libs.<name>`,
+`workspaces.<name>` or a unique name.
+
+| Command | Does |
 |---|---|
-| `hal_skip_unless_changed [<pathspec>...]` | print "unchanged, skipped" and exit 0 unless the part's files changed |
-| `hal_changed [<pathspec>...]` | status 0 when the part's files changed in this landing |
-| `hal_changed_since <commit> [<pathspec>...]` | ... since `<commit>` (an unknown commit counts as changed) |
-| `hal_log <message>` | print `<phase>[<part>]: <message>` |
-
-"Changed" per phase: the branch's own changes (`git diff $(git merge-base HEAD origin/<default>) HEAD`) in
-`worktree-pre-merge`, the staged merge (`git diff --cached HEAD`) in `main-pre-commit`, the merge commit
-(`git diff HEAD^1 HEAD`) in `main-post-commit`. Extra pathspecs narrow the part's files for one check, e.g. tests
-aside: `hal_changed ':(exclude,glob)**/Tests/**'`. A git error counts as changed: a check rather runs once too
-often than never.
-
-### Paths
-
-```
-# The files hal2-macos is built and tested from.
-:(glob)code/swift/apps/hal2-macos/**
-:(glob)code/rust/libs/**           # a crate the app links
-code/rust/Cargo.lock
-:(exclude,glob)**/*.md             # docs never trigger a check
-```
-
-Include what the app is **built from**, not only its own folder: its libs, the workspace manifest and lockfile,
-shared build scripts and assets. `hooks.py check` fails on a pathspec that matches no tracked file (a typo) and
-warns about an app no part covers.
+| `list` | rows (configured and discovered) with stacks, tasks, switches and last runs |
+| `suggest [--write]` | suggested tasks per stack; `--write` adds the missing ones (installs off) |
+| `set <row> <kind> --run <cmd> [--cwd] [--paths a,b] [--ignore a,b] [--timeout 10m]` | create or change a task |
+| `remove <row> <kind>` | delete a task |
+| `enable`, `disable <row> <kind> [--machine]` | switch a task in `hooks.toml`, or only on this machine |
+| `reset <row> <kind>` | drop this machine's switch |
+| `gates <workspace> per-app\|workspace` | move a workspace's gates to its apps, or back |
+| `check` | validate both files, row folders and cwds |
+| `run <row> <kind>` | run one task now, changed or not |
+| `run --phase <phase> [--all] [--base <ref>]` | run a phase the way a landing does (`--all`: every row counts as changed) |
+| `stamp <row> install\|deploy [--set <commit>]` | show or record a delivery stamp |
+| `commit [--message]` | commit `.hal/hooks.toml` on the default branch of the main checkout and push |
 
 ## Recipes per stack
 
-Defaults to propose; adapt the commands to what the repo's README, CLAUDE.md or CI actually run.
+`suggest` proposes these; adapt them to what the repo's README, CLAUDE.md or CI actually run.
 
-| Stack | `worktree-pre-merge` | `main-post-commit` |
-|---|---|---|
-| Cargo workspace (one part for the workspace) | `cargo fmt --all --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked` | per installed binary (one part per app): `cargo install --locked --quiet --path apps/<app>` when changed or installed from elsewhere |
-| bun / npm / pnpm | `bun install --frozen-lockfile` (`npm ci`, `pnpm i --frozen-lockfile`), then the package's `test`, `lint`, `typecheck`, `build` scripts | a global CLI: `bun link` / `npm i -g .`; run from the checkout: nothing |
-| SwiftPM library | `xcrun swift test --package-path <dir>` | nothing: apps that link it rebuild |
-| Xcode / XcodeGen app | the repo's build script with tests (`build.sh`), or `xcodebuild test` | build release, install to `~/Applications`, restart (see hal2-macos) |
-| Neovim plugin (plenary) | `nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {...}" -c qa!` | nothing when lazy.nvim loads it with `dir =` from the main checkout |
-| Python (uv) | `uv run ruff check`, `uv run ruff format --check`, `uv run pytest` | a tool: `uv tool install --force .` |
-| Go | `test -z "$(gofmt -l .)"`, `go vet ./...`, `go test ./...` | `go install ./cmd/<app>` |
+| Stack | setup | gates | install |
+|---|---|---|---|
+| Cargo workspace (one `workspaces.<name>` row) | `cargo fetch --locked` | `cargo fmt --all --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked` | per binary: `cargo install --locked --quiet --path apps/<app>` (cwd the workspace), `ignore = ["**/tests/**"]` |
+| bun / npm / pnpm | `bun install --frozen-lockfile` (`npm ci`, `pnpm i --frozen-lockfile`) | the package's `lint`, `build`, `test` scripts | a global CLI: `bun link` / `npm i -g .`; run from the checkout: none |
+| SwiftPM library | `xcrun swift package resolve` | `xcrun swift build`, `xcrun swift test` | none: apps that link it rebuild |
+| Xcode / XcodeGen app | | the repo's build script with tests (`build.sh`) | build release into `~/Applications`; deploy: restart |
+| Neovim plugin (plenary) | | `stylua --check .` (with a stylua.toml), `nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {...}" -c qa!` | none when lazy.nvim loads it with `dir =` from the main checkout |
+| Python (uv) | `uv sync --locked` | `uv run ruff format --check`, `uv run ruff check`, `uv run pytest` | a tool: `uv tool install --force .` |
+| Go | `go mod download` | `test -z "$(gofmt -l .)"`, `go vet ./...`, `go test ./...` | `go install ./...` |
 
-`main-pre-commit` fits whatever must be part of the landed commit: a version bump, regenerated code or schema, a
-changelog line. Keep its edits deterministic: it runs on the staged merge in the main checkout.
+- `version` fits whatever must be part of the landed commit: a version bump, regenerated code, a changelog line.
+  Keep it deterministic; put it in a script under `.hal/hooks/scripts/` and point `run` at it.
+- Gate before landing, never after: a post-phase failure no longer stops anything.
+- Delivery only installs locally; publishing (a release, a registry push, a remote deploy) needs the user's
+  explicit wish. `deploy` is never suggested.
+- A row's `paths` must hold everything the app is **built from** that is not its folder or a cargo dependency:
+  shared Swift libs, build scripts, assets, a web page it bundles.
 
-Rules of thumb:
+## hal2's configuration
 
-- Gate in `worktree-pre-merge`, never in `main-post-commit`: a post failure no longer stops anything.
-- Every script runs only when its part's code changed. The one addition: delivery also runs when what is
-  installed did not come from the main checkout at the current code (installed from a worktree, a failed
-  install); check that cheaply (`cargo install --list`, a commit stamped into the build) instead of reinstalling
-  on every landing.
-- Delivery from a hook only installs locally; publishing (a release, a registry push, a deploy) needs the user's
-  explicit wish.
-- Output of gates (build folders, `node_modules`) must be gitignored, or the pre phase fails for leaving changes.
+hal2 (`~/a/hal2`, `github.com/divramod/hal2`) has Rust CLIs, a SwiftUI app linking the Rust core and bundling a web
+page, two bun apps and a Neovim plugin; its [`.hal/hooks.toml`](https://github.com/divramod/hal2/blob/main/.hal/hooks.toml):
 
-## Worked examples: hal2
-
-hal2 (`~/a/hal2`, `github.com/divramod/hal2`) has Rust CLIs, a SwiftUI app linking the Rust core, a bun
-statusline and a Neovim plugin:
-
-| Part | `paths` | `worktree-pre-merge` | `main-pre-commit` | `main-post-commit` |
+| Row | setup | gates | version | install / deploy |
 |---|---|---|---|---|
-| `rust-workspace` | `code/rust/**` | fmt, clippy `-D warnings`, test | | |
-| `hal2-cli`, `hal2-cli-git`, `hal2-cli-shooter`, `hal2-cli-tmux` | the app + its libs + Cargo.toml/lock | | | `cargo install --path` when changed or installed from elsewhere |
-| `hal2-macos` | swift app, Hal2Kit, swift scripts, rust libs, bindgen, logos | `build.sh` (debug build + tests) | bump patch version + build number | rebuild, install, restart when changed since the installed build |
-| `hal2-statusline` | the app | bun install, test, biome | | (runs from the checkout) |
-| `hal2-nvim` | the app | plenary specs | | (lazy.nvim `dir =` the checkout) |
+| `workspaces.rust` | | fmt, clippy `-D warnings`, test | | |
+| `apps.hal2-cli`, `-cli-git`, `-cli-hooks`, `-cli-shooter`, `-cli-tmux` | | (the workspace's) | | `cargo install --path`, tests ignored |
+| `apps.hal2-macos` (+ Swift libs and scripts, Rust libs, bindgen, the Excalidraw page, logos) | | `build.sh` (debug build + Hal2Kit and app tests) | `.hal/hooks/scripts/hal2-macos-bump.sh` | `build.sh install`; deploy: `.hal/hooks/scripts/hal2-macos-restart.sh` |
+| `apps.hal2-statusline`, `apps.hal2-excalidraw` | `bun install --frozen-lockfile` | `bun run lint`, `bun run test` | | (run from the checkout / bundled by hal2-macos) |
+| `apps.hal2-nvim` | | plenary specs | | (lazy.nvim `dir =` the checkout) |
 
-`parts/hal2-macos/main-pre-commit.sh`: a change that goes into the merge commit, tests aside:
+## Migrating script hooks
 
-```bash
-# Before the merge commit on main: bump hal2-macos's patch version (and build
-# number) when the landing changes the app's code, tests aside; the change
-# goes into the merge commit.
-spec="code/swift/apps/hal2-macos/project.yml"
-hal_skip_unless_changed ':(exclude,glob)**/Tests/**' ':(exclude,glob)code/rust/**/tests/**'
-
-version="$(sed -nE 's/^ *CFBundleShortVersionString: "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' "$spec")"
-build="$(sed -nE 's/^ *CFBundleVersion: "([0-9]+)"$/\1/p' "$spec")"
-if [[ -z "$version" || -z "$build" ]]; then
-  hal_log "no CFBundleShortVersionString/CFBundleVersion in $spec" >&2
-  exit 1
-fi
-IFS=. read -r major minor patch <<<"$version"
-next="$major.$minor.$((patch + 1))"
-sed -i '' -E \
-  -e "s/^( *CFBundleShortVersionString: )\"$version\"$/\1\"$next\"/" \
-  -e "s/^( *CFBundleVersion: )\"$build\"$/\1\"$((build + 1))\"/" \
-  "$spec"
-hal_log "$version ($build) -> $next ($((build + 1)))"
-```
-
-`parts/hal2-macos/main-post-commit.sh`: delivery keyed to what the installed build was built from, not to the
-last merge, so a failed rebuild is retried by the next landing:
-
-```bash
-app="$HOME/Applications/hal2-macos.app"
-# build.sh stamps the commit it built from into Info.plist ("-dirty" counts as unknown).
-built="$(/usr/libexec/PlistBuddy -c "Print HAL2Commit" "$app/Contents/Info.plist" 2>/dev/null || true)"
-if [[ -n "$built" && "$built" != *-dirty ]] &&
-   ! hal_changed_since "$built" ':(exclude,glob)**/Tests/**' ':(exclude,glob)code/rust/**/tests/**'; then
-  hal_log "code unchanged since $built, not rebuilt"
-  pgrep -x hal2-macos >/dev/null || open "$app"
-  exit 0
-fi
-code/swift/apps/hal2-macos/build.sh install
-if pkill -x hal2-macos; then
-  while pgrep -x hal2-macos >/dev/null; do sleep 0.2; done
-fi
-open "$app"
-hal_log "restarted $app"
-```
-
-`parts/hal2-cli-git/main-post-commit.sh`: an install that runs when the code changed (a change to integration tests
-only does not count), and also when the installed binary did not come from the main checkout, so a failed install or one made from a worktree is repaired:
-
-```bash
-source_dir="$(pwd -P)/code/rust/apps/hal2-cli-git"
-if ! hal_changed ':(exclude,glob)code/rust/**/tests/**' &&
-   cargo install --list | grep -F "($source_dir):" | grep -q "^hal2-cli-git v"; then
-  hal_log "unchanged and installed from $source_dir, skipped"
-  exit 0
-fi
-cd code/rust
-cargo install --locked --quiet --path "apps/hal2-cli-git"
-hal_log "installed $(command -v hal2-cli-git || echo hal2-cli-git)"
-```
-
-`parts/rust-workspace/worktree-pre-merge.sh`: one gate for every crate:
-
-```bash
-hal_skip_unless_changed
-cd code/rust
-cargo fmt --all --check
-cargo clippy --all-targets --locked --quiet -- -D warnings
-cargo test --locked --quiet
-```
-
-## Migrating hand-written hooks
-
-A repo with its own `.hal/hooks/merge-to-main/<phase>.sh` (no `managed by /mtm config` line): per hook, pick the
-part it belongs to, move its path list into `parts/<part>/paths` and its body into `parts/<part>/<phase>.sh`
-(drop the shebang, `set -euo pipefail`, `cd "$HAL_HOOK_MAIN_ROOT"`: the dispatcher does that; replace its own
-change detection with the helpers), `git rm` the old file, then `hooks.py init`. hal2's hooks were migrated this
-way: `hal2-macos-paths.sh` became `parts/hal2-macos/paths`.
-
-## Trying hooks out
-
-`hooks.py try <phase>` runs a phase the way a landing does: `worktree-pre-merge` in this worktree,
-`main-pre-commit`/`main-post-commit` in a throwaway worktree of the default branch with this branch merged in
-(and the merge committed for post), overlaid with this worktree's `.hal/hooks/`, so uncommitted hook edits are
-tried too. `--all-changed` runs every part, `--part a,b` only those; `main-post-commit` needs `--yes` because it
-does real work (installs from the throwaway worktree: the next real landing installs from the main checkout
-again). `--keep` keeps the throwaway worktree for a look.
+A repo with `.hal/hooks/merge-to-main/<phase>.sh` scripts (hand-written, or shot 4's managed `lib.sh` +
+`parts/<part>/`): per script, find the row it belongs to and the kind it does, and turn it into a task
+(`hal2-cli-hooks set`); its change detection becomes the row's `paths` and the task's `ignore`, a script body
+that is more than a command line moves to `.hal/hooks/scripts/`. Deliveries that are current already get a
+stamp (`hal2-cli-hooks stamp <row> install --set <commit the installed build came from>`), so the first landing
+on the new config does not reinstall everything. `git rm` the old scripts; keep a phase script only for what no
+task can say. hal2 was migrated this way in plan 0008 step 6.
 
 ## Rehearsing landings
 
-`try` runs one phase. To test the whole chain (the real `hal2-cli-git`, the merge lock, the push, change
-detection across phases), rehearse in a sandbox clone; its main checkout gets its own lock
-(`~/.hal/git/worktree/<name>/`) because the lock is keyed by the checkout's folder name:
+`run --phase` runs one phase. To test the whole chain (the real `hal2-cli-git`, the merge lock, the push, change
+detection across phases, stamps), rehearse in a sandbox clone; its main checkout gets its own lock
+(`~/.hal/git/worktree/<name>/`) and its own state dir (keyed by the main checkout's path):
 
 ```bash
 git clone -q --bare <repo> sbx/origin.git && git clone -q sbx/origin.git sbx/<repo>-sbx
@@ -214,10 +140,11 @@ git -C sbx/<repo>-sbx remote set-head origin main && git -C sbx/<repo>-sbx workt
 (cd sbx/wt && hal2-cli-git worktree merge-to-main --json)
 ```
 
-Scenarios worth one landing each: a change to one app only (only its parts run), a change to shared code (every
-dependent part runs, version bump, delivery), a test-only change (gates run, no bump, no delivery; one new test
-per app also proves each gate runs that app's tests), a failing gate (exit 4, main unchanged), a failing
-`main-pre-commit` part (merge aborted, main clean) and a failing `main-post-commit` part (landed, pushed, a
-warning; a throwaway `parts/zz-test/` does both). Post phases deliver for real from the sandbox (installs,
-restarts): ask first; the next real landing delivers from the main checkout again. Remove `sbx/` and
-`~/.hal/git/worktree/<repo>-sbx/` afterwards.
+Scenarios worth one landing each: a change to one app only (only its tasks run), a change to shared code (every
+dependent row's tasks run, version bump, delivery), a test-only change (gates run, no bump, no delivery; one new
+test per app also proves each gate runs that app's tests), a failing gate (exit 4, main unchanged), a failing
+version task (merge aborted, main clean) and a failing install (landed, pushed, a warning; a throwaway row does
+both). Also `/mfm` after a lockfile change (setup reruns) and the first landing after seeding stamps (unchanged
+rows deliver nothing). Deliveries from the sandbox are real (installs, restarts): ask first, or point the tasks at
+harmless commands with `hal2-cli-hooks set` in the sandbox; the next real landing delivers from the main checkout
+again (its stamps are separate). Remove `sbx/` and `~/.hal/git/worktree/<repo>-sbx/` afterwards.
