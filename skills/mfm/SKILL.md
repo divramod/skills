@@ -1,6 +1,6 @@
 ---
 name: mfm
-description: merge-from-main — merge the latest default branch (main, master, ...) into the current git worktree, in any repository and on any branch, then run the repo's setup tasks (`.hal/hooks.toml`) and `.hal/hooks/merge-from-main/post-merge.sh`; resolves merge conflicts and fixes a failing setup or hook itself. Use when the user says /mfm, "merge from main", "update the worktree with main", or a prompt says to run merge-from-main before starting. `/mfm h` shows help.
+description: merge-from-main — merge the latest default branch (main, master, ...) into the current git worktree, in any repository and on any branch, then run the repo's setup tasks (`setup` verb scripts, `.hal/hooks.toml`) and `.hal/hooks/merge-from-main/post-merge.sh`; resolves merge conflicts and fixes a failing setup or hook itself. Use when the user says /mfm, "merge from main", "update the worktree with main", or a prompt says to run merge-from-main before starting. `/mfm h` shows help.
 ---
 
 # mfm
@@ -43,12 +43,13 @@ worktree), `:3:<f>` (the default branch), and `git log --oneline -3 <side> -- <f
 
 ## Failing hook
 
-The JSON names the failed task (`task_failed`: `phase`, `row`, `kind`, i.e. `[<row>.<kind>]` in
-`.hal/hooks.toml`; `hal2-cli-hooks run <row> <kind>` reruns it alone) or the `script` (`hook_failed`), its
+The JSON names the failed task (`task_failed`: `phase`, `row` and `kind`, the verb: the row's own `<row>/.hal/hooks/<verb>.sh` or its
+inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`, settings under `[<row>.<verb>]` in `.hal/hooks.toml`;
+`hal2-cli-hooks run <row> <verb>` reruns it alone) or the `script` (`hook_failed`), its
 `exit_code` and the tail of its `output`. Fix the cause in this worktree (the
 code, a test, a missing setup step), not the hook: change the hook only when the hook itself is wrong, and say
-so. `left_changes: true` means the hook passed but changed files (formatting, generated code): review and commit
-them. Commit each fix with a real message in the repo's style, then rerun.
+so. `left_changes: true` means the hook passed but changed files (generated code, a dependency install): review and
+commit them, or gitignore build output. Commit each fix with a real message in the repo's style, then rerun.
 
 Stop after **3 runs in a row that fail the same hook with the same error**: report what fails and what you tried.
 
