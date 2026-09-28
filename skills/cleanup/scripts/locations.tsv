@@ -1,0 +1,19 @@
+# Known build artifact locations of hal projects (hal2 and repos with the same layout), relative to the worktree root.
+# path (glob)	kind	rebuilt by
+code/rust/target	build	cargo build (in code/rust)
+code/swift/build	build	code/bash/scripts/test-kit-ios/main.sh
+code/swift/apps/*/build	build	code/swift/apps/<app>/build.sh
+code/swift/apps/*/*.xcodeproj	generated	xcodegen (build.sh runs it)
+code/swift/libs/*/.build	build	xcrun swift build|test --package-path code/swift/libs/<lib>
+code/swift/libs/*/.swiftpm	build	Xcode / SwiftPM
+code/swift/libs/Hal2Core/Frameworks	generated	code/bash/scripts/build-core/main.sh
+code/swift/libs/Hal2Core/Sources/Hal2Ffi/hal2_ffi.swift	generated	code/bash/scripts/build-core/main.sh
+code/swift/libs/Hal2Core/Package.resolved	generated	code/swift/apps/hal2-macos/build.sh
+code/swift/libs/Hal2Kit/Frameworks	deps	code/bash/scripts/fetch-vlckit/main.sh
+code/typescript/apps/*/dist	build	bun run build (in the app)
+code/typescript/apps/*/node_modules	deps	bun install (in the app)
+code/typescript/libs/*/dist	build	bun run build (in the lib)
+code/typescript/libs/*/node_modules	deps	bun install (in the lib)
+code/kotlin/apps/*/build	build	./gradlew build
+code/kotlin/apps/*/.gradle	build	./gradlew build
+code/python/**/.venv	deps	uv sync
