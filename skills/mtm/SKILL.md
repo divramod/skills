@@ -5,9 +5,12 @@ description: merge-to-main — land the current git worktree's branch on the def
 
 # mtm
 
-Lands this worktree on the default branch. `hal2-cli-git` does the git work under a per-repo merge lock (merge
-the default branch in, the hooks, the merge, the push, the reset; see `.adr/declarative-hooks.md` and
-`.adr/merge-hooks.md` in hal2); this skill
+Lands this worktree on the default branch. `hal2-cli-git` does the git work (see `.adr/declarative-hooks.md` and
+`.adr/merge-hooks.md` in hal2): it merges the default branch in and runs the gates in the worktree without any
+lock (gates whose inputs passed before end `cached`), then waits its turn in the repo's merge queue (FIFO, no
+timeout) and holds the merge lock only for the merge, version bump, commit and push (rerunning the gates first
+when the default branch moved meanwhile), resets the worktree and finally runs the deliveries (install, deploy)
+in the delivery worktree `~/.hal/git/worktree/<repo>/.deliver`, after the lock; this skill
 commits the work first and handles what needs judgment. Calling `/mtm` is the user's consent to commit in this
 worktree, land on the default branch and push it. `S=<skill-dir>/scripts`. Ask every question with the question
 tool, recommended option first.
@@ -41,7 +44,9 @@ Run in the worktree; if it is the main checkout on the default branch, stop: `/m
 ## 2. Land
 
 1. `hal2-cli-git worktree merge-to-main --json [<slot>]`. If the command is missing or has no `--json`, run
-   `bash $S/install-prerequisites.sh` once and retry. It may wait up to 10 minutes for another merge's lock.
+   `bash $S/install-prerequisites.sh` once and retry. It waits as long as other landings are ahead of it in the
+   merge queue (`hal2-cli-git worktree queue` lists the holder and the waiters; hal2-macos shows every repo's
+   queue), then for its deliveries; never kill a waiting landing for taking long.
 2. Act on the exit code; after every fix go back to 1:
 
 | Exit | JSON `status` | Do |
@@ -49,7 +54,7 @@ Run in the worktree; if it is the main checkout on the default branch, stop: `/m
 | 0 | `ok` | [clear the current task](#3-clear-the-current-task), then [report](#4-report) |
 | 3 | `conflict` | merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
 | 4 | `task_failed`, `hook_failed` | fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. The default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the verb: the task is the script `hal2-cli-hooks list` shows for that row and verb, its own `<row>/.hal/hooks/<verb>.sh` or an inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`; `hal2-cli-hooks run <row> <verb>` reruns it alone; tasks it cancelled or skipped need no fix of their own), `hook_failed` the `script` |
-| 1 | `error` | uncommitted changes: back to [step 1](#1-commit-everything). Anything else (main checkout dirty or not on the default branch, default branch diverged from origin, lock held too long): report the `message` and stop. Never touch the main checkout yourself |
+| 1 | `error` | uncommitted changes: back to [step 1](#1-commit-everything). Anything else (main checkout dirty or not on the default branch, default branch diverged from origin): report the `message` and stop. Never touch the main checkout yourself |
 
 Stop after **3 runs in a row that fail the same way** (same hook and error, or the same conflict): report what
 fails and what you tried.
@@ -67,6 +72,7 @@ gitignored). Delete the file when the landed work is finished:
 ## 4. Report
 
 One short block: commits landed (`commits`) and the merge commit (`git -C <main checkout> log --oneline -1`),
-`pushed`, the `tasks` that ran (row and verb; skip `unchanged` ones) and the `hooks`, `warnings` (a failed install, deploy or
+`pushed`, the `tasks` that ran (row and verb; skip `unchanged` and `cached` ones, say how many were cached) and the `hooks`, `warnings` (a failed install, deploy or
 `main-post-commit` hook does not undo the landing: show its output), whether `plans/CURRENT_PLAN` was deleted (and what it named), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
-committed. The worktree now equals the new default branch and is ready for the next task.
+committed, and the landing's timings (`hal2-cli-hooks landings <id> --json`: lock wait, lock held, gates,
+deliveries; the Landings part of the Hooks tab shows the same). The worktree now equals the new default branch and is ready for the next task.
