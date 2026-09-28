@@ -6,10 +6,10 @@ description: merge-to-main — land the current git worktree's branch on the def
 # mtm
 
 Lands this worktree on the default branch. `hal2-cli-git` does the git work (see `.adr/declarative-hooks.md` and
-`.adr/merge-hooks.md` in hal2): it merges the default branch in and runs the gates in the worktree without any
-lock (gates whose inputs passed before end `cached`), then waits its turn in the repo's merge queue (FIFO, no
-timeout) and holds the merge lock only for the merge, version bump, commit and push (rerunning the gates first
-when the default branch moved meanwhile), resets the worktree and finally runs the deliveries (install, deploy)
+`.adr/merge-hooks.md` in hal2): landings run one after another, so it first waits its turn in the repo's merge
+queue (FIFO, no timeout), then holds the merge lock while it merges the default branch in, runs the gates in the
+worktree (gates whose inputs passed before end `cached`), merges, bumps versions, commits and pushes (rerunning
+the gates when the default branch moved meanwhile), resets the worktree and finally runs the deliveries (install, deploy)
 in the delivery worktree `~/.hal/git/worktree/<repo>/.deliver`, after the lock; this skill
 commits the work first and handles what needs judgment. Calling `/mtm` is the user's consent to commit in this
 worktree, land on the default branch and push it. `S=<skill-dir>/scripts`. Ask every question with the question
