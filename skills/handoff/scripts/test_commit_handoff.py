@@ -32,36 +32,56 @@ class CommitHandoffTest(unittest.TestCase):
     def commit(self, *args):
         return run(self.repo, "bash", str(SCRIPT), *args, check=False)
 
-    def test_commits_only_the_handoff(self):
+    def committed(self):
+        lines = run(self.repo, "git", "show", "--name-status", "--format=%s", "HEAD").stdout.split("\n")
+        return lines[0], sorted(filter(None, lines[1:]))
+
+    def test_commits_only_the_docs_and_ignores_the_handoff(self):
         (self.repo / "code.txt").write_text("staged\n")
         run(self.repo, "git", "add", "code.txt")
         (self.repo / "other.txt").write_text("untracked\n")
-        (self.repo / "docs").mkdir()
         (self.repo / "HANDOFF.md").write_text("# Handoff\n")
         (self.repo / "INTENT.md").write_text("# Intent\n")
 
         result = self.commit("docs: update handoff", "HANDOFF.md", "INTENT.md")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        lines = run(self.repo, "git", "show", "--name-only", "--format=%s", "HEAD").stdout.split("\n")
-        self.assertEqual(lines[0], "docs: update handoff")
-        self.assertEqual(sorted(filter(None, lines[1:])), ["HANDOFF.md", "INTENT.md"])
+        self.assertEqual(self.committed(), ("docs: update handoff", ["A\t.gitignore", "A\tINTENT.md"]))
+        self.assertIn("HANDOFF.md", (self.repo / ".gitignore").read_text())
         status = run(self.repo, "git", "status", "--short").stdout
         self.assertIn("M  code.txt", status)  # still staged, not committed
         self.assertIn("?? other.txt", status)
+        self.assertNotIn("HANDOFF.md", status)
 
-    def test_unchanged_file_is_a_no_op(self):
-        (self.repo / "handoff.md").write_text("x\n")
-        self.assertEqual(self.commit("msg", "handoff.md").returncode, 0)
+    def test_a_tracked_handoff_is_untracked_and_kept_on_disk(self):
+        (self.repo / ".gitignore").write_text("build/")  # no newline at the end
+        (self.repo / "HANDOFF.md").write_text("# old\n")
+        run(self.repo, "git", "add", ".")
+        run(self.repo, "git", "commit", "-qm", "tracked handoff")
+        (self.repo / "HANDOFF.md").write_text("# new\n")
+
+        result = self.commit("docs: update handoff", "HANDOFF.md")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.committed(), ("docs: update handoff", ["D\tHANDOFF.md", "M\t.gitignore"]))
+        self.assertEqual((self.repo / ".gitignore").read_text().splitlines()[0], "build/")
+        self.assertEqual((self.repo / "HANDOFF.md").read_text(), "# new\n")
+        self.assertEqual(run(self.repo, "git", "status", "--short").stdout, "")
+
+    def test_unchanged_docs_are_a_no_op(self):
+        (self.repo / "INTENT.md").write_text("x\n")
+        self.assertEqual(self.commit("msg", "INTENT.md").returncode, 0)
         head = run(self.repo, "git", "rev-parse", "HEAD").stdout
-        result = self.commit("msg", "handoff.md")
+        result = self.commit("msg", "INTENT.md")
         self.assertEqual(result.returncode, 0)
         self.assertIn("nothing to commit", result.stdout)
+        self.assertEqual(run(self.repo, "git", "rev-parse", "HEAD").stdout, head)
+        self.assertEqual(self.commit("only-a-message").returncode, 0)
         self.assertEqual(run(self.repo, "git", "rev-parse", "HEAD").stdout, head)
 
     def test_missing_file_fails(self):
         self.assertEqual(self.commit("msg", "nope.md").returncode, 1)
-        self.assertEqual(self.commit("only-a-message").returncode, 1)
+        self.assertEqual(self.commit().returncode, 1)
 
 
 if __name__ == "__main__":

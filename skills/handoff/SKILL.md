@@ -6,7 +6,8 @@ description: Write or refresh the repo's HANDOFF.md so a fresh session (after /c
 # handoff
 
 `HANDOFF.md` (repo root) is one short file per repo (per worktree when working in one): the state a fresh session needs
-and nothing else. It links to the intent doc, the plan, the ADRs and the code instead of copying them. It is
+and nothing else. It is session state, never committed: gitignored and untracked in every repo (the commit script
+does both when a repo still tracks it), so parallel worktrees never conflict on it and a fresh worktree has none. It links to the intent doc, the plan, the ADRs and the code instead of copying them. It is
 rewritten every time, so nothing may live only there: decisions go to a durable doc first. The test for a good
 handoff: a cleared session never has to ask the user something they already answered, and nothing the user said
 is lost. `S=<skill-dir>/scripts`.
@@ -15,7 +16,7 @@ is lost. `S=<skill-dir>/scripts`.
 
 | Call | Short | Does |
 |---|---|---|
-| `/handoff` | | [write](#write): record decisions, rewrite `HANDOFF.md`, commit |
+| `/handoff` | | [write](#write): record decisions, rewrite `HANDOFF.md`, commit the decision docs |
 | `/handoff continue`, `/handoff resume` | `/handoff c` | [continue](#continue) in a fresh session |
 | `/handoff help` | `/handoff h` | print this table and stop |
 
@@ -83,7 +84,7 @@ nothing to say:
 ```markdown
 # Handoff
 
-Updated <YYYY-MM-DD>, branch `<branch>`, written at `<short sha of HEAD before this handoff commit>`.
+Updated <YYYY-MM-DD>, branch `<branch>`, written at `<short sha of HEAD when written>`.
 
 ## Goal
 <one or two sentences: what this line of work is for>
@@ -126,15 +127,17 @@ Rules:
 - **Next** for plan work is the current step's tasks only; the step list itself stays in the plan.
 - No secrets, no tool-call logs, no restating of the plan's content.
 
-### 4. Commit only the handoff docs
+### 4. Commit the decision docs, never the handoff
 
 ```bash
-bash $S/commit-handoff.sh "docs: update handoff" HANDOFF.md [INTENT.md plans/<plan>/plan.md .adr/<new>.md ...]
+bash $S/commit-handoff.sh "docs: record decisions" [INTENT.md plans/<plan>/plan.md .adr/<new>.md ...]
 ```
 
-It commits exactly the files you name (the handoff plus the docs you changed in step 1), leaving everything else
-staged or unstaged as it was, and prints the new commit. It never pushes. If a script exits 2 with a
-missing-tool error, run `bash $S/install-prerequisites.sh`.
+It commits exactly the docs you changed in step 1, leaving everything else staged or unstaged as it was, and
+prints the new commit. `HANDOFF.md` is never committed: when the repo does not ignore it yet, the script adds it to
+the root `.gitignore`, and when the repo still tracks it, it untracks it (`git rm --cached`, the file stays), both
+in the same commit. With no docs changed and `HANDOFF.md` already ignored, it commits nothing. It never pushes.
+If a script exits 2 with a missing-tool error, run `bash $S/install-prerequisites.sh`.
 
 ### 5. Report
 
