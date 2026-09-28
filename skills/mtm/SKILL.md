@@ -54,6 +54,7 @@ Run in the worktree; if it is the main checkout on the default branch, stop: `/m
 | 0 | `ok` | [clear the current task](#3-clear-the-current-task), then [report](#4-report) |
 | 3 | `conflict` | merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
 | 4 | `task_failed`, `hook_failed` | fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. The default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the verb: the task is the script `hal2-cli-hooks list` shows for that row and verb, its own `<row>/.hal/hooks/<verb>.sh` or an inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`; `hal2-cli-hooks run <row> <verb>` reruns it alone; tasks it cancelled or skipped need no fix of their own), `hook_failed` the `script` |
+| 5 | `stopped` | the user stopped the landing (hal2-macos' Stop button, SIGTERM); the default branch is unchanged. Report it and stop: never rerun on your own |
 | 1 | `error` | uncommitted changes: back to [step 1](#1-commit-everything). Anything else (main checkout dirty or not on the default branch, default branch diverged from origin): report the `message` and stop. Never touch the main checkout yourself |
 
 Stop after **3 runs in a row that fail the same way** (same hook and error, or the same conflict): report what
