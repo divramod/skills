@@ -15,15 +15,14 @@ other documents keep their own headings (one level below `## Document`).
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<path or document URL>" [--refresh]
-python3 $S/file/prepare.py "<any URL that serves a document>"   # when the web source says it is not a web page
+hal2-cli-tell prepare "<path or document URL>" [--refresh]
 ```
 
 - The file's sha256 is its id: the same document is reused wherever it lies or however it is named (the envelope
   says `reused: true`). `--refresh` converts it again.
 - The same path or URL with new content is a new version when it looks like the same document (same title, or
   mostly the same words; `--refresh` forces it): it is converted into the same folder with `changed: true`, and
-  `versions` lists the earlier hashes with their dates. The earlier summary is kept as `summary.<sha8>.md/.html`
+  `versions` lists the earlier hashes with their dates. The earlier summary is kept as `summary.<sha8>.md`
   and the earlier file as `original.<sha8>.<ext>`, so `summary_exists` is false: write a new summary and say in
   one line that it is of the new version (compare with the old one when it helps). Otherwise (another document
   saved under the same name, e.g. `~/Downloads/paper.pdf`) it gets its own folder.
@@ -32,16 +31,16 @@ python3 $S/file/prepare.py "<any URL that serves a document>"   # when the web s
   as the fallback. Everything else with markitdown (via uvx; the first run installs its dependencies and takes
   about a minute), then `pandoc` for docx/epub/odt/html. `.rtf`: pandoc first; `.doc`: macOS `textutil`.
   `converter` and `attempts` say what ran. Exit 2 when only a missing tool stopped it: run
-  `$S/file/install-prerequisites.sh`.
-- A URL is downloaded first (up to 500 MB). The web source sends a URL that serves a PDF here (it says `not a web
-  page`): run `file/prepare.py` with it. A server that answers with an HTML page (a captcha or login) instead of
+  `hal2-cli-tell prereqs install --source file`.
+- A URL is downloaded first (up to 500 MB). Any URL that serves a PDF or another document comes here by itself,
+  also one without a document extension. A server that answers with an HTML page (a captcha or login) instead of
   the document is an error: ask the user to download it in a browser and pass the file.
 
 ## Anchor links
 
-Copy `[p. n](original.pdf#page=n)` next to the points it supports: the browser opens the copy at that page. The
+Copy `[p. n](original.pdf#page=n)` next to the points it supports: the link opens the copy at that page. The
 links are relative to the document's folder, so they only work in that folder's `summary.md`: a digest across
-several inputs must not copy them (cite "p. n" of the document in words, or link the document's summary page). For
+several inputs must not copy them (cite "p. n" of the document in words, or link the document's `summary.md`). For
 documents without pages, name the section in words (`(§ Risks)`, `(slide 4)`); there is nothing to link to.
 
 ## Reading
@@ -58,7 +57,7 @@ Decide what kind of document it is first:
 
 ## Conversion problems
 
-- **Almost no text** (a scanned PDF without a text layer): the script exits 1 and says so. Tell the user it needs
+- **Almost no text** (a scanned PDF without a text layer): `prepare` exits 1 and says so. Tell the user it needs
   OCR (e.g. `ocrmypdf`); don't summarize from the file name.
 - **Garbled text** (a paragraph that jumps to another column, numbers split off tables, markitdown's fallback
   mixing two columns): read around it and say in one line that the conversion is rough in those places; cite the
@@ -68,21 +67,13 @@ Decide what kind of document it is first:
 
 ## Related reading (related section)
 
-There is no related script for documents. For a paper: the works it builds on (from its references, with their
+There is no `hal2-cli-tell related` for documents. For a paper: the works it builds on (from its references, with their
 year) and newer work that cites or supersedes it, found with web search. For other documents: sources the
 document names. Nothing worth listing: no section.
 
 ## Page and files
 
-The page header shows the author and date; the full `content.md` is in the collapsed "Document" section. The folder
-`documents/<parent-folder>/<file-stem>/` (a URL: `documents/<host>/<file-stem>/`) holds `summary.md`,
-`summary.html`, `content.md`, `metadata.json` (`extras`: kind, original_path, original_file, pages, sha256, size,
-converter, versions, aliases) and `original.<ext>` (earlier versions: `original.<sha8>.<ext>`,
-`summary.<sha8>.md/.html`).
-
-## Scripts (`scripts/file/`)
-
-| Script | Does |
-|---|---|
-| `prepare.py` | path or URL → sha256 dedupe / new version / new folder → copy as `original.<ext>` → `convert.py` → `content.md` (page anchors) + `metadata.json` |
-| `convert.py` | PDF: pdftotext → markitdown, page split and clean-up; others: markitdown → pandoc (textutil for .doc/.rtf); title, author and date from the document's properties |
+The summary's header shows the author and date; the full `content.md` is in the collapsed "Document" section. The
+folder `documents/<parent-folder>/<file-stem>/` (a URL: `documents/<host>/<file-stem>/`) holds `summary.md`,
+`content.md`, `metadata.json` (`extras`: kind, original_path, original_file, pages, sha256, size, converter,
+versions, aliases) and `original.<ext>` (earlier versions: `original.<sha8>.<ext>`, `summary.<sha8>.md`).

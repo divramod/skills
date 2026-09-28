@@ -1,5 +1,5 @@
 <!-- links: appended to every mode except qa (qa only when the user asks), followed by the related section from the source's template.md. Skip any sub-section or sub-list that would be empty; skip "## Links" entirely when there is nothing worth linking. -->
-<!-- Dates: save_summary.py adds each link's date right after it, e.g. [Title](url) *(published 2025-06-03)*,
+<!-- Dates: hal2-cli-tell save adds each link's date right after it, e.g. [Title](url) *(published 2025-06-03)*,
      [owner/repo](url) *(v1.4.0 released 2026-09-01 · last commit 2026-09-24 on main)*. Never write dates yourself. -->
 ## Links
 

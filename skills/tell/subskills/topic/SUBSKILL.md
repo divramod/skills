@@ -8,7 +8,7 @@ summary through its own source, and the digest across them lands in the topic's 
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<topic>" [--also "<query>" …] [--limit 8] [--only video,web,github,hn,file] [--dir <folder> …]
+hal2-cli-tell prepare "<topic>" [--also "<query>" …] [--limit 8] [--only video,web,github,hn,file] [--dir <folder> …]
 ```
 
 Pass the whole topic as **one quoted argument** (`"open knowledge format"`, not three words: three inputs would be
@@ -23,8 +23,8 @@ three topics).
 - `notes` names each search that failed (tell the user in one line) and always the X note: **X has no search
   without a login.** Run your own web search (`site:x.com <topic>`, also for the `--also` names) and take the post
   links (`x.com/<user>/status/<id>`) of the posts that are really about it.
-- `digest_exists: true` and the user did not ask for a new look: show the page
-  (`python3 $S/shared/render_html.py "<dir>" --open`). Topics move fast: offer to search again.
+- `digest_exists: true` and the user did not ask for a new look: show the digest in hal2-macos
+  (`hal2-cli-tell open "<dir>"`). Topics move fast: offer to search again.
 
 ## Choosing
 
@@ -48,18 +48,18 @@ three topics).
 ## Preparing and summarizing the chosen items
 
 ```bash
-python3 $S/shared/prepare.py "<input 1>" "<input 2>" … --digest-dir "<topic dir>" [source flags]
+hal2-cli-tell prepare "<input 1>" "<input 2>" … --digest-dir "<topic dir>" [source flags]
 ```
 
 Take each candidate's `input` as it is (a URL or a path), plus the X links from your own search. Every item is then
 an ordinary input: follow SKILL.md steps 2-6 for each (its own subskill, the default mode `summary`, parallel
-subagents when there are more than 3, each handed its envelope from this call), without opening each page. Items
+subagents when there are more than 3, each handed its envelope from this call), without opening each summary. Items
 with `summary_exists` are not rewritten. When you add items later, pass the earlier ones again: the call replaces
 the topic's item list.
 
 **One library entry per topic.** Each item the topic creates is marked `topic_only` in its `metadata.json`: the
-library sidebar lists it under the topic's entry, not on its own. Items that were in the library before stay
-where they are (and are listed under the topic too). So never run `prepare.py` for a single item again (a
+library lists it under the topic's entry, not on its own. Items that were in the library before stay
+where they are (and are listed under the topic too). So never run `hal2-cli-tell prepare` for a single item again (a
 subagent re-preparing "its" item would drop the mark and list the item on its own); that is only right when the
 user asks about that item directly.
 
@@ -70,20 +70,13 @@ prepare prints it too): what the topic is, the ranking, what each kind of source
 then the links section and the candidates you did not summarize. Save it into the topic's folder:
 
 ```bash
-python3 $S/shared/save_summary.py "<topic dir>" --mode digest --summary-lang <xx> --model <your model id> --open < body.md
+hal2-cli-tell save "<topic dir>" --mode digest --summary-lang <xx> --model <your model id> --open < body.md
 ```
 
 (or the body on stdin as in SKILL.md step 6).
 
 ## Page and files
 
-The folder `topics/<topic>/` holds `metadata.json` (kind: digest, `queries`, `items`), `candidates.md` (the page's search results section), `candidates.json` (every
-search result by kind, with the notes) and, once saved, `digest.md` and `digest.html`. The library sidebar lists it
-with the digests.
-
-## Scripts (`scripts/topic/`)
-
-| Script | Does |
-|---|---|
-| `prepare.py` | topic (+ `--also` queries) → every search in parallel + library matches → merged candidates by kind → `candidates.json`, `metadata.json`, envelope |
-| `search.py` | one search per kind (video, web, github, hn, file) for one query; runs alone too: `search.py "<query>" --kind hn` |
+The folder `topics/<topic>/` holds `metadata.json` (kind: digest, `queries`, `items`), `candidates.md` (the search results section of its summary), `candidates.json` (every
+search result by kind, with the notes) and, once saved, `digest.md`. The library lists it with the
+digests.

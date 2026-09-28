@@ -13,7 +13,7 @@ reply:
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<x.com/…/status/<id>>" [--refresh] [--max-replies N] [--skip-download] [--no-video] \
+hal2-cli-tell prepare "<x.com/…/status/<id>>" [--refresh] [--max-replies N] [--skip-download] [--no-video] \
   [--refresh-video]
 ```
 
@@ -33,13 +33,13 @@ python3 $S/shared/prepare.py "<x.com/…/status/<id>>" [--refresh] [--max-replie
   syndication`: no thread, no replies): say so. A deleted, suspended or protected post exits 1 with the reason. A
   thread longer than 25 posts above the linked one is cut at the top (`attempts` says so): say so.
 - Post and reply text in `content.md` is escaped where a line would start markdown structure (`\## …`, `\>`,
-  `` \``` ``): drop the backslash when quoting; `check_quotes.py` ignores it.
+  `` \``` ``): drop the backslash when quoting; `hal2-cli-tell check-quotes` ignores it.
 - **Video**: the thread's first video (not a GIF) goes through the video source: its transcript is `## Video` (the
   whole file is `video-transcript.md`), and the video downloads in the background in the best quality into the
   same folder, as for videos ([subskills/video/SUBSKILL.md](../video/SUBSKILL.md)). `--skip-download` only when the
   user says not to keep the video; `--no-video` skips the video part. Further videos (a post with several, or
   later posts) are listed under `## Video` as not transcribed and noted in `attempts`: say so when they matter.
-  Without yt-dlp the part is skipped and `attempts` says to run `scripts/video/install-prerequisites.sh`: run it
+  Without yt-dlp the part is skipped and `attempts` says to run `hal2-cli-tell prereqs install --source video`: run it
   and `--refresh-video` if the video matters. Any other video failure is `video: the video source failed (…)`.
 
 ## Reading
@@ -57,7 +57,7 @@ python3 $S/shared/prepare.py "<x.com/…/status/<id>>" [--refresh] [--max-replie
 4. **Check the quotes** before saving:
 
    ```bash
-   python3 $S/shared/check_quotes.py "<dir>" <<'EOF'
+   hal2-cli-tell check-quotes "<dir>" <<'EOF'
    <body>
    EOF
    ```
@@ -67,21 +67,20 @@ python3 $S/shared/prepare.py "<x.com/…/status/<id>>" [--refresh] [--max-replie
 
 ## Links (related section)
 
-There is no related script for X. The section lists what the thread points to: the links in the posts and link
+There is no `hal2-cli-tell related` for X. The section lists what the thread points to: the links in the posts and link
 cards (an article, a repo, a paper; each with one line on what it is), the quoted posts, and the best links
 repliers posted. Nothing linked: no section.
 
 ## Page and files
 
-The page header shows the author, the date and the post link; the full `content.md` is in the collapsed "Posts"
-section. The folder `posts/x/<user>/<first-words>-<id>/` holds `summary.md`, `summary.html`, `content.md`,
+The summary's header shows the author, the date and the post link; the full `content.md` is in the collapsed "Posts"
+section. The folder `posts/x/<user>/<first-words>-<id>/` holds `summary.md`, `content.md`,
 `metadata.json` (`duration`: the video's; `extras`: user, name, views, likes, reposts, replies, quotes, bookmarks,
 replies_fetched, posts, community_note, api, attempts, aliases; `video`: the video part's facts, only while a video
-part ran) and, with a video, `video-transcript.md` and `video.<ext>`.
+part ran) and, with a video, `video-transcript.md` and `video.mp4`.
 
-## Scripts (`scripts/x/`)
+## Commands
 
-| Script | Does |
+| Command | Does |
 |---|---|
-| `prepare.py` | post id → thread (walked up to its first post) + replies via `client.py` → the video part via `video/prepare.py --content-part video --playlist-item N` → `content.md` + `metadata.json` |
-| `client.py` | FxTwitter v2 (thread, status, conversation by likes and by recency), X's embed endpoint as the fallback |
+| `hal2-cli-tell x post <id> [--replies N]` | the raw thread (and replies) from FxTwitter as JSON, for debugging |

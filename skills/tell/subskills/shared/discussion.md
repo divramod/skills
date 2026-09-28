@@ -15,5 +15,5 @@ discussion is not linear, so don't retell it in order: group it by what people a
    file gives comment counts and depth. Never present a single comment as the consensus.
 
 Quotes must be copied exactly from the content file (whitespace aside); paraphrase outside quote marks. Before
-saving, run `python3 $S/shared/check_quotes.py "<dir>"` with the body on stdin: it lists every quote that is not
+saving, run `hal2-cli-tell check-quotes "<dir>"` with the body on stdin: it lists every quote that is not
 in the content file (`NOT FOUND:`). Fix those and run it again until it exits 0.

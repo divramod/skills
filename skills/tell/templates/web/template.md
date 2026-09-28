@@ -17,5 +17,5 @@
 
 <!-- related section: last, for every mode that has links -->
 ## Similar articles
-- [<title>](<url>): <site> · <author>. <one line: what it adds, e.g. counterpoint, deeper dive, the original source, a newer update> ([summary](<path from web/related.py>), only when already summarized)
-<3-5 articles found via web search and checked with scripts/web/related.py, best first; never the article itself>
+- [<title>](<url>): <site> · <author>. <one line: what it adds, e.g. counterpoint, deeper dive, the original source, a newer update> ([summary](<path from hal2-cli-tell related>), only when already summarized)
+<3-5 articles found via web search and checked with hal2-cli-tell related, best first; never the article itself>

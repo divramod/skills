@@ -15,7 +15,7 @@ follows it; its subskill says how to fill it.
 - "Mentioned in the source" holds only what the content file names, with its anchor link. Anything else goes under
   "Further reading" (3-5 of the best sources on the topic: official docs, the original paper, a good explainer, a
   counterpoint), so it's always clear what the author said and what you added.
-- **Dates are added for you.** When you save, `save_summary.py` checks every link and writes how current it is right
+- **Dates are added for you.** When you save, `hal2-cli-tell save` checks every link and writes how current it is right
   after it: videos, papers and articles get their publish date; GitHub repos their latest release (version + date)
   and last commit on the default branch; packages their latest version; books the first-publication year; Wikipedia
   the last edit. Never write dates yourself. To see the dates before saving (e.g. to prefer recent sources), run the
@@ -24,10 +24,10 @@ follows it; its subskill says how to fill it.
   site blocks scripts (often Amazon): keep those links when your web search showed the page.
 
 ```bash
-python3 $S/shared/check_links.py <<'EOF'
+hal2-cli-tell check-links <<'EOF'
 <body>
 EOF
 ```
 
 To refresh the dates of an existing summary later (new releases, new commits):
-`python3 $S/shared/check_links.py --folder "<dir>" --annotate`.
+`hal2-cli-tell check-links --folder "<dir>" --annotate`.

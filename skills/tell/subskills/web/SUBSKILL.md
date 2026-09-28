@@ -7,7 +7,7 @@ anchor link, plus a header (site, author, published date, extractor) and the pag
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<url>" [--refresh]
+hal2-cli-tell prepare "<url>" [--refresh]
 ```
 
 - The page is fetched once and run through **trafilatura and defuddle**; the better text wins. Under 200 words
@@ -19,7 +19,8 @@ python3 $S/shared/prepare.py "<url>" [--refresh]
 - `snapshot` set means the text comes from the Wayback Machine, and the anchor links open that archived copy. Say
   which case in one line: `gone` (404/410) set means the live page no longer exists; otherwise the live page was
   cut off (paywall, JavaScript) and the archive had more.
-- A URL that serves a PDF or another document exits 1 and says so: that is a file input, not a web page.
+- A URL that serves a PDF or another document is a file input, not a web page: `prepare` hands it to the file
+  source by itself (the envelope's `source` is `file`; read that subskill).
 
 ## Anchor links
 
@@ -53,7 +54,7 @@ Decide what kind of page it is first; it changes what the summary should do:
 - **A private address** (localhost, a LAN IP, a single-label or `.local`/`.internal` host): Jina and the
   Wayback Machine are skipped, so a JavaScript-only page there stays short. Say so instead of guessing the rest.
   An intranet host with a public-looking name is not detected: don't pass such URLs if they must stay private.
-- **The script exits 1 with "answered HTTP 403"** (a bot challenge or an error page): tell the user and
+- **`prepare` exits 1 with "answered HTTP 403"** (a bot challenge or an error page): tell the user and
   show the attempts; the page may still open in a browser.
 - **Comments** are not extracted. If the user wants the discussion, look for an HN thread (a `hn` input) instead.
 - `published` can be missing: then say "undated" rather than guessing.
@@ -63,20 +64,19 @@ Decide what kind of page it is first; it changes what the summary should do:
 Run 2-3 web searches: the article's topic, its central claim, and the author or site plus the topic. Pick 3-5
 articles that add something: a counterpoint, a deeper dive, the original source it builds on, a more recent
 update. Prefer recent ones when the topic moves fast, never the page itself, and say in one line what each adds.
-Then run `python3 $S/web/related.py "<dir>" --url <u1> --url <u2> ...` with your picks: it drops the article
+Then run `hal2-cli-tell related "<dir>" --url <u1> --url <u2> ...` with your picks: it drops the article
 itself and duplicates, and gives a `summary` path for those already in the library; add `([summary](<path>))` to them.
 
 ## Page and files
 
-The page header shows the author, the date and a link to the site; the full `content.md` (with the archived-copy
-line when a snapshot was used) is in the collapsed **Article** section below the summary. The folder
-`articles/<site>/<title>/` holds `summary.md`, `summary.html`, `content.md` and `metadata.json` (`extras`:
-description, language, image, attempts, snapshot).
+The summary's header shows the author, the date and a link to the site; the full `content.md` (with the
+archived-copy line when a snapshot was used) is in the collapsed **Article** section below the summary. The folder
+`articles/<site>/<title>/` holds `summary.md`, `content.md` and `metadata.json` (`extras`: description, language,
+image, attempts, snapshot).
 
-## Scripts (`scripts/web/`)
+## Commands
 
-| Script | Does |
+| Command | Does |
 |---|---|
-| `prepare.py` | route → reuse by canonical URL → `extract.py` → `content.md` with paragraph anchors + `metadata.json` |
-| `related.py` | candidate similar-article URLs → deduped, the article itself dropped, library summaries marked |
-| `extract.py` | fetch → trafilatura + defuddle in parallel, the better text wins → Jina Reader → Wayback; `extract.py <url>` prints the raw result |
+| `hal2-cli-tell related "<dir>" --url …` | candidate similar-article URLs → deduped, the article itself dropped, library summaries marked |
+| `hal2-cli-tell web extract "<url>"` | the raw extractor result (trafilatura + defuddle in parallel, the better text wins → Jina Reader → Wayback), for debugging |

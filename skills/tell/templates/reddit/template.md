@@ -22,5 +22,5 @@
 
 <!-- related section: last, for every mode that has links -->
 ## Other posts of this article
-- [<title>](<Reddit url>) (r/<subreddit>, <date>, <n> comments): <one line: how the reaction differed> ([summary](<path from reddit/related.py>), only when already summarized)
-<from scripts/reddit/related.py, at most 5 with comments; leave the section out for a text post or when there are none>
+- [<title>](<Reddit url>) (r/<subreddit>, <date>, <n> comments): <one line: how the reaction differed> ([summary](<path from hal2-cli-tell related>), only when already summarized)
+<from hal2-cli-tell related, at most 5 with comments; leave the section out for a text post or when there are none>

@@ -22,5 +22,5 @@
 
 <!-- related section: last, for every mode that has links -->
 ## Past discussions
-- [<title>](<HN url>) (<date>, <n> comments): <one line: how it differed> ([summary](<path from hn/related.py>), only when already summarized)
-<from scripts/hn/related.py, at most 5 with comments; leave the section out when there are none>
+- [<title>](<HN url>) (<date>, <n> comments): <one line: how it differed> ([summary](<path from hal2-cli-tell related>), only when already summarized)
+<from hal2-cli-tell related, at most 5 with comments; leave the section out when there are none>

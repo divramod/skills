@@ -13,7 +13,7 @@ line per comment:
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<news.ycombinator.com/item?id=N>" [--refresh] [--no-article]
+hal2-cli-tell prepare "<news.ycombinator.com/item?id=N>" [--refresh] [--no-article]
 ```
 
 - A comment link prepares its whole story; the envelope's `focus_comment` names that comment. When the user
@@ -47,7 +47,7 @@ python3 $S/shared/prepare.py "<news.ycombinator.com/item?id=N>" [--refresh] [--n
 3. **Check the quotes** before saving:
 
    ```bash
-   python3 $S/shared/check_quotes.py "<dir>" <<'EOF'
+   hal2-cli-tell check-quotes "<dir>" <<'EOF'
    <body>
    EOF
    ```
@@ -58,27 +58,18 @@ python3 $S/shared/prepare.py "<news.ycombinator.com/item?id=N>" [--refresh] [--n
 ## Past discussions (related section)
 
 ```bash
-python3 $S/hn/related.py "<dir>"
+hal2-cli-tell related "<dir>"
 ```
 
 It lists other HN threads about the same article (most comments first) and marks those already summarized.
 List the ones with comments (at most 5), each with its date and one line on how it differed (it may be years
-older); add `([summary](<path>))` when the script gives one. Comments that flag a dupe or link an earlier thread
+older); add `([summary](<path>))` when the output gives one. Comments that flag a dupe or link an earlier thread
 ("[dupe]", "Earlier: item?id=…") point at submissions of other URLs (the project page, the repo): add those
 too, with the comment's `[→]` link. Nothing from either: no section.
 
 ## Page and files
 
-The page header shows who posted it, the date and a link to the thread; the full `content.md` (article and
+The summary's header shows who posted it, the date and a link to the thread; the full `content.md` (article and
 discussion) is in the collapsed section below the summary. The folder `discussions/hn/<title>-<id>/` holds
-`summary.md`, `summary.html`, `content.md` and `metadata.json` (`extras`: points, comments, threads,
+`summary.md`, `content.md` and `metadata.json` (`extras`: points, comments, threads,
 article_url, article_extractor, article_words, snapshot, api).
-
-## Scripts (`scripts/hn/`)
-
-| Script | Does |
-|---|---|
-| `prepare.py` | item id → Algolia tree (Firebase fallback) → linked article via `web/extract.py` → `content.md` + `metadata.json` |
-| `related.py` | past HN threads about the same article URL (Algolia search), library summaries marked |
-
-`scripts/shared/check_quotes.py` checks every quote in a summary against the content file.

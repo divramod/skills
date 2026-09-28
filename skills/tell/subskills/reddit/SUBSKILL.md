@@ -15,7 +15,7 @@ top-level comment, best first, one line per comment:
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<reddit post, comment or share link>" [--refresh] [--no-article]
+hal2-cli-tell prepare "<reddit post, comment or share link>" [--refresh] [--no-article]
 ```
 
 - Every link form works: `reddit.com/r/<sub>/comments/<id>/…` (www, old, new, np), `redd.it/<id>`, a share link
@@ -53,7 +53,7 @@ python3 $S/shared/prepare.py "<reddit post, comment or share link>" [--refresh] 
 3. **Check the quotes** before saving:
 
    ```bash
-   python3 $S/shared/check_quotes.py "<dir>" <<'EOF'
+   hal2-cli-tell check-quotes "<dir>" <<'EOF'
    <body>
    EOF
    ```
@@ -64,28 +64,19 @@ python3 $S/shared/prepare.py "<reddit post, comment or share link>" [--refresh] 
 ## Other posts of the article (related section)
 
 ```bash
-python3 $S/reddit/related.py "<dir>"
+hal2-cli-tell related "<dir>"
 ```
 
 For a link post it lists other Reddit posts of the same page (other subreddits, earlier submissions; most
 comments first) and marks those already summarized. List the ones with comments (at most 5), each with its
-subreddit, date and one line on how the reaction differed; add `([summary](<path>))` when the script gives one.
+subreddit, date and one line on how the reaction differed; add `([summary](<path>))` when the output gives one.
 A Hacker News thread about the same page is related too when the library has one (`discussions/hn/`). Nothing
 from either: no section.
 
 ## Page and files
 
-The page header shows the subreddit, score, comment count and a link to the post; the full `content.md` is in the
+The summary's header shows the subreddit, score, comment count and a link to the post; the full `content.md` is in the
 collapsed section below the summary. The folder `discussions/reddit/<subreddit>/<title>-<id>/` holds
-`summary.md`, `summary.html`, `content.md` and `metadata.json` (`extras`: subreddit, score, upvote_ratio, comments,
+`summary.md`, `content.md` and `metadata.json` (`extras`: subreddit, score, upvote_ratio, comments,
 num_comments, threads, not_loaded, flair, article_url, media, crosspost_from, over_18, api, attempts, and the
 article's facts).
-
-## Scripts (`scripts/reddit/`)
-
-| Script | Does |
-|---|---|
-| `prepare.py` | post id → Reddit JSON (OAuth, then Arctic Shift as fallbacks) → linked article via `web/extract.py` → `content.md` + `metadata.json` |
-| `related.py` | other Reddit posts of the same article URL (Arctic Shift search), library summaries marked |
-
-`scripts/shared/check_quotes.py` checks every quote in a summary against the content file.

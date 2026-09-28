@@ -21,5 +21,5 @@
 
 <!-- related section: last, for every mode that has links -->
 ## Similar videos
-- [<title>](<https://www.youtube.com/watch?v=...>): <channel> · <duration>. <one line: what it adds, e.g. deeper dive, other side, hands-on version> ([summary](<relative path from related.py>), only when already summarized)
-<4-6 videos from scripts/video/related.py, best first; mix a deeper dive, a beginner explainer and a different viewpoint>
+- [<title>](<https://www.youtube.com/watch?v=...>): <channel> · <duration>. <one line: what it adds, e.g. deeper dive, other side, hands-on version> ([summary](<relative path from hal2-cli-tell related>), only when already summarized)
+<4-6 videos from hal2-cli-tell related, best first; mix a deeper dive, a beginner explainer and a different viewpoint>

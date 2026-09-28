@@ -26,5 +26,5 @@
 
 <!-- related section: last, for every mode that has links -->
 ## Similar repos
-- [<owner/repo>](<url>): <stars> stars. <one line: how it differs> ([summary](<path from github/related.py>), only when already summarized)
-<3-5 from scripts/github/related.py; for a thread: the repo, and the issues / PRs it links as duplicates or fixes>
+- [<owner/repo>](<url>): <stars> stars. <one line: how it differs> ([summary](<path from hal2-cli-tell related>), only when already summarized)
+<3-5 from hal2-cli-tell related; for a thread: the repo, and the issues / PRs it links as duplicates or fixes>

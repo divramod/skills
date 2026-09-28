@@ -31,7 +31,7 @@ cite the items (<item title>, <anchor link>)>
 
 ## Per item
 ### [<title>](<url>)
-<the TL;DR from its summary.md> ([summary](<relative path to its summary.html>))
+<the TL;DR from its summary.md> ([summary](<relative path to its folder's summary.md>))
 
 <!-- links: the shared links section (templates/shared/links.md) across all items, then: -->
 ## Also found

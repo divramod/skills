@@ -20,7 +20,7 @@ GitHub repositories, and their issues, pull requests and discussions.
 ## Flags
 
 ```bash
-python3 $S/shared/prepare.py "<github url>" [--deep] [--refresh]
+hal2-cli-tell prepare "<github url>" [--deep] [--refresh]
 ```
 
 - The API goes through `gh` when it is installed and logged in (5000 requests/hour), else plain HTTPS (60
@@ -30,7 +30,7 @@ python3 $S/shared/prepare.py "<github url>" [--deep] [--refresh]
   `repo-pack.md` next to it; the envelope's `pack_file` and `pack_words` point at it (a `--refresh` without
   `--deep` that lands on a newer commit drops the old pack). Use it when the user asks how the code
   works (architecture, a specific mechanism), not for "what is this repo". It clones the repo: for a big one
-  (the script warns) it takes minutes and the pack can exceed what you can read, so read it selectively (search
+  (`prepare` warns) it takes minutes and the pack can exceed what you can read, so read it selectively (search
   it for the files and symbols that matter).
 - An item prepared before is reused (repos by `owner/repo`, threads by `owner/repo#n`); `--refresh` refetches it
   into the same folder. A repo link with a different ref or focus path is refetched. The id is GitHub's
@@ -55,7 +55,7 @@ say so and lean on the docs and the file tree.
 
 **Issue / pull request / discussion.** Summarize the opening post first (the problem, the proposal, or the
 change), then follow [subskills/shared/discussion.md](../shared/discussion.md) for the comments: themes with
-attributed verbatim quotes, then check them with `check_quotes.py`. Then add what a reader needs:
+attributed verbatim quotes, then check them with `hal2-cli-tell check-quotes`. Then add what a reader needs:
 - **Issue:** is it confirmed, is there a workaround (quote it), and what is the status (open, closed as completed
   or as not planned, linked fix).
 - **Pull request:** what changes (from `## Files changed` and the description), what reviewers asked for and
@@ -68,29 +68,25 @@ attributed verbatim quotes, then check them with `check_quotes.py`. Then add wha
 ## Similar repos (related section)
 
 ```bash
-python3 $S/github/related.py "<dir>" [--query "<3-5 words on what it does>"]
+hal2-cli-tell related "<dir>" [--query "<3-5 words on what it does>"]
 ```
 
 It searches GitHub for the repo's topics (and your query; required when the repo has no topics), drops the repo
 and forks, ranks by shared topics then stars, and marks repos already summarized. Pick 3-5 real alternatives or
 complements (not merely popular repos that share a generic topic like `cli`), each with one line on how it
-differs; add `([summary](<path>))` when the script gives one. For a thread, the related section is the repo
+differs; add `([summary](<path>))` when the output gives one. For a thread, the related section is the repo
 itself plus any issues or PRs the thread links as duplicates or fixes.
 
 ## Page and files
 
-The page header shows the owner, the date and a link to GitHub; the full `content.md` is in the collapsed
+The summary's header shows the owner, the date and a link to GitHub; the full `content.md` is in the collapsed
 **Repository** section below the summary. Repos live in `repos/github/<owner>/<repo>/`, threads in
-`repos/github/<owner>/<repo>/<issues|pulls|discussions>/<n>-<title>/`, each with `summary.md`, `summary.html`,
-`content.md`, `metadata.json` (`extras`: stars, license, languages, release, topics, sha, docs, api, pack_file;
+`repos/github/<owner>/<repo>/<issues|pulls|discussions>/<n>-<title>/`, each with `summary.md`, `content.md`, `metadata.json` (`extras`: stars, license, languages, release, topics, sha, docs, api, pack_file;
 ref, focus_path; threads: number, state, labels, comments, merged, additions, deletions, discussions: upvotes) and `repo-pack.md` after `--deep`.
 
-## Scripts (`scripts/github/`)
+## Commands
 
-| Script | Does |
+| Command | Does |
 |---|---|
-| `prepare.py` | repo: facts + README + tree + docs → `content.md` with line anchors; `--deep` repomix pack; threads via `thread.py` |
-| `thread.py` | issue / pull request (+ reviews, line comments, files) / discussion (GraphQL) → discussion-shaped `content.md` |
-| `related.py` | similar repos by topic / query search, library summaries marked |
-| `client.py` | `gh api` or REST (token or anonymous), rate-limit messages; `client.py <api path>` prints raw JSON |
-| `anchors.py` | `[L<n>]` line anchors and `[#]` heading anchors pinned to a commit |
+| `hal2-cli-tell related "<dir>" [--query …]` | similar repos by topic / query search, library summaries marked |
+| `hal2-cli-tell github api <api path>` | the raw JSON of an API path through `gh api` or REST (token or anonymous), for debugging |
