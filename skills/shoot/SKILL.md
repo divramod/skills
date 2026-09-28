@@ -1,6 +1,6 @@
 ---
 name: shoot
-description: shoot — list the open shots of the repo's shotfiles (`shotfiles/*.md` of the main checkout, also from a worktree; the prompts written with hal2-nvim's shooter) as a table of id, shotfile, shot number and title, then shoot the ones the user picks by id (`3`, `1,2,4`, `1-4`) into this session, as `<space>00` does from Neovim — the shots are marked sent (`## x shot ...`) in their shotfiles and carried out here. `/shoot` shows the 10 most important open shots, `/shoot -a` all of them, `/shoot <shotfile>` the open shots of one shotfile, `/shoot <ids>` shoots shots directly. Use when the user says /shoot, asks which shots are open, or wants to pick the next shot to work on. `/shoot h` shows help.
+description: shoot — list the open shots of the repo's shotfiles (`shotfiles/*.md` of the main checkout, also from a worktree; the prompts written with hal2-nvim's shooter) as a table of id, shotfile, shot number and title, then shoot the ones the user picks by id (`3`, `1,2,4`, `1-4`) into this session, as `<space>00` does from Neovim — the shots are marked sent (`## x shot ...`) in their shotfiles and carried out here. `/shoot` shows the 10 most important open shots, `/shoot g` the global shotfiles' shots (ids `g1`, `g2`, ...), `/shoot -a` all of both, `/shoot <shotfile>` the open shots of one shotfile, `/shoot <ids>` shoots shots directly. Use when the user says /shoot, asks which shots are open, or wants to pick the next shot to work on. `/shoot h` shows help.
 ---
 
 # shoot
@@ -13,9 +13,10 @@ question tool, recommended option first.
 | Call | Does |
 |---|---|
 | `/shoot` | table of the 10 most important open shots, then ask which to shoot |
-| `/shoot -a`, `/shoot --all` | table of every open shot, then ask |
-| `/shoot <shotfile>` | table of the open shots of `<shotfile>` (`skills` or `skills.md`), then ask |
-| `/shoot <ids>` | shoot the shots with these ids (from a table: `3`, `1,2,4`, `1-4`, `1-3,7`) without asking |
+| `/shoot g`, `/shoot global` | table of every open shot of the global shotfiles (ids `g1`, `g2`, ...), then ask |
+| `/shoot -a`, `/shoot --all` | table of every open shot, the repo's and the global ones, then ask |
+| `/shoot <shotfile>` | table of the open shots of `<shotfile>` (`skills` or `skills.md`; `global:<name>` for a global one), then ask |
+| `/shoot <ids>` | shoot the shots with these ids (from a table: `3`, `1,2,4`, `1-4`, `1-3,7`, `g2`, `g1-g3`) without asking |
 | `/shoot h`, `/shoot help` | print this table and stop |
 
 ## List
@@ -29,6 +30,14 @@ question tool, recommended option first.
    shots with a title are listed. `id` is the shot's position in the repo's full list, so it stays the same with
    or without a filter until a shotfile changes.
 3. No shots: say so (`no open shots in <shotfiles>`) and stop.
+
+Global shots live in the global shotfiles folder (`hal2-cli-shooter settings --json` prints it as `root`; flat
+`*.md`, shared by every repository): `hal2-cli-shooter shots list-open [<name>] --global --json`, same JSON, works
+outside a repository too. Their ids get a `g` prefix (`g1`, `g2`, ...) and their shotfile shows as
+`global:<name>`, so they never collide with the repo's. `/shoot g` lists only them; `/shoot -a` lists the repo's
+shots, then the global ones, in one table (outside a repository, only the global ones); plain `/shoot` and
+`/shoot <shotfile>` stay repo-only (`/shoot global:<name>` lists one global shotfile). A missing global folder
+lists nothing (it is created only when a shot is written).
 
 ## Rank (plain `/shoot` only)
 
@@ -50,14 +59,15 @@ A Markdown table with exactly these columns, one row per shot:
 | ID | Shotfile | Shot | Title |
 |---|---|---|---|
 | 15 | skills | 5 | adapt plan |
+| g2 | global:ideas | 3 | try the new tokenizer |
 
-Below it one line: `<shown> of <total> open shots in <shotfiles>` and, for a ranked table, the one-line reason
+Below it one line: `<shown> of <total> open shots in <shotfiles>` (with global shots also `and <global folder>`) and, for a ranked table, the one-line reason
 for the top pick. Then end the message with the plain-text question, never the question tool:
 
-`Which shots? ids from the table (e.g. 16 or 16,14 or 1-4), none to stop. Recommended: <id>`
+`Which shots? ids from the table (e.g. 16 or 16,14 or 1-4 or g2), none to stop. Recommended: <id>`
 
 and wait for the answer. The answer is a list of ids and ranges (`1,2,4`, `1-4`, `1-3,7`, spaces allowed); any
-id of the repo's full list counts, also one not shown in the table. `none` (or an empty answer): stop. An id
+id of the repo's or the global full list counts (`g` ids and ranges `g1-g3`), also one not shown in the table. `none` (or an empty answer): stop. An id
 that is not an open shot: say which and ask again.
 
 ## Shoot
@@ -66,26 +76,31 @@ Resolve every picked id to its `file` and `number` from the list first (for `/sh
 unknown id: say so and stop), before marking any: ids refer to that list.
 
 1. Mark every picked shot, in the order picked, before working on any:
-   `hal2-cli-shooter shots mark-sent <file> <number> --json`. It turns the header into
-   `## x shot <n> <title> (<timestamp>)`, as hal2-nvim's `<space><NN>` does, and prints the shot:
-   `{file, path, number, title, line, sent, body}`. Exit 1 (`already sent`, `no shot`): report that shot and
+   `hal2-cli-shooter shots mark-sent <file> <number> --json` (a global shot: `--global`). It turns the header
+   into `## x shot <n> <title> (<timestamp>) [<worktree>]`, as hal2-nvim's `<space><NN>` does (a global shot:
+   `[<repo>/<worktree>]`, e.g. `[hal2/00]`, since the shotfile names no repository), and prints the shot:
+   `{file, path, number, title, line, sent, worktree, body}`. Exit 1 (`already sent`, `no shot`): report that shot and
    leave it out; the shotfile changed since the list.
 2. Print each marked shot in a code block, as `<space>00` shows what was sent:
 
    ```
-   # shot <number> <title> (<file>)
+   # shot <number> <title> (<file>, or global:<file>)
    <body>
    ```
 
 3. Carry them out one after another, in the order picked, each as the current task with the same rules as a
    shot sent from Neovim:
-   - It is shot `<number>` of the feature `<file>` in this repository. Read the shotfile (`path`) only when you
-     need more context on what was prompted before.
+   - It is shot `<number>` of the feature `<file>` in this repository; a global shot is shot `<number>` of the
+     global shotfile `<file>` (at `path`), carried out in this repository. Read the shotfile (`path`) only when
+     you need more context on what was prompted before.
    - In a git worktree, run `/mfm` (merge-from-main) once before starting the first shot.
    - Make every shot a plan before starting it: `/plan new "<file> <number> <title>"` (`shooter 3 i want all
-     shots to become a plan`; `<file> <number>` for a shot without a title), then carry the plan out. `/plan`
+     shots to become a plan`; `<file> <number>` for a shot without a title; a global shot:
+     `"global <file> <number> <title>"`), then carry the plan out. `/plan`
      writes the plan's `<NNNN>-<slug>` into `plans/CURRENT_PLAN`, so the statusline shows it; the file is
-     gitignored runtime state, never committed, and `/mtm` deletes it once the plan has landed.
+     gitignored runtime state, never committed, and `/mtm` deletes it once the plan has landed. A shot worked
+     on without a plan names itself there as `<file>/<number>/<title-slug>`, a global one as
+     `global:<file>/<number>/<title-slug>`.
    - Do not implement shots that were not picked, and do not change the shotfiles beyond the marks from step 1.
 
 The mark is written straight into the shotfile, without renumbering: hal2-nvim renumbers on its next send. An open
