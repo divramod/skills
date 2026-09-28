@@ -59,26 +59,29 @@ so a typo never silently changes what runs.
 | Verb | Phase | Needs (same row) | Runs when |
 |---|---|---|---|
 | setup | `setup`: after `/mfm`, on a new worktree slot, before a landing's gates (worktree), after a landing (main) | | the row's manifests + lockfiles changed since its last setup in that checkout |
-| lint | `worktree-pre-merge`: in the worktree, after the default branch was merged in, before the merge lock; checks formatting too, never writes | | the branch changed the row (`merge-base..HEAD`) and its inputs did not pass before (else `cached`) |
+| lint | `worktree-pre-merge`: in the worktree, after the default branch was merged in (under the merge lock: landings are serial); checks formatting too, never writes | | the branch changed the row (`merge-base..HEAD`) and its inputs did not pass before (else `cached`) |
 | build | `worktree-pre-merge` | | same |
 | test-unit | `worktree-pre-merge` | build | same |
 | test-e2e | `worktree-pre-merge` | test-unit | same |
 | version | `main-pre-commit`: on the staged merge in the main checkout; its edits go into the merge commit (lock `repo`) | | the staged merge changes the row |
-| install | `main-post-commit`: after the merge commit was pushed and the lock released, in the delivery worktree `<base>/.deliver` | | the row changed since the task's delivery stamp (no stamp: changed) |
+| install | `main-post-commit`: after the merge commit was pushed, in the delivery worktree `<base>/.deliver` | | the row changed since the task's delivery stamp (no stamp: changed) |
 | deploy | `main-post-commit` | install | same |
 
 version, install and deploy ignore `**/tests/**`, `**/Tests/**`, `**/UITests/**` by default: a test-only change
 never bumps or redelivers. A repo adds verbs (or overrides a built-in's `needs`/`lock`/`ignore`) under
 `[verbs.<name>]`.
 
-- A landing: setup and gates in the worktree without a lock; then a ticket in the repo's **merge queue**
-  (`~/.hal/git/worktree/<repo>/.merge-queue/`, first come first served, no timeout; `hal2-cli-git worktree
-  queue`); under the merge lock the main checkout is fast-forwarded, and when the default branch moved since the
-  gates it is merged into the worktree again and the gates rerun (the cache skips unchanged ones); then merge,
-  version, commit, push, and the lock is released. The deliveries run afterwards in the **delivery worktree**
-  `<base>/.deliver` (detached, warm build caches, its own lock) on the newest default branch commit, so queued
-  landings coalesce into one delivery; builds there are named as main's (`HAL2_BUILD_AS_MAIN=1`).
-  `hal2-cli-git worktree deliver` runs the deliveries alone.
+- A landing takes a ticket in the repo's **merge queue** at its start (`~/.hal/git/worktree/<repo>/.merge-queue/`,
+  first come first served, no timeout; `hal2-cli-git worktree queue`) and waits for the merge lock; under it:
+  merge the default branch in, setup and gates in the worktree, merge, version, commit, push, then the
+  deliveries in the **delivery worktree** `<base>/.deliver` (detached, warm build caches, its own lock) on the
+  newest default branch commit; builds there are named as main's (`HAL2_BUILD_AS_MAIN=1`). Only then is the
+  queue released. `hal2-cli-git worktree deliver` runs the deliveries alone.
+- A failed (exit 3/4/1) or killed landing **holds** the queue (`held`: reason, step, `attempts` of identical
+  failures against `[landing] attempts`, default 10); the same worktree's next merge-to-main takes it over at its
+  place. `worktree stop` (or the app's Stop) ends a landing and releases the queue, `worktree release` frees a
+  held one; the app also reorders and cancels waiting tickets (the waiter prints `moved to #n ...`, a cancel ends
+  it with exit 5 `cancelled`).
 - Every landing writes a **landing record** as it goes (steps with their times, every planned task with its
   `needs`, lock wait and hold, queue position): `hal2-cli-hooks landings [<id>] [--json]`, the Landings part of
   the Hooks tab (list, timeline, DAG, table) and hal2-macos's Merge Queue pane.
@@ -89,8 +92,9 @@ never bumps or redelivers. A repo adds verbs (or overrides a built-in's `needs`/
   the checkout). With more than one task running, each output line is prefixed `<row> <verb> │ `.
 - A failing setup, gate or version task stops the landing (exit 4, `status: "task_failed"` with `phase`, `row`,
   `kind` (the verb), `exit_code`, `output`): the phase's running tasks end `cancelled`, the unstarted ones
-  `skipped`; main stays untouched, a failed version task aborts the merge. A failing install or deploy only
-  warns and skips the tasks that need it; the landing stays.
+  `skipped`; main stays untouched, a failed version task aborts the merge. A failing install or deploy skips the
+  tasks that need it, the other deliveries still run; the landing stays on the default branch but ends
+  `delivery_failed` (exit 4) holding the queue, and its rerun delivers again.
 - A setup or gate phase in a worktree that changes `git status` fails every task that passed in it
   (`left_changes`): gates must not write tracked or unignored files (gitignore build output).
 - **Gate result cache**: a gate that counts as changed but passed before with identical inputs (script,
@@ -206,7 +210,7 @@ Scenarios worth one landing each: a change to one app only (only its tasks run),
 dependent row's tasks run, version bump, delivery), a test-only change (gates run, no bump, no delivery; one new
 test per app also proves each gate runs that app's tests), a failing gate (exit 4, main unchanged; the phase's
 other running tasks `cancelled`, the rest `skipped`), a failing
-version task (merge aborted, main clean) and a failing install (landed, pushed, a warning; a throwaway row does
+version task (merge aborted, main clean) and a failing install (landed, pushed, `delivery_failed` holding the queue; a throwaway row does
 both; its deploy ends `skipped`), rows with `needs` (a lib's failing build skips the apps that need it) and two
 tasks sharing a `lock` (they never overlap in the prefixed output). Also `/mfm` after a lockfile change (setup reruns) and the first landing after seeding stamps (unchanged
 rows deliver nothing). Deliveries from the sandbox are real (installs, restarts): ask first, or point the tasks at
