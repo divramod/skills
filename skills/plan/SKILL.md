@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step and stops for a /handoff when the context window is 40% full), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step and stops for a /handoff when the context window is 40% full), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -8,7 +8,7 @@ description: Lean planning for a repo — one self-contained folder per plan, pl
 One folder per plan, `plans/<NNNN>-<slug>/`: `plan.md` plus any helper file that belongs to the plan (scripts,
 notes, data), so the folder is self-contained; no phase folders, no state files, no gap sub-plans. The plan says *what* and
 *in which order*; each step is detailed only when it is next. `S=<skill-dir>/scripts`; every command prints the
-plan as JSON (`slug`, `path`, `grilled`, `done`, `total`, `next`, `steps`).
+plan as JSON (`slug`, `path`, `research`, `grilled`, `done`, `total`, `next`, `steps`).
 
 Ask every question with the question tool, recommended option first.
 
@@ -16,6 +16,15 @@ Ask every question with the question tool, recommended option first.
 plan's slug into it. Other work writes it too (a shot `<shotfile>/<n>/<title-slug>`, a task name); then `current` fails with
 "not a plan": list the plans and ask, as in Status. The file is gitignored per-worktree state: never stage or
 commit it (untrack and gitignore it when the repo still tracks it); `/mtm` deletes it once a finished plan has landed.
+
+**Research plans start with `research`.** When the user asks for research rather than an implementation
+(investigate, compare, evaluate, analyse, "find out", "look into": the result is findings or a decision, not code),
+create the plan with `--research`: its slug becomes `<NNNN>-research-<topic>`, so `CURRENT_PLAN` and the
+statusline show it as research (the number stays first, so numbering and `/plan use <n>` keep working; a title that
+already starts with "research" is not prefixed twice). Its deliverable is the research doc
+`research/<NNNN>-<topic>/research.md` (numbered on its own, next free number in `research/`), linked under
+**Context**; decisions it yields go to their one home. Research that gets no plan writes `research-<topic>` into
+`CURRENT_PLAN`. When unsure whether a request is research or implementation, ask.
 
 **The step table is the plan's state.** `/plan`, `/handoff` and the statusline all read it; nothing else tracks
 progress. Update it the moment a step's check passes, never later.
@@ -37,6 +46,7 @@ that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and
 | Call | Short | Does |
 |---|---|---|
 | `/plan new <idea>` | | [create a plan](#new-plan) and make it current |
+| `/plan new --research <topic>` | `/plan r <topic>` | the same for a research plan (see above): slug `<NNNN>-research-<topic>` |
 | `/plan`, `/plan status` | `/plan s` | [show where the current plan stands](#status) |
 | `/plan next` | `/plan n` | [run the plan](#run-the-plan) from its next step to the end, offering `/grill` first |
 | `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
@@ -50,9 +60,11 @@ that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and
    decisions are not questions. Ask only what you can't find out, with the question tool.
 2. Create the plan folder with its `plan.md` and make it current:
    ```bash
-   python3 $S/plan.py new "<title>" --goal "<goal>"
+   python3 $S/plan.py new "<title>" --goal "<goal>"              # add --research for a research plan
    ```
-3. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. Record
+3. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. A research
+   plan's steps end in its research doc (e.g. question and criteria, sources, compare, write `research.md`, record
+   the decision). Record
    decisions taken so far in their one home.
 4. Show the plan in a few lines, then ask with the question tool: grill it now with `/grill` (recommended for
    anything beyond a small change), [run it](#run-the-plan) from step 1 (it then runs to the end on its own), or
