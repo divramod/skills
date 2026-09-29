@@ -9,12 +9,16 @@ A flat plans/<NNNN>-<slug>.md from before the folder layout is still read and up
                                                            create the next plan from the template; its number
                                                            is unique across all worktrees and branches
                                                            (plan_number.py; --fetch sees other clones too);
-                                                           --research: a research plan, slug <NNNN>-research-<topic>
+                                                           --research: a research plan, slug <NNNN>-research-<topic>;
+                                                           writes `Landing: auto` (--manual-landing: manual)
   plan.py current                                          print the current plan as JSON
   plan.py list                                             print every plan as JSON
   plan.py use <slug-or-number>                             make a plan current
   plan.py status <step> "<status>" [--plan <slug>]         set one step's Status cell
   plan.py grilled [--plan <slug>]                          set the plan's `Grilled:` line to today
+  plan.py landing auto|manual [--plan <slug>]              set the plan's `Landing:` line: auto lands the plan
+                                                           with /mtm when its last step is done, manual waits
+                                                           for the user's /mtm (a plan without the line)
   plan.py check                                            exit 1 when a plan number is used twice
   plan.py -g ...                                           the same on the global plans folder (hal2's
                                                            plans.toml root, default ~/Documents/hal2/plans;
@@ -23,6 +27,12 @@ A flat plans/<NNNN>-<slug>.md from before the folder layout is still read and up
                                                            grilled with --plan <n>; no CURRENT_PLAN there
 
 Run from anywhere inside the repo, or pass --root. Prints JSON on stdout; exits 1 with a message on stderr.
+
+The JSON's `landing` is the plan's `Landing:` line (auto|manual; none for a global plan), each step's
+`after_landing` says its done-when starts with "after the landing" (or the older "after the user's `/mtm`"), `next`
+is the first open step to run before the landing (an after-landing step only when no other is open), `land` is
+`ready` when no open step must run before the landing (`wait` otherwise; `manual`, `none` from `landing`), and
+`problems` lists after-landing steps followed by steps that are not.
 """
 import argparse
 import datetime as dt
@@ -41,6 +51,9 @@ PLAN_RE = re.compile(r"^(\d{4})-[a-z0-9-]+$")
 MAIN = "plan.md"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "plan.md"
 RESEARCH = "research"
+LANDINGS = ("auto", "manual")
+AFTER_LANDING = ("after the landing", "after the user's `/mtm`", "after the user's /mtm")
+GLOBAL = False
 
 
 class PlanError(Exception):
@@ -49,8 +62,9 @@ class PlanError(Exception):
 
 def use_global(folder: Path) -> Path:
     """Work on the global plans folder `folder`: plans are `folder/<slug>/plan.md`; the root to pass on."""
-    global PLANS
+    global PLANS, GLOBAL
     PLANS = Path(folder.name)
+    GLOBAL = True
     return folder.parent
 
 
@@ -181,15 +195,49 @@ def read_steps(text: str) -> list[dict]:
             "done_when": cells[cols["done when"]] if "done when" in cols else "",
             "status": cells[cols["status"]],
         })
+    for step in steps:
+        step["after_landing"] = step["done_when"].lower().lstrip("*_ ").startswith(AFTER_LANDING)
     return steps
+
+
+def header_value(text: str, key: str) -> str:
+    """The value of a `<key>: <value>` line above the plan's first section."""
+    for line in text.splitlines():
+        if line.startswith("## "):
+            break
+        if line.startswith(key + ":"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def landing_of(text: str) -> str:
+    """auto, manual (also for a plan without the line or with an unknown value) or none (a global plan)."""
+    if GLOBAL:
+        return "none"
+    value = header_value(text, "Landing").lower()
+    return value if value in LANDINGS else "manual"
+
+
+def problems_of(steps: list[dict]) -> list[str]:
+    """After-landing steps that other steps follow: they belong at the end of the table."""
+    problems = []
+    for i, step in enumerate(steps):
+        later = [s["number"] for s in steps[i + 1:] if not s["after_landing"]]
+        if step["after_landing"] and later:
+            problems.append(f"step {step['number']} is checked after the landing but step(s) {', '.join(later)} "
+                            "follow it: move it to the end, a plan lands once, after all its other steps")
+    return problems
 
 
 def describe(root: Path, path: Path) -> dict:
     text = path.read_text()
     steps = read_steps(text)
     title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), slug_of(path))
-    grilled = next((l.split(":", 1)[1].strip() for l in text.splitlines() if l.startswith("Grilled:")), "")
+    grilled = header_value(text, "Grilled")
     open_steps = [s for s in steps if not s["status"].lower().startswith("done")]
+    before_landing = [s for s in open_steps if not s["after_landing"]]
+    landing = landing_of(text)
+    land = landing if landing != "auto" else ("wait" if before_landing else "ready")
     pointer = root / PLANS / POINTER
     return {
         "slug": slug_of(path),
@@ -200,13 +248,16 @@ def describe(root: Path, path: Path) -> dict:
         "grilled": grilled,
         "done": len(steps) - len(open_steps),
         "total": len(steps),
-        "next": open_steps[0] if open_steps else None,
+        "next": (before_landing or open_steps or [None])[0],
+        "landing": landing,
+        "land": land,
+        "problems": problems_of(steps),
         "steps": steps,
     }
 
 
 def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool = False,
-             research: bool = False) -> Path:
+             research: bool = False, landing: str = "auto") -> Path:
     slug = research_slug(slugify(title)) if research else slugify(title)
     if fetch:
         plan_number.git(root, "fetch", "--all", "--quiet")
@@ -218,7 +269,7 @@ def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool 
     path.parent.mkdir(parents=True, exist_ok=True)
     text = TEMPLATE.read_text().format(
         number=f"{number:04d}", title=title, goal=goal or "<one or two sentences>",
-        date=dt.date.today().isoformat(),
+        date=dt.date.today().isoformat(), landing=landing,
     )
     path.write_text(text)
     if make_current:
@@ -241,17 +292,29 @@ def set_status(path: Path, step: str, status: str) -> None:
     raise PlanError(f"no step '{step}' in {slug_of(path)}")
 
 
-def set_grilled(path: Path) -> None:
-    today = dt.date.today().isoformat()
+def set_header(path: Path, key: str, value: str) -> None:
+    """Set the plan's `<key>: <value>` line, inserting it below the title when missing."""
     lines = path.read_text().splitlines(keepends=True)
     for i, line in enumerate(lines):
-        if line.startswith("Grilled:"):
-            lines[i] = f"Grilled: {today}\n"
+        if line.startswith("## "):
             break
-    else:
-        title = next((i for i, l in enumerate(lines) if l.startswith("# ")), -1)
-        lines.insert(title + 1, f"\nGrilled: {today}\n")
+        if line.startswith(key + ":"):
+            lines[i] = f"{key}: {value}\n"
+            path.write_text("".join(lines))
+            return
+    title = next((i for i, l in enumerate(lines) if l.startswith("# ")), -1)
+    lines.insert(title + 1, f"\n{key}: {value}\n")
     path.write_text("".join(lines))
+
+
+def set_grilled(path: Path) -> None:
+    set_header(path, "Grilled", dt.date.today().isoformat())
+
+
+def set_landing(path: Path, landing: str) -> None:
+    if GLOBAL:
+        raise PlanError("a global plan never lands: it belongs to no repository")
+    set_header(path, "Landing", landing)
 
 
 def main(argv: list[str]) -> int:
@@ -267,6 +330,8 @@ def main(argv: list[str]) -> int:
     p_new.add_argument("--research", action="store_true")
     p_new.add_argument("--no-current", action="store_true")
     p_new.add_argument("--fetch", action="store_true")
+    p_new.add_argument("--manual-landing", action="store_true",
+                       help="write `Landing: manual`: the plan waits for the user's /mtm at its end")
     sub.add_parser("current")
     sub.add_parser("list")
     p_use = sub.add_parser("use")
@@ -277,6 +342,9 @@ def main(argv: list[str]) -> int:
     p_status.add_argument("--plan")
     p_grilled = sub.add_parser("grilled")
     p_grilled.add_argument("--plan")
+    p_landing = sub.add_parser("landing")
+    p_landing.add_argument("landing", choices=LANDINGS)
+    p_landing.add_argument("--plan")
     sub.add_parser("check")
     args = parser.parse_args(argv)
 
@@ -288,7 +356,7 @@ def main(argv: list[str]) -> int:
             return plan_number.main(["--root", str(root), "check"])
         if args.command == "new":
             result = describe(root, new_plan(root, args.title, args.goal, not args.no_current, args.fetch,
-                                             args.research))
+                                             args.research, "manual" if args.manual_landing else "auto"))
         elif args.command == "current":
             result = describe(root, current_path(root))
         elif args.command == "list":
@@ -301,6 +369,8 @@ def main(argv: list[str]) -> int:
             path = resolve(root, args.plan) if args.plan else current_path(root)
             if args.command == "status":
                 set_status(path, args.step, args.status)
+            elif args.command == "landing":
+                set_landing(path, args.landing)
             else:
                 set_grilled(path)
             result = describe(root, path)

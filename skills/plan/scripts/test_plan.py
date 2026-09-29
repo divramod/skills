@@ -125,6 +125,67 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(self.run_plan("status", "7", "x", "--plan", "2").returncode, 1)
         self.assertEqual(self.run_plan("new", "!!!").returncode, 1)
 
+    def test_new_plan_lands_automatically_unless_manual(self):
+        info = self.plan("new", "Auto")
+        self.assertEqual(info["landing"], "auto")
+        self.assertIn("\nLanding: auto\n", (self.root / info["path"]).read_text())
+        self.assertEqual(info["land"], "wait")
+
+        info = self.plan("new", "Manual", "--manual-landing")
+        self.assertEqual(info["landing"], "manual")
+        self.assertEqual(info["land"], "manual")
+
+    def test_plan_without_landing_line_is_manual_and_landing_sets_it(self):
+        self.write_plan()
+        self.assertEqual(self.plan("use", "2")["landing"], "manual")
+
+        info = self.plan("landing", "auto")
+        self.assertEqual(info["landing"], "auto")
+        self.assertEqual(info["land"], "wait")
+        text = (self.plans / "0002-migrate-daily-tools" / "plan.md").read_text()
+        self.assertTrue(text.startswith("# Plan 0002: migrate daily tools\n\nLanding: auto\n"))
+
+        self.assertEqual(self.plan("landing", "manual")["landing"], "manual")
+        text = (self.plans / "0002-migrate-daily-tools" / "plan.md").read_text()
+        self.assertEqual(text.count("Landing:"), 1)
+        self.assertEqual(self.run_plan("landing", "later").returncode, 2)
+
+    def test_land_is_ready_when_only_after_landing_steps_are_open(self):
+        self.write_plan(text="""# Plan 0002: x
+
+Landing: auto
+
+| # | Step | Done when | Status |
+|---|---|---|---|
+| 1 | build | `cargo test` | done |
+| 2 | install | after the landing: `x --version` works | |
+| 3 | old style | after the user's `/mtm`: `y` works | |
+""")
+        info = self.plan("use", "2")
+        self.assertEqual(info["land"], "ready")
+        self.assertEqual([s["after_landing"] for s in info["steps"]], [False, True, True])
+        self.assertEqual(info["next"]["number"], "2")
+        self.assertEqual(info["problems"], [])
+
+        self.plan("status", "1", "next")
+        self.assertEqual(self.plan("current")["land"], "wait")
+
+    def test_after_landing_step_before_others_is_a_problem_and_not_next(self):
+        self.write_plan(text="""# Plan 0002: x
+
+Landing: auto
+
+| # | Step | Done when | Status |
+|---|---|---|---|
+| 1 | install | after the landing: `x` works | |
+| 2 | build | `cargo test` | |
+""")
+        info = self.plan("use", "2")
+        self.assertEqual(info["next"]["number"], "2")
+        self.assertEqual(info["land"], "wait")
+        self.assertEqual(len(info["problems"]), 1)
+        self.assertIn("step 1", info["problems"][0])
+
     def test_current_names_a_shot_not_a_plan(self):
         self.write_plan()
         (self.plans / "CURRENT_PLAN").write_text("shooter/1\n")
@@ -177,8 +238,12 @@ echo '{{"slug": "0002-next", "path": "{self.folder}/0002-next/plan.md"}}'
         self.assertEqual(info["slug"], "0002-next")
         self.assertEqual(info["next"]["number"], "1")
 
+    def test_global_plans_never_land(self):
+        info = self.plan("list")[0]
+        self.assertEqual((info["landing"], info["land"]), ("none", "none"))
+
     def test_current_and_use_are_for_repositories_only(self):
-        for args in (["current"], ["use", "1"], ["status", "1", "done"]):
+        for args in (["current"], ["use", "1"], ["status", "1", "done"], ["landing", "auto", "--plan", "1"]):
             result = self.run_plan(*args)
             self.assertEqual(result.returncode, 1, args)
             self.assertIn("plan.py:", result.stderr)
