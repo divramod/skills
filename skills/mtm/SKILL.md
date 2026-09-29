@@ -1,6 +1,6 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch; resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
 ---
 
 # mtm
@@ -14,7 +14,10 @@ in the delivery worktree `~/.hal/git/worktree/<repo>/.deliver`. The queue is rel
 through: a failed, killed or interrupted landing keeps **holding** it, and every other worktree waits, until this
 worktree's next merge-to-main takes the hold over and lands (or the human stops or releases it). This skill
 reserves the worktree's turn in the queue first (`worktree reserve`), then commits and pushes the work and merges
-the default branch in while nothing else can land, so conflicts are fixed once; it handles what needs judgment. `S=<skill-dir>/scripts`. Ask every question with the
+the default branch in while nothing else can land, so conflicts are fixed once, and lands with
+`--keep-reserved`: after the landing the queue stays reserved while it finishes the plan and lands that too, and
+only then releases it. **The goal: when `/mtm` ends, the worktree has no commit and no change that is not on the
+default branch.** It handles what needs judgment. `S=<skill-dir>/scripts`. Ask every question with the
 question tool, recommended option first.
 
 **Only the human starts a landing.** Run merge-to-main only when the user asked for it in this session (`/mtm`,
@@ -47,9 +50,9 @@ older than the reservation: go on without it (the landing then waits in the queu
 | 1 | `error` | report the `message` and stop |
 
 **Holding the reservation.** Every other worktree's landing waits while this one holds: go straight through steps
-2 to 4. When the landing will not happen after all (the user decides against it, a conflict or failure you cannot
+2 to 5. When the landing will not happen after all (the user decides against it, a conflict or failure you cannot
 fix and the user says to stop), give the queue back with `hal2-cli-git worktree release` and say so; never end
-with the queue reserved and nobody landing.
+with the queue reserved and nobody landing (after a landing too: step 5 ends with the release).
 
 ## 2. Commit and push everything
 
@@ -84,8 +87,10 @@ The default branch cannot move now, so what you merge in here is what the landin
 
 ## 4. Land
 
-1. `hal2-cli-git worktree merge-to-main --json [<slot>]`. If the command is missing or has no `--json`, run
-   `bash $S/install-prerequisites.sh` once and retry. It takes this worktree's reservation over at once (`took over
+1. `hal2-cli-git worktree merge-to-main --keep-reserved --json [<slot>]`. If the command is missing or has no
+   `--json`, run `bash $S/install-prerequisites.sh` once and retry; one that does not know `--keep-reserved` yet
+   (exit 2, `unknown argument`) is older: rerun without it (the queue is then released after the landing, see step
+   5). It takes this worktree's reservation over at once (`took over
    the merge queue this worktree reserved`); without one (an old hal2-cli-git) it waits as long as other landings
    are ahead of it in the merge queue (`hal2-cli-git worktree queue` lists the holder, active or held and why, and the waiters;
    hal2-macos shows every repo's queue), then for its deliveries; never kill a waiting landing for taking long.
@@ -96,7 +101,7 @@ The default branch cannot move now, so what you merge in here is what the landin
 
 | Exit | JSON `status` | Do |
 |---|---|---|
-| 0 | `ok` | [clear the current task](#5-clear-the-current-task), then [report](#6-report). Allowed failures (`allowed_failure: true` in `tasks`, listed in `warnings`) landed and released the queue: report them as warnings; never fix-and-rerun for them, never ask to release the queue for them |
+| 0 | `ok` | landed, the queue stays reserved for this worktree (`reserved: true`): go straight to [finish the plan](#5-finish-the-plan-and-land-it). Allowed failures (`allowed_failure: true` in `tasks`, listed in `warnings`) landed: report them as warnings; never fix-and-rerun for them, never ask to release the queue for them |
 | 3 | `conflict` | rare after step 3 (a push to the default branch from outside the queue); merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
 | 4 | `task_failed`, `hook_failed`, `delivery_failed` | the queue stays held by this worktree (`held` in the JSON; say so when you report progress). Fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. After `task_failed` and `hook_failed` the default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the verb: the task is the script `hal2-cli-hooks list` shows for that row and verb, its own `<row>/.hal/hooks/<verb>.sh` or an inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`; `hal2-cli-hooks run <row> <verb>` reruns it alone; tasks it cancelled or skipped need no fix of their own), `hook_failed` the `script`, `delivery_failed` the `failures` (the landing is on the default branch and pushed; fix the install/deploy in this worktree, commit, and the rerun delivers again) |
 | 5 | `stopped`, `cancelled`, `interrupted` | the user ended the landing: stopped (Stop button, `worktree stop`, SIGTERM), cancelled while waiting (`by` says who and where, e.g. `the user in hal2-macos`), or interrupted (its shell went away). The default branch is unchanged. Report it and stop: never rerun on your own |
@@ -109,9 +114,31 @@ spot) against `limit` (`[landing] attempts` of `.hal/hooks.toml`, default 10). K
 worktree goes, this landing ends), or leave it held. Never stop silently while the queue is held: every other
 worktree waits for this one. `hal2-cli-git worktree queue` confirms who holds it.
 
-## 5. Clear the current task
+## 5. Finish the plan and land it
 
-After a successful landing, read `plans/CURRENT_PLAN` in the worktree (the landing's reset keeps it, it is
+The landing is on the default branch and the queue is still reserved for this worktree: every other landing waits,
+so work through this without pausing. What only the landing let you check (a step whose done-when needs the landed
+default branch, its install or deploy: "after the landing ...", a check of the installed binary) is finished now
+and lands before anything else, so no commit is left behind on the worktree branch.
+
+1. `plans/CURRENT_PLAN` names a plan (`<NNNN>-<slug>`, `python3 <plan-skill-dir>/scripts/plan.py current`): take its
+   open steps whose done-when needed the landing and can be run now. Run each check; when it passes, finish the step
+   as the [plan](../plan/SKILL.md) skill's **Finish a step** says (step table, notes, one commit
+   `... (plan <NNNN> step <n>)`, no context check, no handoff); when it fails, fix it (commit) or, when you cannot,
+   leave the step open and say so in the report. Steps that need more work than a check stay open: the plan goes
+   on after this `/mtm`.
+2. Anything else still uncommitted in the worktree: [step 2](#2-commit-and-push-everything) (commit, push).
+3. `git log --oneline <default>..HEAD` lists what is not landed yet:
+   - commits: push, back to [step 4](#4-land) (`merge-to-main --keep-reserved` takes the reservation over at once;
+     only the plan changed, so the gates end `cached` or `unchanged`), then here again;
+   - nothing, and `git status --porcelain` shows nothing but ignored files: `hal2-cli-git worktree release`, the
+     next worktree goes. Only now is the landing over.
+4. Without `reserved: true` (an older hal2-cli-git released the queue already): with commits left, reserve again
+   ([step 1](#1-reserve-the-merge-queue)) and land them (step 4); the queue may let other worktrees go first.
+
+## 6. Clear the current task
+
+After the landing and the plan's finish, read `plans/CURRENT_PLAN` in the worktree (the landing's reset keeps it, it is
 gitignored). Delete the file when the landed work is finished:
 
 - it names a shot (`<shotfile>/<n>/<title-slug>`) or a task name: the work has landed, delete it;
@@ -119,9 +146,10 @@ gitignored). Delete the file when the landed work is finished:
   current` shows `done` equal to `total`, the `plan` skill next to this one); a plan with open steps keeps it;
 - missing or empty: nothing to do.
 
-## 6. Report
+## 7. Report
 
-One short block: the queue released (or, after a stop, cancel or release, that it no longer holds it), commits landed (`commits`) and the merge commit (`git -C <main checkout> log --oneline -1`),
+One short block: the queue released (or, after a stop, cancel or release, that it no longer holds it), commits landed (`commits`, of every landing of this `/mtm`) and the merge commit(s) (`git -C <main checkout> log --oneline -2`), the plan steps finished after the landing (and any left open, with why),
+`git log --oneline <default>..HEAD` empty and the worktree clean (say so; if not, what is left and why),
 `pushed`, the `tasks` that ran (row and verb; skip `unchanged` and `cached` ones, say how many were cached) and the `hooks`, `warnings` (a failed install, deploy or
 `main-post-commit` hook does not undo the landing: show its output; an allowed failure is a warning, not a fix), whether `plans/CURRENT_PLAN` was deleted (and what it named), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
 committed. the side branches the landing deleted (`branches_deleted`) and those it kept because they are not merged
