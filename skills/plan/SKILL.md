@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step and, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2, and when its last step is done lands itself with /mtm (`Landing: auto`, what `new` writes; `manual` waits for the user's /mtm)), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -8,7 +8,7 @@ description: Lean planning for a repo — one self-contained folder per plan, pl
 One folder per plan, `plans/<NNNN>-<slug>/`: `plan.md` plus any helper file that belongs to the plan (scripts,
 notes, data), so the folder is self-contained; no phase folders, no state files, no gap sub-plans. The plan says *what* and
 *in which order*; each step is detailed only when it is next. `S=<skill-dir>/scripts`; every command prints the
-plan as JSON (`slug`, `path`, `research`, `grilled`, `done`, `total`, `next`, `steps`).
+plan as JSON (`slug`, `path`, `research`, `grilled`, `done`, `total`, `next`, `landing`, `land`, `problems`, `steps`).
 
 Ask every question with the question tool, recommended option first.
 
@@ -32,11 +32,23 @@ progress. Update it the moment a step's check passes, never later.
 **Good steps** fit one session (split a step that doesn't) and have a **Done when** that is a runnable command
 where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise one observable behaviour.
 
-**Steps checked after the landing belong to `/mtm`.** A step whose done-when needs the landed default branch (its
-install or deploy, a check of the installed binary: write it as "after the user's `/mtm`: ...") is not finished
-with a commit of its own after the landing: that commit would stay on the worktree branch. `/mtm` finishes it
-while it still holds the merge queue and lands it too (its step "Finish the plan and land it"), so the worktree
-ends with nothing that is not on the default branch.
+**A plan lands once, at its end.** `new` writes `Landing: auto` below the title: when the plan's last step is done,
+the plan lands itself with `/mtm` in the same run (the user's start of the plan is the consent to land it; hal2's
+merge-hooks ADR, "Who starts a landing"). `Landing:
+manual` (`new --manual-landing`, `plan.py landing manual`, and every plan without the line) waits for the user's
+`/mtm`. So write plans that land only when they are finished:
+
+- no step lands, merges to the default branch or asks for `/mtm` (no "one part per landing"): work that should land
+  on its own is a plan of its own;
+- a step whose done-when needs the landed default branch (its install or deploy, a check of the installed binary)
+  starts its done-when with **"after the landing: ..."** (`after_landing` in the JSON) and comes after every other
+  step. `/mtm` finishes it while it still holds the merge queue and lands it too (its step "Finish the plan and
+  land it"), never as a commit of its own after the landing, which would stay on the worktree branch. `problems`
+  names after-landing steps that other steps follow: move them to the end.
+
+`land` in the JSON says what the plan's end does: `ready` (auto, no open step before the landing: land now), `wait`
+(auto, steps before the landing still open), `manual` or `none` (a global plan). `next` is the first open step that
+runs before the landing.
 
 **Plan numbers are unique across the whole repository**: `plan.py new` takes the number from
 `scripts/plan_number.py`, which looks at every worktree (committed or not), every local and remote-tracking
@@ -64,6 +76,7 @@ and its steps are not committed (the folder is no repository) unless the user ke
 | `/plan next` | `/plan n` | [run the plan](#run-the-plan) from its next step to the end, offering `/grill` first |
 | `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
 | `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
+| `/plan landing auto\|manual` | `/plan l a\|m` | `python3 $S/plan.py landing <auto\|manual>`: whether the current plan lands itself at its end |
 | `/plan new -g <title>` | `/plan r -g <topic>` | a global plan (see "Global plans" above; `--research` works too) |
 | `/plan s -g <n>`, `/plan n -g <n>`, `/plan d -g <n> [<step>]` | | status, run, finish a step of global plan `<n>` |
 | `/plan check` | `/plan c` | `python3 $S/plan.py check`: report plan numbers used twice |
@@ -79,10 +92,11 @@ and its steps are not committed (the folder is no repository) unless the user ke
    ```
 3. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. A research
    plan's steps end in its research doc (e.g. question and criteria, sources, compare, write `research.md`, record
-   the decision). Record
-   decisions taken so far in their one home.
+   the decision). No step lands; steps checked after the landing come last ("after the landing: ..."). The plan
+   lands itself at its end (`Landing: auto`); when the user wants to land it themselves, `plan.py landing manual`.
+   Record decisions taken so far in their one home.
 4. Show the plan in a few lines, then ask with the question tool: grill it now with `/grill` (recommended for
-   anything beyond a small change), [run it](#run-the-plan) from step 1 (it then runs to the end on its own), or
+   anything beyond a small change), [run it](#run-the-plan) from step 1 (it then runs to the end on its own and, `Landing: auto`, lands), or
    stop here.
 
 ## Status
@@ -91,18 +105,20 @@ and its steps are not committed (the folder is no repository) unless the user ke
 python3 $S/plan.py current      # or: list
 ```
 
-Report the plan title, `done/total`, the next step and its done-when check, and whether it was grilled. If there is
+Report the plan title, `done/total`, the next step and its done-when check, whether it was grilled, whether it lands
+itself (`landing`) and any `problems`. If there is
 no current plan, list the plans and ask which one to use.
 
 ## Run the plan
 
-**Once a plan is started it runs to the end on its own.** The user approves the plan once, when it starts (the
+**Once a plan is started it runs to the end on its own, landing included.** The user approves the plan once, when it starts (the
 grill offer below); after that, work through the steps one after another without asking for approval, without plan
 mode and without per-step grill offers. Ask the user only for
 
 - a decision that is genuinely theirs and not settled by the plan, the decision record (`INTENT.md`), the ADRs or
   the repo's rules for choosing between options (decide those yourself and record them in their one home);
-- an outward-facing or irreversible action (pushing, publishing, deleting data that is not the plan's own);
+- an outward-facing or irreversible action (pushing, publishing, deleting data that is not the plan's own), except
+  the landing of an auto plan at its end ([Land the plan](#land-the-plan)), which the start of the plan agreed to;
 - a step whose done-when check still fails after reasonable attempts: stop and report what fails.
 
 1. `python3 $S/plan.py current`, then offer grilling with the question tool, once, proportionate to the risk:
@@ -116,9 +132,29 @@ mode and without per-step grill offers. Ask the user only for
    2. Implement it until its done-when check passes.
    3. [Finish the step](#finish-a-step): table, notes, commit, context check. Stop when the context check says so,
       otherwise go on with the next step.
-3. When every step is done, say so and ask whether to set another plan current. When only steps checked after the
-   landing are left, stop there: say that the user's `/mtm` lands the work and finishes them (never start it
-   yourself).
+3. When no step before the landing is left (`land` is `ready`, `manual` or `none`), the plan's end:
+   - `ready`: [land the plan](#land-the-plan) now, in this run: no question, no context check, no handoff.
+   - `manual`: say the plan is done and that the user's `/mtm` lands it (never start it yourself), and ask whether
+     to set another plan current.
+   - `none` (a global plan): say it is done.
+
+## Land the plan
+
+The last step of an auto plan is done (`land: ready`). This is the only time the plan skill starts a landing, and
+only for the plan the user started (also in a session continued with `/handoff c`); never before its last step,
+never for another worktree or session, never again after a landing ended with exit 5 (stopped, cancelled,
+interrupted).
+
+1. Check you can land: a worktree on its own branch (in the main checkout or on the default branch there is nothing
+   to land: say so and stop), `problems` empty (else move the after-landing steps to the end, commit, check again).
+2. Commit and sort before the queue is reserved: everything the plan changed is committed (each step committed
+   already); untracked files are junk (gitignore), secrets (gitignore, never commit) or the plan's work (commit);
+   what stays unclear is left untracked, no question, and named in the report.
+3. Run the [mtm](../mtm/SKILL.md) skill from its step 1, as a plan's landing: it lands the work, finishes the
+   after-landing steps, clears `CURRENT_PLAN` and reports what landed. Fix and rerun as it says while it holds the
+   queue; when it has to ask the user (the attempts limit, a cause you cannot fix), push a notification first
+   (`PushNotification`, e.g. "plan 0063: landing holds the merge queue, needs you"), so the user learns it even when
+   away. A successful landing only reports.
 
 ## Finish a step
 
@@ -138,8 +174,8 @@ mode and without per-step grill offers. Ask the user only for
    python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] percent, else 35; percent as the statusline shows it
    ```
    - No step is left that you run now (this was the last step, or only steps checked after the landing remain):
-     skip the check, never hand off or clear here: the plan's end ("Run the plan" point 3: done, or the user's
-     `/mtm` lands it) and its report must stay on screen. hal2 refuses to clear then too (`no-open-plan`).
+     skip the check, never hand off or clear here: the plan's end ("Run the plan" point 3: the plan lands itself,
+     or it is done and the user's `/mtm` lands it) and its report must stay on screen. hal2 refuses to clear then too (`no-open-plan`).
    - `stop` is false: continue with the next step.
    - `stop` is true (and steps are left that you run now): stop the plan here and hand off:
      1. Stop your background work (TaskStop every background shell, subagent, workflow and monitor you started):
