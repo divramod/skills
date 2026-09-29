@@ -1,6 +1,6 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`) and ends with what landed (the plan and its steps, or the shot); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`) and ends with what landed (the plan and its steps, or the shot); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session, or by the plan skill when a plan the user started (`Landing: auto`) has finished its last step. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
 ---
 
 # mtm
@@ -20,10 +20,23 @@ only then releases it. **The goal: when `/mtm` ends, the worktree has no commit 
 default branch.** It handles what needs judgment. `S=<skill-dir>/scripts`. Ask every question with the
 question tool, recommended option first.
 
-**Only the human starts a landing.** Run merge-to-main only when the user asked for it in this session (`/mtm`,
-"merge to main", "land this"); that is their consent to commit in this worktree, land on the default branch and
-push it. Never start it on your own, for another worktree or session, or because another session says a fix has
-landed; never ask another session to run it. Once started, finish it: fix and rerun until it lands.
+**Only the human starts a landing, directly or through a finished plan.** Run merge-to-main only when
+
+- the user asked for it in this session (`/mtm`, "merge to main", "land this"), or
+- the [plan](../plan/SKILL.md) skill's **Land the plan** runs it: the current plan has `Landing: auto`, the user
+  started it (in this session, or in the one this session continued with `/handoff c`) and its last step before
+  the landing is done (`plan.py current` shows `land: ready`). That is a **plan's landing**.
+
+Either is the user's consent to commit in this worktree, land on the default branch and push it. Never start it on
+your own otherwise: not mid-plan, not for a `manual` plan, not for another worktree or session, not because another
+session says a fix has landed, never again after it ended with exit 5; never ask another session to run it. Once
+started, finish it: fix and rerun until it lands.
+
+**A plan's landing asks nothing it can decide.** The user may be away, and while the queue is reserved every other
+worktree waits: sort and commit the worktree before step 1 (as step 2 says, with unclear files left untracked and
+named in the report instead of a question), and when a failure needs the user (the attempts limit, a cause you
+cannot fix, an `error`), push a notification (`PushNotification`: the plan, "landing holds the merge queue, needs
+you") before asking. A landing that went through only reports.
 
 | Call | Does |
 |---|---|
@@ -67,7 +80,8 @@ The queue is reserved now: work through this without pausing, every other landin
      them in the report;
    - **work**: commit it;
    - **unclear**: ask, one question per file or per batch of similar files: commit it, gitignore it, or leave it
-     untracked.
+     untracked. In a plan's landing, leave it untracked without asking and name it in the report (the plan skill
+     sorted the worktree before step 1, so this is rare).
 3. `plans/CURRENT_PLAN` is per-worktree runtime state (what the worktree works on, shown by the statusline) and is
    never committed: when the repo still tracks it or does not ignore it, `git rm --cached` it (if tracked), add
    `plans/CURRENT_PLAN` to the root `.gitignore` and commit that as its own change.
@@ -110,7 +124,7 @@ The default branch cannot move now, so what you merge in here is what the landin
 **When to ask.** A failure's `held` object counts identical failures in a row (`attempts`, the same failing
 spot) against `limit` (`[landing] attempts` of `.hal/hooks.toml`, default 10). Keep fixing and rerunning while
 `limit_reached` is false. When it is true, or when you cannot fix the cause yourself, ask the user: fix further
-(rerun; recommended when you have a new idea), release the queue (`hal2-cli-git worktree release`: the next
+(rerun; recommended when you have a new idea; in a plan's landing push a notification first), release the queue (`hal2-cli-git worktree release`: the next
 worktree goes, this landing ends), or leave it held. Never stop silently while the queue is held: every other
 worktree waits for this one. `hal2-cli-git worktree queue` confirms who holds it.
 
@@ -122,7 +136,8 @@ default branch, its install or deploy: "after the landing ...", a check of the i
 and lands before anything else, so no commit is left behind on the worktree branch.
 
 1. `plans/CURRENT_PLAN` names a plan (`<NNNN>-<slug>`, `python3 <plan-skill-dir>/scripts/plan.py current`): take its
-   open steps whose done-when needed the landing and can be run now. Run each check; when it passes, finish the step
+   open steps whose done-when needed the landing (`after_landing` in its JSON: "after the landing: ...") and can be
+   run now. Run each check; when it passes, finish the step
    as the [plan](../plan/SKILL.md) skill's **Finish a step** says (step table, notes, one commit
    `... (plan <NNNN> step <n>)`, no context check, no handoff); when it fails, fix it (commit) or, when you cannot,
    leave the step open and say so in the report. Steps that need more work than a check stay open: the plan goes
