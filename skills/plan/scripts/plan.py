@@ -5,10 +5,11 @@ A plan is a folder plans/<NNNN>-<slug>/ holding plan.md and the plan's helper fi
 (optionally `Done when`). plans/CURRENT_PLAN holds the slug of the active plan (the Claude statusline shows it).
 A flat plans/<NNNN>-<slug>.md from before the folder layout is still read and updated.
 
-  plan.py new "<title>" [--goal "<goal>"] [--no-current] [--fetch]
+  plan.py new "<title>" [--goal "<goal>"] [--research] [--no-current] [--fetch]
                                                            create the next plan from the template; its number
                                                            is unique across all worktrees and branches
-                                                           (plan_number.py; --fetch sees other clones too)
+                                                           (plan_number.py; --fetch sees other clones too);
+                                                           --research: a research plan, slug <NNNN>-research-<topic>
   plan.py current                                          print the current plan as JSON
   plan.py list                                             print every plan as JSON
   plan.py use <slug-or-number>                             make a plan current
@@ -32,6 +33,7 @@ POINTER = "CURRENT_PLAN"
 PLAN_RE = re.compile(r"^(\d{4})-[a-z0-9-]+$")
 MAIN = "plan.md"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "plan.md"
+RESEARCH = "research"
 
 
 class PlanError(Exception):
@@ -50,6 +52,19 @@ def slugify(title: str) -> str:
     if not slug:
         raise PlanError("title needs at least one letter or digit")
     return slug[:60].rstrip("-")
+
+
+def research_slug(slug: str) -> str:
+    """`research-<slug>` for a research plan, unless the slug already starts with it."""
+    if slug == RESEARCH or slug.startswith(RESEARCH + "-"):
+        return slug
+    return f"{RESEARCH}-{slug}"[:60].rstrip("-")
+
+
+def is_research(slug: str) -> bool:
+    """A research plan: `<NNNN>-research-<topic>`."""
+    name = slug[5:]
+    return name == RESEARCH or name.startswith(RESEARCH + "-")
 
 
 def slug_of(path: Path) -> str:
@@ -138,6 +153,7 @@ def describe(root: Path, path: Path) -> dict:
         "slug": slug_of(path),
         "path": str(path.relative_to(root)),
         "title": title,
+        "research": is_research(slug_of(path)),
         "current": pointer.is_file() and pointer.read_text().strip() == slug_of(path),
         "grilled": grilled,
         "done": len(steps) - len(open_steps),
@@ -147,8 +163,9 @@ def describe(root: Path, path: Path) -> dict:
     }
 
 
-def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool = False) -> Path:
-    slug = slugify(title)
+def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool = False,
+             research: bool = False) -> Path:
+    slug = research_slug(slugify(title)) if research else slugify(title)
     if fetch:
         plan_number.git(root, "fetch", "--all", "--quiet")
     try:
@@ -202,6 +219,7 @@ def main(argv: list[str]) -> int:
     p_new = sub.add_parser("new")
     p_new.add_argument("title")
     p_new.add_argument("--goal", default="")
+    p_new.add_argument("--research", action="store_true")
     p_new.add_argument("--no-current", action="store_true")
     p_new.add_argument("--fetch", action="store_true")
     sub.add_parser("current")
@@ -222,7 +240,8 @@ def main(argv: list[str]) -> int:
         if args.command == "check":
             return plan_number.main(["--root", str(root), "check"])
         if args.command == "new":
-            result = describe(root, new_plan(root, args.title, args.goal, not args.no_current, args.fetch))
+            result = describe(root, new_plan(root, args.title, args.goal, not args.no_current, args.fetch,
+                                             args.research))
         elif args.command == "current":
             result = describe(root, current_path(root))
         elif args.command == "list":

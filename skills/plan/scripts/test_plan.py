@@ -43,6 +43,24 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
+    def test_new_research_plan_slug_starts_with_research(self):
+        info = self.plan("new", "macOS plugin runtimes", "--research")
+
+        self.assertEqual(info["slug"], "0001-research-macos-plugin-runtimes")
+        self.assertTrue(info["research"])
+        self.assertEqual((self.plans / "CURRENT_PLAN").read_text(), "0001-research-macos-plugin-runtimes\n")
+
+    def test_new_research_plan_keeps_a_leading_research(self):
+        info = self.plan("new", "Research: plugin runtimes", "--research")
+
+        self.assertEqual(info["slug"], "0001-research-plugin-runtimes")
+
+    def test_plain_plan_is_no_research_plan(self):
+        info = self.plan("new", "researcher view")
+
+        self.assertEqual(info["slug"], "0001-researcher-view")
+        self.assertFalse(info["research"])
+
     def test_new_numbers_after_existing_and_becomes_current(self):
         self.write_plan()
         (self.plans / "0001-old").mkdir()  # a folder without plan.md is no plan
