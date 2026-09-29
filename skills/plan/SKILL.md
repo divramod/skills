@@ -32,6 +32,12 @@ progress. Update it the moment a step's check passes, never later.
 **Good steps** fit one session (split a step that doesn't) and have a **Done when** that is a runnable command
 where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise one observable behaviour.
 
+**Steps checked after the landing belong to `/mtm`.** A step whose done-when needs the landed default branch (its
+install or deploy, a check of the installed binary: write it as "after the user's `/mtm`: ...") is not finished
+with a commit of its own after the landing: that commit would stay on the worktree branch. `/mtm` finishes it
+while it still holds the merge queue and lands it too (its step "Finish the plan and land it"), so the worktree
+ends with nothing that is not on the default branch.
+
 **Plan numbers are unique across the whole repository**: `plan.py new` takes the number from
 `scripts/plan_number.py`, which looks at every worktree (committed or not), every local and remote-tracking
 branch, and a reservation file shared by all worktrees of the clone, and reserves the number under a file lock.
@@ -101,7 +107,9 @@ mode and without per-step grill offers. Ask the user only for
    2. Implement it until its done-when check passes.
    3. [Finish the step](#finish-a-step): table, notes, commit, context check. Stop when the context check says so,
       otherwise go on with the next step.
-3. When every step is done, say so and ask whether to set another plan current.
+3. When every step is done, say so and ask whether to set another plan current. When only steps checked after the
+   landing are left, stop there: say that the user's `/mtm` lands the work and finishes them (never start it
+   yourself).
 
 ## Finish a step
 
