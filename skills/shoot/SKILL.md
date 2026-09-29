@@ -96,7 +96,8 @@ unknown id: say so and stop), before marking any: ids refer to that list.
    - In a git worktree, run `/mfm` (merge-from-main) once before starting the first shot.
    - Make every shot a plan before starting it: `/plan new "<file> <number> <title>"` (`shooter 3 i want all
      shots to become a plan`; `<file> <number>` for a shot without a title; a global shot:
-     `"global <file> <number> <title>"`), then carry the plan out. `/plan`
+     `"global <file> <number> <title>"`; a shot that asks for research rather than implementation becomes a
+     research plan, `/plan new --research ...`, slug `<NNNN>-research-...`), then carry the plan out. `/plan`
      writes the plan's `<NNNN>-<slug>` into `plans/CURRENT_PLAN`, so the statusline shows it; the file is
      gitignored runtime state, never committed, and `/mtm` deletes it once the plan has landed. A shot worked
      on without a plan names itself there as `<file>/<number>/<title-slug>`, a global one as
