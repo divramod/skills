@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step and stops for a /handoff when the context window is 40% full), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step and, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -133,13 +133,24 @@ mode and without per-step grill offers. Ask the user only for
 4. **Commit the step**: one commit with the step's changes and the updated plan, message
    `<type>(<scope>): <what> (plan <NNNN> step <n>)`. Stage only the files this step changed (other uncommitted
    work in the tree stays as it was). Never push without the user's consent.
-5. **Check the context window**:
+5. **Check the context window** before starting the next step:
    ```bash
-   python3 $S/context.py            # --threshold 40 by default; percent as the statusline shows it
+   python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] percent, else 35; percent as the statusline shows it
    ```
-   - `stop` is true (40% or more used): stop the plan here. Run `/handoff` (it records decisions, writes
-     `HANDOFF.md` with the plan's next step and commits it), then tell the user to run `/clear` and then
-     `/handoff c` to continue.
    - `stop` is false: continue with the next step.
+   - `stop` is true: stop the plan here and hand off:
+     1. Stop your background work (TaskStop every background shell, subagent, workflow and monitor you started):
+        after a clear their notifications would wake the fresh session. Note in the handoff what was stopped and
+        must be rerun.
+     2. Run `/handoff` (it records decisions, writes `HANDOFF.md` with the plan's next step and commits them).
+     3. `autoclear` is true: start the automatic clear-and-continue, then end your turn with one line saying the
+        session clears and continues with `/handoff c`; do nothing after it (the clear waits for your turn to end,
+        waits out a draft the user types, and never types into a non-empty prompt):
+        ```bash
+        hal2-cli-agents clear-and-continue --detach --json    # pane and session from $TMUX_PANE, $CLAUDE_CODE_SESSION_ID
+        ```
+        When it fails to start (non-zero exit, `already-running`), say so and fall back to the next point.
+     4. `autoclear` is false (its `autoclear_reason` says why: disabled, not Claude Code, not in tmux, no hal2):
+        tell the user to run `/clear` and then `/handoff c` to continue.
    - `known` is false (not Claude Code, no transcript): judge the fill level yourself and say so; when in doubt,
-     stop and hand off.
+     stop and hand off as above.

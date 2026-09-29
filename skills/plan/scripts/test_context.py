@@ -32,7 +32,8 @@ class ContextTest(unittest.TestCase):
         return path
 
     def run_context(self, *args, env=None) -> dict:
-        full_env = {"HOME": str(self.home), "PATH": os.environ.get("PATH", "")}
+        full_env = {"HOME": str(self.home), "PATH": os.environ.get("PATH", ""),
+                    "HAL2_CLI_AGENTS": str(self.home / "no-hal2-cli-agents")}
         full_env.update(env or {})
         out = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True,
                              env=full_env, check=True)
@@ -90,6 +91,45 @@ class ContextTest(unittest.TestCase):
         self.assertFalse(result["known"])
         self.assertIn("no usage", result["source"])
         self.assertFalse(self.run_context(env={"CLAUDE_CODE_SESSION_ID": "other"})["known"])
+
+
+    def fake_agents(self, settings_json: str) -> str:
+        program = self.home / "hal2-cli-agents"
+        program.write_text(f"#!/bin/sh\n[ \"$1 $2\" = \"settings --json\" ] && echo '{settings_json}'\n")
+        program.chmod(0o755)
+        return str(program)
+
+    def test_default_threshold_is_35_without_hal2(self):
+        path = self.transcript(assistant(100_000))
+        result = self.run_context("--transcript", str(path))
+        self.assertEqual(result["threshold"], 35.0)
+        self.assertFalse(result["autoclear"])
+        self.assertIn("settings", result["autoclear_reason"])
+
+    def test_threshold_and_autoclear_from_hal2_settings(self):
+        path = self.transcript(assistant(100_000))
+        program = self.fake_agents('{"autoclear": {"enabled": true, "percent": 10}}')
+        env = {"HAL2_CLI_AGENTS": program, "CLAUDE_CODE_SESSION_ID": "s1", "TMUX_PANE": "%3"}
+        result = self.run_context("--transcript", str(path), env=env)
+        self.assertEqual(result["threshold"], 10.0)
+        self.assertTrue(result["stop"])
+        self.assertTrue(result["autoclear"])
+        self.assertEqual(result["autoclear_reason"], "")
+        # --threshold still wins.
+        self.assertEqual(self.run_context("--transcript", str(path), "--threshold", "50", env=env)["threshold"], 50.0)
+
+    def test_no_autoclear_when_disabled_or_outside_tmux(self):
+        path = self.transcript(assistant(100_000))
+        disabled = self.fake_agents('{"autoclear": {"enabled": false, "percent": 35}}')
+        result = self.run_context("--transcript", str(path), env={
+            "HAL2_CLI_AGENTS": disabled, "CLAUDE_CODE_SESSION_ID": "s1", "TMUX_PANE": "%3"})
+        self.assertFalse(result["autoclear"])
+        self.assertIn("disabled", result["autoclear_reason"])
+        enabled = self.fake_agents('{"autoclear": {"enabled": true, "percent": 35}}')
+        result = self.run_context("--transcript", str(path), env={
+            "HAL2_CLI_AGENTS": enabled, "CLAUDE_CODE_SESSION_ID": "s1"})
+        self.assertFalse(result["autoclear"])
+        self.assertIn("TMUX_PANE", result["autoclear_reason"])
 
 
 if __name__ == "__main__":

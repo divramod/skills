@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """How full the agent's context window is, to decide whether a running plan stops for a handoff.
 
-  context.py [--threshold 40] [--window <tokens>] [--session <id>] [--transcript <file>]
+  context.py [--threshold <percent>] [--window <tokens>] [--session <id>] [--transcript <file>]
 
 Claude Code: the session is $CLAUDE_CODE_SESSION_ID, its transcript ~/.claude/projects/*/<session>.jsonl.
 Used tokens are the last main-conversation API call's input (uncached + cache read + cache write) plus its
@@ -12,19 +12,27 @@ are in use than that, the window must be the 1M one.
 `percent` is measured against the usable window, i.e. without Claude Code's auto-compact buffer (16.5% of the
 window), exactly like the Claude Code statusline shows it; `raw_percent` is against the whole window.
 
-Prints JSON: {"known", "used", "window", "percent", "raw_percent", "threshold", "stop", "source"}. `stop` is true when
-percent >= threshold. When nothing can be measured (another agent, no transcript yet) `known` is false and
+The threshold is --threshold, else hal2's `[autoclear] percent` (`hal2-cli-agents settings --json`, agents.toml),
+else 35. `autoclear` says whether the session can clear and continue on its own after a hand-off
+(`hal2-cli-agents clear-and-continue --detach`): hal2's autoclear is enabled and the agent is Claude Code in a tmux
+pane ($CLAUDE_CODE_SESSION_ID, $TMUX_PANE); `autoclear_reason` says why not. $HAL2_CLI_AGENTS names the program
+(default `hal2-cli-agents` on the PATH).
+
+Prints JSON: {"known", "used", "window", "percent", "raw_percent", "threshold", "stop", "source", "autoclear",
+"autoclear_reason"}. `stop` is true when percent >= threshold. When nothing can be measured (another agent, no transcript yet) `known` is false and
 `stop` is null: the agent judges for itself. Always exits 0 unless the arguments are wrong.
 """
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 DEFAULT_WINDOW = 200_000
 LARGE_WINDOW = 1_000_000
-DEFAULT_THRESHOLD = 40.0
+DEFAULT_THRESHOLD = 35.0
 # Share of the window Claude Code keeps free for auto-compaction; the statusline leaves it out.
 AUTO_COMPACT_BUFFER = 0.165
 
@@ -64,9 +72,42 @@ def configured_window(settings: Path) -> int:
     return LARGE_WINDOW if model.lower().endswith("[1m]") else DEFAULT_WINDOW
 
 
+def autoclear_settings() -> tuple[dict | None, str]:
+    """hal2's `[autoclear]` settings and the program, or None and why not."""
+    program = os.environ.get("HAL2_CLI_AGENTS") or shutil.which("hal2-cli-agents")
+    if not program:
+        return None, "hal2-cli-agents is not installed"
+    try:
+        out = subprocess.run([program, "settings", "--json"], capture_output=True, text=True, timeout=10)
+        settings = json.loads(out.stdout).get("autoclear") if out.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, AttributeError):
+        settings = None
+    if not isinstance(settings, dict):
+        return None, f"{program} settings --json has no autoclear settings (hal2 too old?)"
+    return settings, ""
+
+
+def autoclear(settings: dict | None, why: str) -> tuple[bool, str]:
+    if settings is None:
+        return False, why
+    if not settings.get("enabled", True):
+        return False, "autoclear is disabled in agents.toml"
+    for name, what in (("CLAUDE_CODE_SESSION_ID", "not Claude Code"), ("TMUX_PANE", "not in a tmux pane")):
+        if not os.environ.get(name, "").strip():
+            return False, f"{what} (${name} unset)"
+    return True, ""
+
+
 def measure(args: argparse.Namespace, home: Path) -> dict:
+    settings, why = autoclear_settings()
+    threshold = args.threshold
+    if threshold is None:
+        percent_setting = (settings or {}).get("percent")
+        threshold = float(percent_setting) if isinstance(percent_setting, (int, float)) else DEFAULT_THRESHOLD
+    can_clear, clear_why = autoclear(settings, why)
     result = {"known": False, "used": None, "window": None, "percent": None, "raw_percent": None,
-              "threshold": args.threshold, "stop": None, "source": None}
+              "threshold": threshold, "stop": None, "source": None,
+              "autoclear": can_clear, "autoclear_reason": clear_why}
     transcript = Path(args.transcript) if args.transcript else None
     if transcript is None:
         session = args.session or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
@@ -91,13 +132,14 @@ def measure(args: argparse.Namespace, home: Path) -> dict:
     percent = round(min(100.0, 100 * used / (window * (1 - AUTO_COMPACT_BUFFER))), 1)
     result.update(known=True, used=used, window=window, percent=percent,
                   raw_percent=round(100 * used / window, 1),
-                  stop=percent >= args.threshold, source=str(transcript))
+                  stop=percent >= threshold, source=str(transcript))
     return result
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD, help="stop at this percent used")
+    parser.add_argument("--threshold", type=float,
+                        help="stop at this percent used (default: hal2's autoclear percent, else 35)")
     parser.add_argument("--window", type=int, help="context window size in tokens")
     parser.add_argument("--session", help="Claude Code session id (default: $CLAUDE_CODE_SESSION_ID)")
     parser.add_argument("--transcript", help="transcript file to read instead of finding it")

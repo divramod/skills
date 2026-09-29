@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write or refresh the repo's HANDOFF.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff c` continues, `/handoff h` shows help.
+description: Write or refresh the repo's HANDOFF.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff clear` also clears the session and continues on its own (hal2), `/handoff c` continues, `/handoff h` shows help.
 ---
 
 # handoff
@@ -17,6 +17,7 @@ is lost. `S=<skill-dir>/scripts`.
 | Call | Short | Does |
 |---|---|---|
 | `/handoff` | | [write](#write): record decisions, rewrite `HANDOFF.md`, commit the decision docs |
+| `/handoff clear` | `/handoff x` | [write](#write), then [clear this session and continue](#clear-and-continue) with `/handoff c` on its own |
 | `/handoff continue`, `/handoff resume` | `/handoff c` | [continue](#continue) in a fresh session |
 | `/handoff help` | `/handoff h` | print this table and stop |
 
@@ -142,4 +143,23 @@ If a script exits 2 with a missing-tool error, run `bash $S/install-prerequisite
 ### 5. Report
 
 Tell the user the commit, which decisions you added to the intent doc, the plan it links (or that there is none),
-and the prompt from **Start the next session with**, so they can `/clear` and paste it.
+and the prompt from **Start the next session with**, so they can `/clear` and paste it (with `/handoff clear`:
+see below instead).
+
+## Clear and continue
+
+`/handoff clear` (and the `plan` skill's hand-off at its context threshold) writes and commits the handoff as above,
+then lets hal2 clear this Claude Code session and type `/handoff c` into the fresh one:
+
+1. Stop your background work first (TaskStop every background shell, subagent, workflow and monitor you started;
+   the handoff names what must be rerun): their notifications would wake the fresh session.
+2. Start it and end your turn right after with one line ("clearing, continuing with /handoff c"):
+   ```bash
+   hal2-cli-agents clear-and-continue --detach --json    # pane/session from $TMUX_PANE, $CLAUDE_CODE_SESSION_ID
+   ```
+   It waits for your turn to end, waits out a draft the user is typing (and the user's own turns), types `/clear`
+   only into an empty prompt, confirms the new session through its hook record, then types `/handoff c`; the
+   job shows on the agent in hal2's Agents pane, where it can be cancelled (`--cancel`).
+3. It exits non-zero when it cannot start (autoclear disabled in agents.toml, not Claude Code, not in tmux,
+   `already-running`, no hal2): report its message and fall back to telling the user to `/clear` and paste the
+   prompt.
