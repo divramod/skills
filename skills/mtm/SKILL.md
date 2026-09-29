@@ -60,7 +60,7 @@ Run in the worktree; if it is the main checkout on the default branch, stop: `/m
 
 | Exit | JSON `status` | Do |
 |---|---|---|
-| 0 | `ok` | [clear the current task](#3-clear-the-current-task), then [report](#4-report) |
+| 0 | `ok` | [clear the current task](#3-clear-the-current-task), then [report](#4-report). Allowed failures (`allowed_failure: true` in `tasks`, listed in `warnings`) landed and released the queue: report them as warnings; never fix-and-rerun for them, never ask to release the queue for them |
 | 3 | `conflict` | merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
 | 4 | `task_failed`, `hook_failed`, `delivery_failed` | the queue stays held by this worktree (`held` in the JSON; say so when you report progress). Fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. After `task_failed` and `hook_failed` the default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the verb: the task is the script `hal2-cli-hooks list` shows for that row and verb, its own `<row>/.hal/hooks/<verb>.sh` or an inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`; `hal2-cli-hooks run <row> <verb>` reruns it alone; tasks it cancelled or skipped need no fix of their own), `hook_failed` the `script`, `delivery_failed` the `failures` (the landing is on the default branch and pushed; fix the install/deploy in this worktree, commit, and the rerun delivers again) |
 | 5 | `stopped`, `cancelled`, `interrupted` | the user ended the landing: stopped (Stop button, `worktree stop`, SIGTERM), cancelled while waiting (`by` says who and where, e.g. `the user in hal2-macos`), or interrupted (its shell went away). The default branch is unchanged. Report it and stop: never rerun on your own |
@@ -87,6 +87,8 @@ gitignored). Delete the file when the landed work is finished:
 
 One short block: the queue released (or, after a stop, cancel or release, that it no longer holds it), commits landed (`commits`) and the merge commit (`git -C <main checkout> log --oneline -1`),
 `pushed`, the `tasks` that ran (row and verb; skip `unchanged` and `cached` ones, say how many were cached) and the `hooks`, `warnings` (a failed install, deploy or
-`main-post-commit` hook does not undo the landing: show its output), whether `plans/CURRENT_PLAN` was deleted (and what it named), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
-committed, and the landing's timings (`hal2-cli-hooks landings <id> --json`: lock wait, lock held, gates,
-deliveries; the Landings part of the Hooks tab shows the same). The worktree now equals the new default branch and is ready for the next task.
+`main-post-commit` hook does not undo the landing: show its output; an allowed failure is a warning, not a fix), whether `plans/CURRENT_PLAN` was deleted (and what it named), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
+committed. The worktree now equals the new default branch and is ready for the next task. End the report with
+the durations table from the result's `steps` (after a failure or stop too, when it has them): a markdown table
+of step, outcome and duration, under each step its slowest tasks (cached and unchanged are left out already),
+and the total `duration_ms`; the Landings part of the Hooks tab shows the same live.
