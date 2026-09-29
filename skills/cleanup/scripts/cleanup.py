@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Find and delete the build artifacts of a git worktree.
+"""Find and delete the build artifacts of a git worktree, without asking.
 
 Usage: cleanup.py <command> [options]
-  list [--deps] [--json]   the artifacts of this worktree with kind and size; ignored paths that are not known as
-                           artifacts are listed as `unknown` (never deleted by `delete --kinds`)
+  list [--json]            this worktree's git-ignored paths: `artifact` (delete takes it), `kept` or `unknown`,
+                           with size and how it comes back
   busy                     processes whose command line names this worktree (a build still running); exit 1 if any
-  delete [--deps] [--dry-run] [PATH...]
-                           delete PATHs (worktree-relative), or with none every `build` and `generated` artifact
-                           (+ `deps` with --deps). Every path must be git-ignored, hold no tracked file and not be
-                           protected.
+  delete [--dry-run] [PATH...]
+                           delete PATHs (worktree-relative), or with none every `artifact`. Every path must be
+                           git-ignored, hold no tracked file and not be protected.
 
-Artifacts are git-ignored, untracked paths that match locations.tsv (known hal project locations) or a generic
-pattern (target/, build/, .build/, dist/, node_modules/, __pycache__/, ...). Protected, never deleted: .git, .hal,
-.secrets, .env*, plans/, shotfiles/, *.machine.toml. Exit 2: git is missing.
+What counts: the repo's `.hal/cleanup` (one glob per line relative to the worktree root, `*` within a folder,
+`**` across folders; `!glob` keeps; a trailing `# ...` says how it comes back), or without that file generic
+build folders (target/, build/, .build/, dist/, __pycache__/, ...; fetched dependencies like node_modules/ are
+kept). Ignored paths no rule names are `unknown` and never deleted in bulk. Protected, never listed or deleted:
+.git, .hal, .secrets, .env*, plans/, shotfiles/, *.machine.toml. Exit 2: git is missing.
 """
 import fnmatch
 import json
@@ -22,13 +23,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-# Directory names that are artifacts wherever they are ignored.
+LIST = ".hal/cleanup"
+# Without .hal/cleanup: directory names that are artifacts (or kept dependencies) wherever they are ignored.
 GENERIC = {
-    "build": ["target", "build", ".build", "dist", "out", ".next", ".nuxt", ".turbo", ".parcel-cache",
-              ".svelte-kit", "coverage", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-              ".gradle", ".swiftpm", "DerivedData", ".cache", "*.egg-info", "*.xcresult", "*.noindex", ".tox"],
-    "deps": ["node_modules", ".venv", "venv", "Pods", "Carthage", "vendor/bundle"],
+    "artifact": ["target", "build", ".build", "dist", "out", ".next", ".nuxt", ".turbo", ".parcel-cache",
+                 ".svelte-kit", "coverage", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                 ".gradle", ".swiftpm", "DerivedData", ".cache", "*.egg-info", "*.xcresult", "*.noindex", ".tox"],
+    "kept": ["node_modules", ".venv", "venv", "Pods", "Carthage", "vendor/bundle"],
 }
 PROTECTED = [".git", ".hal", ".hal/*", ".secrets", ".secrets/*", ".env", ".env.*", "plans", "plans/*",
              "shotfiles", "shotfiles/*", "*.machine.toml", "*/.env", "*/.env.*"]
@@ -49,23 +50,43 @@ def toplevel() -> Path:
         sys.exit(1)
 
 
-def known():
-    rows = []
-    for line in (HERE / "locations.tsv").read_text().splitlines():
-        if line.strip() and not line.startswith("#"):
-            path, kind, how = (line.split("\t") + ["", ""])[:3]
-            rows.append((path.strip(), kind.strip(), how.strip()))
-    return rows
+def rules(top: Path):
+    """The rules of `.hal/cleanup` as (glob, kind, how), in file order; None without the file."""
+    path = top / LIST
+    if not path.is_file():
+        return None
+    out = []
+    for line in path.read_text().splitlines():
+        glob, _, how = line.partition("#")
+        glob = glob.strip()
+        if not glob:
+            continue
+        kind = "kept" if glob.startswith("!") else "artifact"
+        out.append((glob.lstrip("!").strip().strip("/"), kind, how.strip()))
+    return out
 
 
-def classify(rel: str):
-    """(kind, how) for an ignored path, or ('unknown', ''). A path inside a known location has its kind."""
+def matches(glob: str, rel: str) -> bool:
+    """Whether the worktree-relative path matches the glob: `*` within one folder, `**` any number of them."""
+    def go(pat, parts):
+        if not pat:
+            return not parts
+        if pat[0] == "**":
+            return any(go(pat[1:], parts[i:]) for i in range(len(parts) + 1))
+        return bool(parts) and fnmatch.fnmatchcase(parts[0], pat[0]) and go(pat[1:], parts[1:])
+    return go(glob.split("/"), rel.split("/"))
+
+
+def classify(rel: str, listed):
+    """(kind, how) of an ignored path, by its own or an enclosing folder's rule; the last matching rule wins."""
     parts = rel.split("/")
     prefixes = ["/".join(parts[:i]) for i in range(len(parts), 0, -1)]
-    for prefix in prefixes:
-        for pattern, kind, how in known():
-            if fnmatch.fnmatch(prefix, pattern) or fnmatch.fnmatch(prefix, pattern.replace("**/", "")):
-                return kind, how
+    if listed is not None:
+        for prefix in prefixes:
+            hits = [(kind, how) for glob, kind, how in listed if matches(glob, prefix)]
+            if hits:
+                return hits[-1]
+        return "unknown", ""
     for prefix in prefixes:
         name = prefix.rsplit("/", 1)[-1]
         for kind, names in GENERIC.items():
@@ -104,9 +125,10 @@ def ignored(top: Path):
     return sorted({line.rstrip("/") for line in out.splitlines() if line.strip()})
 
 
-def artifacts(top: Path, deps: bool):
+def artifacts(top: Path):
+    listed = rules(top)
     entries = [e for e in ignored(top) if not protected(e)]
-    kinds = {e: classify(e) for e in entries}
+    kinds = {e: classify(e, listed) for e in entries}
     # git lists some ignored files and their untracked directory both: an unknown directory with listed content
     # gives way to that content, a known one covers it.
     keep = [e for e in entries
@@ -118,21 +140,21 @@ def artifacts(top: Path, deps: bool):
         path = top / rel
         if not path.exists() and not path.is_symlink():
             continue
-        rows.append({"path": rel, "kind": kind, "size": size(path), "rebuild": how,
-                     "selected": kind in ("build", "generated") or (deps and kind == "deps")})
-    return rows
+        rows.append({"path": rel, "kind": kind, "size": size(path), "rebuild": how, "selected": kind == "artifact"})
+    return rows, listed is not None
 
 
 def cmd_list(args):
     top = toplevel()
-    rows = artifacts(top, "--deps" in args)
+    rows, listed = artifacts(top)
     if "--json" in args:
-        print(json.dumps({"worktree": str(top), "artifacts": rows}, indent=2))
+        print(json.dumps({"worktree": str(top), "rules": LIST if listed else "generic", "artifacts": rows},
+                         indent=2))
         return 0
-    print(f"worktree {top}")
+    print(f"worktree {top} (rules: {LIST if listed else 'generic'})")
     for r in sorted(rows, key=lambda r: -r["size"]):
         mark = "*" if r["selected"] else " "
-        print(f"{mark} {human(r['size']):>7}  {r['kind']:<9}  {r['path']}" + (f"  ({r['rebuild']})" if r["rebuild"] else ""))
+        print(f"{mark} {human(r['size']):>7}  {r['kind']:<8}  {r['path']}" + (f"  ({r['rebuild']})" if r["rebuild"] else ""))
     sel = sum(r["size"] for r in rows if r["selected"])
     print(f"selected (*): {human(sel)} of {human(sum(r['size'] for r in rows))}")
     return 0
@@ -173,7 +195,7 @@ def cmd_delete(args):
     dry = "--dry-run" in args
     paths = [a for a in args if not a.startswith("--")]
     if not paths:
-        paths = [r["path"] for r in artifacts(top, "--deps" in args) if r["selected"]]
+        paths = [r["path"] for r in artifacts(top)[0] if r["selected"]]
     status, freed = 0, 0
     for rel in paths:
         why = check(top, rel.rstrip("/"))

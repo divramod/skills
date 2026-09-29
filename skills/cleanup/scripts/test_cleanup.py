@@ -1,4 +1,5 @@
 """cleanup.py lists a worktree's git-ignored build artifacts and deletes only those."""
+import importlib.util
 import json
 import os
 import subprocess
@@ -48,17 +49,41 @@ class CleanupTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         return {a["path"]: a for a in json.loads(r.stdout)["artifacts"]}
 
-    def test_list_classifies_and_skips_protected(self):
+    def test_generic_rules_without_list(self):
         rows = self.listing()
-        self.assertEqual(rows["code/rust/target"]["kind"], "build")
+        self.assertEqual(rows["code/rust/target"]["kind"], "artifact")
         self.assertTrue(rows["code/rust/target"]["selected"])
-        self.assertEqual(rows["code/swift/libs/Hal2Core/Frameworks"]["kind"], "generated")
-        self.assertEqual(rows["web/node_modules"]["kind"], "deps")
+        self.assertEqual(rows["web/node_modules"]["kind"], "kept")
         self.assertFalse(rows["web/node_modules"]["selected"])
+        self.assertEqual(rows["code/swift/libs/Hal2Core/Frameworks"]["kind"], "unknown")
         self.assertEqual(rows["notes.txt"]["kind"], "unknown")
         self.assertFalse(rows["notes.txt"]["selected"])
         self.assertNotIn(".secrets", rows)
-        self.assertTrue(self.listing("--deps")["web/node_modules"]["selected"])
+
+    def test_list_file_drives_it(self):
+        self.write(".hal/cleanup", "# what goes\ncode/rust/target   # cargo build\n"
+                                   "code/swift/libs/*/Frameworks   # build-core\n"
+                                   "**/node_modules\n!web/node_modules   # bun install\n")
+        rows = self.listing()
+        self.assertEqual(rows["code/rust/target"]["rebuild"], "cargo build")
+        self.assertTrue(rows["code/swift/libs/Hal2Core/Frameworks"]["selected"])
+        self.assertEqual(rows["web/node_modules"]["kind"], "kept")
+        self.assertEqual(rows["web/node_modules"]["rebuild"], "bun install")
+        self.assertEqual(rows["notes.txt"]["kind"], "unknown")
+        self.run_("delete")
+        self.assertFalse((self.repo / "code/swift/libs/Hal2Core/Frameworks").exists())
+        self.assertTrue((self.repo / "web/node_modules").exists())
+        self.assertTrue((self.repo / "notes.txt").exists())
+
+    def test_globs(self):
+        spec = importlib.util.spec_from_file_location("cleanup", SCRIPT)
+        c = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(c)
+        self.assertTrue(c.matches("code/*/build", "code/ios/build"))
+        self.assertFalse(c.matches("code/*/build", "code/a/b/build"))
+        self.assertTrue(c.matches("code/**/build", "code/build"))
+        self.assertTrue(c.matches("code/**/build", "code/a/b/build"))
+        self.assertFalse(c.matches("code/rust/target", "code/rust/target/debug"))
 
     def test_dry_run_deletes_nothing(self):
         r = self.run_("delete", "--dry-run")
@@ -68,7 +93,7 @@ class CleanupTest(unittest.TestCase):
     def test_delete_selected_keeps_deps_unknown_and_tracked(self):
         r = self.run_("delete")
         self.assertFalse((self.repo / "code/rust/target").exists())
-        self.assertFalse((self.repo / "code/swift/libs/Hal2Core/Frameworks").exists())
+        self.assertTrue((self.repo / "code/swift/libs/Hal2Core/Frameworks").exists())
         self.assertTrue((self.repo / "web/node_modules").exists())
         self.assertTrue((self.repo / "notes.txt").exists())
         self.assertTrue((self.repo / ".secrets/00/TOKEN").exists())
