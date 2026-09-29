@@ -1,6 +1,6 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch; resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
 ---
 
 # mtm
@@ -146,14 +146,26 @@ gitignored). Delete the file when the landed work is finished:
   current` shows `done` equal to `total`, the `plan` skill next to this one); a plan with open steps keeps it;
 - missing or empty: nothing to do.
 
-## 7. Report
+When it was deleted, delete `HANDOFF.md` too (the session state of the finished work), unless git tracks it.
+
+## 7. Clean up
+
+Only when the worktree is fully landed: the queue was released at step 5 and `git log --oneline <default>..HEAD`
+is empty. After a stop, a cancel, a held queue or commits left over, skip it (the rerun would rebuild everything)
+and say so. Run the [cleanup](../cleanup/SKILL.md) skill's steps in the worktree (`python3
+<cleanup-skill-dir>/scripts/cleanup.py busy`, then `delete`, no question): it deletes the build artifacts the
+repo's `.hal/cleanup` lists (generic build folders without the file) and keeps what it marks `!` (e.g. fetched
+dependencies). A busy worktree (a build or test still runs in it) is not cleaned: name the process. Note the space
+freed and any `unknown` rows for the report.
+
+## 8. Report
 
 One short block: the queue released (or, after a stop, cancel or release, that it no longer holds it), commits landed (`commits`, of every landing of this `/mtm`) and the merge commit(s) (`git -C <main checkout> log --oneline -2`), the plan steps finished after the landing (and any left open, with why),
 `git log --oneline <default>..HEAD` empty and the worktree clean (say so; if not, what is left and why),
 `pushed`, the `tasks` that ran (row and verb; skip `unchanged` and `cached` ones, say how many were cached) and the `hooks`, `warnings` (a failed install, deploy or
-`main-post-commit` hook does not undo the landing: show its output; an allowed failure is a warning, not a fix), whether `plans/CURRENT_PLAN` was deleted (and what it named), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
+`main-post-commit` hook does not undo the landing: show its output; an allowed failure is a warning, not a fix), whether `plans/CURRENT_PLAN` was deleted (and what it named) and `HANDOFF.md` with it, the cleanup (space freed, or why it was skipped; `unknown` rows to add to `.hal/cleanup`), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
 committed. the side branches the landing deleted (`branches_deleted`) and those it kept because they are not merged
-(`branches_kept`: say so, they are left for the user). The worktree now equals the new default branch and is ready for the next task. End the report with
+(`branches_kept`: say so, they are left for the user). The worktree now equals the new default branch, without build artifacts, and is ready for the next task. End the report with
 the durations table from the result's `steps` (after a failure or stop too, when it has them): a markdown table
 of step, outcome and duration, under each step its slowest tasks (cached and unchanged are left out already),
 and the total `duration_ms`; the Landings part of the Hooks tab shows the same live.
