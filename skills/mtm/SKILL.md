@@ -1,6 +1,6 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`) and ends with what landed (the plan and its steps, or the shot); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
 ---
 
 # mtm
@@ -139,7 +139,14 @@ and lands before anything else, so no commit is left behind on the worktree bran
 ## 6. Clear the current task
 
 After the landing and the plan's finish, read `plans/CURRENT_PLAN` in the worktree (the landing's reset keeps it, it is
-gitignored). Delete the file when the landed work is finished:
+gitignored). First keep **What landed** for the report's last lines (step 8), since the file may go now:
+
+- a plan (`<NNNN>-<slug>`): its `title` and `steps` from `python3 <plan-skill-dir>/scripts/plan.py current`
+  (after the plan's finish, so the step statuses are final);
+- a shot (`<shotfile>/<n>[/<title-slug>]`) or a task name: that name;
+- missing or empty: nothing.
+
+Then delete the file when the landed work is finished:
 
 - it names a shot (`<shotfile>/<n>/<title-slug>`) or a task name: the work has landed, delete it;
 - it names a plan (`<NNNN>-<slug>`): delete it when every step is done (`python3 <plan-skill-dir>/scripts/plan.py
@@ -169,3 +176,16 @@ committed. the side branches the landing deleted (`branches_deleted`) and those 
 the durations table from the result's `steps` (after a failure or stop too, when it has them): a markdown table
 of step, outcome and duration, under each step its slowest tasks (cached and unchanged are left out already),
 and the total `duration_ms`; the Landings part of the Hooks tab shows the same live.
+
+When the work landed (step 4 exited 0), the very last lines of the message, after the durations table, are
+**What landed** kept at step 6, so the user still sees what the work was after `plans/CURRENT_PLAN` is gone:
+
+```
+**Plan 0059: topic-selfimprovement 3 show as last message after mtm was successful**
+1. ✓ <step>
+2. ○ <step> (open)
+```
+
+one line per step of the plan's table, `✓` when done, `○ ... (open)` otherwise; for a shot or a task one line,
+`**Shot <shotfile>/<n>/<title-slug>**` or `**Task <name>**`. Nothing when `CURRENT_PLAN` was missing, and never
+after a stop, a cancel or a queue left held.
