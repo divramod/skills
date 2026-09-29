@@ -16,6 +16,11 @@ A flat plans/<NNNN>-<slug>.md from before the folder layout is still read and up
   plan.py status <step> "<status>" [--plan <slug>]         set one step's Status cell
   plan.py grilled [--plan <slug>]                          set the plan's `Grilled:` line to today
   plan.py check                                            exit 1 when a plan number is used twice
+  plan.py -g ...                                           the same on the global plans folder (hal2's
+                                                           plans.toml root, default ~/Documents/hal2/plans;
+                                                           --global-root <dir> overrides): new (through
+                                                           `hal2-cli-plans new --global`), list, status,
+                                                           grilled with --plan <n>; no CURRENT_PLAN there
 
 Run from anywhere inside the repo, or pass --root. Prints JSON on stdout; exits 1 with a message on stderr.
 """
@@ -23,6 +28,8 @@ import argparse
 import datetime as dt
 import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,6 +45,41 @@ RESEARCH = "research"
 
 class PlanError(Exception):
     pass
+
+
+def use_global(folder: Path) -> Path:
+    """Work on the global plans folder `folder`: plans are `folder/<slug>/plan.md`; the root to pass on."""
+    global PLANS
+    PLANS = Path(folder.name)
+    return folder.parent
+
+
+def global_folder() -> Path:
+    """hal2's global plans folder (`hal2-cli-plans settings --json`)."""
+    if shutil.which("hal2-cli-plans") is None:
+        raise PlanError("hal2-cli-plans is missing: install hal2 (cargo install --path apps/hal2-cli-plans)")
+    out = subprocess.run(["hal2-cli-plans", "settings", "--json"], capture_output=True, text=True)
+    if out.returncode != 0:
+        raise PlanError(f"hal2-cli-plans settings: {out.stderr.strip()}")
+    return Path(json.loads(out.stdout)["root"])
+
+
+def new_global_plan(folder: Path, title: str, goal: str, research: bool) -> Path:
+    """A global plan, numbered and written by hal2 (`hal2-cli-plans new --global`)."""
+    if shutil.which("hal2-cli-plans") is None:
+        raise PlanError("hal2-cli-plans is missing: install hal2 (cargo install --path apps/hal2-cli-plans)")
+    args = ["hal2-cli-plans", "new", title, "--global", "--json"]
+    if goal:
+        args += ["--goal", goal]
+    if research:
+        args.append("--research")
+    out = subprocess.run(args, capture_output=True, text=True)
+    if out.returncode != 0:
+        raise PlanError(f"hal2-cli-plans new: {out.stderr.strip()}")
+    path = Path(json.loads(out.stdout)["path"]).resolve()
+    if path.parent.parent.resolve() != folder.resolve():
+        raise PlanError(f"hal2-cli-plans created {path}, outside the global folder {folder}")
+    return path
 
 
 def find_root(start: Path) -> Path:
@@ -215,6 +257,9 @@ def set_grilled(path: Path) -> None:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", type=Path, help="repository root (default: found from the current directory)")
+    parser.add_argument("-g", "--global", dest="is_global", action="store_true",
+                        help="the global plans folder instead of a repository")
+    parser.add_argument("--global-root", type=Path, help="the global plans folder (default: hal2's plans.toml)")
     sub = parser.add_subparsers(dest="command", required=True)
     p_new = sub.add_parser("new")
     p_new.add_argument("title")
@@ -236,6 +281,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.is_global or args.global_root:
+            return run_global(args)
         root = args.root.resolve() if args.root else find_root(Path.cwd())
         if args.command == "check":
             return plan_number.main(["--root", str(root), "check"])
@@ -260,6 +307,29 @@ def main(argv: list[str]) -> int:
     except PlanError as error:
         print(f"plan.py: {error}", file=sys.stderr)
         return 1
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def run_global(args) -> int:
+    """The commands on the global plans folder: no git, no CURRENT_PLAN."""
+    folder = (args.global_root or global_folder()).expanduser().resolve()
+    root = use_global(folder)
+    if args.command == "new":
+        result = describe(root, new_global_plan(folder, args.title, args.goal, args.research))
+    elif args.command == "list":
+        result = [describe(root, p) for p in plan_files(root)]
+    elif args.command in ("status", "grilled"):
+        if not args.plan:
+            raise PlanError("a global plan has no current plan: name it with --plan <n>")
+        path = resolve(root, args.plan)
+        if args.command == "status":
+            set_status(path, args.step, args.status)
+        else:
+            set_grilled(path)
+        result = describe(root, path)
+    else:
+        raise PlanError(f"'{args.command}' works on a repository only: global plans have no CURRENT_PLAN")
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 

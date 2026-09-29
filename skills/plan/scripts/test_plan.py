@@ -133,5 +133,56 @@ class PlanTest(unittest.TestCase):
         self.assertIn("names 'shooter/1', which is not a plan", result.stderr)
 
 
+class GlobalPlanTest(unittest.TestCase):
+    """plan.py -g: the global plans folder, no git, no CURRENT_PLAN."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.folder = Path(self.tmp.name) / "global-plans"
+        (self.folder / "0001-life").mkdir(parents=True)
+        (self.folder / "0001-life" / "plan.md").write_text(EXISTING.replace("0002", "0001"))
+        # A fake hal2-cli-plans that creates what `new --global` would.
+        self.bin = Path(self.tmp.name) / "bin"
+        self.bin.mkdir()
+        fake = self.bin / "hal2-cli-plans"
+        fake.write_text(f"""#!/bin/sh
+mkdir -p {self.folder}/0002-next
+printf '# Plan 0002: Next\\n\\n| # | Step | Status |\\n|---|---|---|\\n| 1 | a | next |\\n' > {self.folder}/0002-next/plan.md
+echo '{{"slug": "0002-next", "path": "{self.folder}/0002-next/plan.md"}}'
+""")
+        fake.chmod(0o755)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_plan(self, *args) -> subprocess.CompletedProcess:
+        env = {"PATH": f"{self.bin}:/usr/bin:/bin"}
+        return subprocess.run([sys.executable, str(SCRIPT), "-g", "--global-root", str(self.folder), *args],
+                              capture_output=True, text=True, env=env)
+
+    def plan(self, *args):
+        result = self.run_plan(*args)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_list_status_and_grilled_on_a_named_plan(self):
+        self.assertEqual([p["slug"] for p in self.plan("list")], ["0001-life"])
+        info = self.plan("status", "2", "done", "--plan", "1")
+        self.assertEqual(info["done"], 2)
+        self.assertFalse(info["current"])
+        self.assertTrue(self.plan("grilled", "--plan", "1")["grilled"])
+
+    def test_new_goes_through_hal2(self):
+        info = self.plan("new", "Next")
+        self.assertEqual(info["slug"], "0002-next")
+        self.assertEqual(info["next"]["number"], "1")
+
+    def test_current_and_use_are_for_repositories_only(self):
+        for args in (["current"], ["use", "1"], ["status", "1", "done"]):
+            result = self.run_plan(*args)
+            self.assertEqual(result.returncode, 1, args)
+            self.assertIn("plan.py:", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -47,6 +47,13 @@ lists numbers used by two plans (for example after merging branches from before 
 **One home per decision**: decisions that matter only to this plan go under the plan's **Decisions**; decisions
 that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and the plan links them.
 
+**Global plans** belong to no repository: they live in hal2's global plans folder (`plans.toml`'s `root`,
+default `~/Documents/hal2/plans`, laid out like `plans/`), and hal2-macos shows them next to every repository's
+plans. `-g` goes before the command: `python3 $S/plan.py -g new "<title>"` (numbered and written by
+`hal2-cli-plans new --global`, so hal2 must be installed), `-g list`, `-g status <step> <status> --plan <n>`,
+`-g grilled --plan <n>`. A global plan has no `CURRENT_PLAN` (no statusline), so always name it (`--plan <n>`),
+and its steps are not committed (the folder is no repository) unless the user keeps that folder in git.
+
 ## Pick the action
 
 | Call | Short | Does |
@@ -57,6 +64,8 @@ that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and
 | `/plan next` | `/plan n` | [run the plan](#run-the-plan) from its next step to the end, offering `/grill` first |
 | `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
 | `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
+| `/plan new -g <title>` | `/plan r -g <topic>` | a global plan (see "Global plans" above; `--research` works too) |
+| `/plan s -g <n>`, `/plan n -g <n>`, `/plan d -g <n> [<step>]` | | status, run, finish a step of global plan `<n>` |
 | `/plan check` | `/plan c` | `python3 $S/plan.py check`: report plan numbers used twice |
 | `/plan help` | `/plan h` | print this table and stop |
 
