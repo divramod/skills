@@ -160,6 +160,8 @@ then lets hal2 clear this Claude Code session and type `/handoff c` into the fre
    It waits for your turn to end, waits out a draft the user is typing (and the user's own turns), types `/clear`
    only into an empty prompt, confirms the new session through its hook record, then types `/handoff c`; the
    job shows on the agent in hal2's Agents pane, where it can be cancelled (`--cancel`).
-3. It exits non-zero when it cannot start (autoclear disabled in agents.toml, not Claude Code, not in tmux,
-   `already-running`, no hal2): report its message and fall back to telling the user to `/clear` and paste the
+3. It clears only while the checkout's `plans/CURRENT_PLAN` names a plan with steps left, and checks again right
+   before it types `/clear` (a finished plan's last output, e.g. the merge-to-main report, stays on screen). It
+   exits non-zero when it cannot start (`no-open-plan`, autoclear disabled in agents.toml, not Claude Code, not in
+   tmux, `already-running`, no hal2): report its message and fall back to telling the user to `/clear` and paste the
    prompt.

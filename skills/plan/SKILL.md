@@ -137,8 +137,11 @@ mode and without per-step grill offers. Ask the user only for
    ```bash
    python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] percent, else 35; percent as the statusline shows it
    ```
+   - No step is left that you run now (this was the last step, or only steps checked after the landing remain):
+     skip the check, never hand off or clear here: the plan's end ("Run the plan" point 3: done, or the user's
+     `/mtm` lands it) and its report must stay on screen. hal2 refuses to clear then too (`no-open-plan`).
    - `stop` is false: continue with the next step.
-   - `stop` is true: stop the plan here and hand off:
+   - `stop` is true (and steps are left that you run now): stop the plan here and hand off:
      1. Stop your background work (TaskStop every background shell, subagent, workflow and monitor you started):
         after a clear their notifications would wake the fresh session. Note in the handoff what was stopped and
         must be rerun.
@@ -149,7 +152,8 @@ mode and without per-step grill offers. Ask the user only for
         ```bash
         hal2-cli-agents clear-and-continue --detach --json    # pane and session from $TMUX_PANE, $CLAUDE_CODE_SESSION_ID
         ```
-        When it fails to start (non-zero exit, `already-running`), say so and fall back to the next point.
+        When it fails to start (non-zero exit: `already-running`, `no-open-plan`, ...), say so and fall back to the
+        next point.
      4. `autoclear` is false (its `autoclear_reason` says why: disabled, not Claude Code, not in tmux, no hal2):
         tell the user to run `/clear` and then `/handoff c` to continue.
    - `known` is false (not Claude Code, no transcript): judge the fill level yourself and say so; when in doubt,
