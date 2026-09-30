@@ -109,6 +109,17 @@ class PlanTest(unittest.TestCase):
         self.assertRegex(info["grilled"], r"^\d{4}-\d{2}-\d{2}$")
         self.assertEqual(self.plan("grilled")["grilled"], info["grilled"])  # idempotent, one line
 
+    def test_last_step_done_stamps_finished_and_reopening_removes_it(self):
+        info = self.plan("new", "Tiny")
+        path = self.root / info["path"]
+        self.assertEqual(info["finished"], "")
+        self.plan("status", "1", "done")
+        text = path.read_text()
+        self.assertRegex(text, r"\nFinished: \d{4}-\d{2}-\d{2}\n")
+        self.assertTrue(self.plan("current")["finished"])
+        self.plan("status", "1", "next")
+        self.assertNotIn("Finished:", path.read_text())
+
     def test_grilled_auto_counts_autogrill_rounds(self):
         self.write_plan()
         self.plan("use", "2")
