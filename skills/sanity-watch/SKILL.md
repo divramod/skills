@@ -156,7 +156,9 @@ them.
    > - a regression test that replays the incident;
    > - a step that adds logs to the code path that failed, so the next occurrence is easy to debug (what it did,
    >   with which inputs, why it gave up), whose done-when shows the new log lines;
-   > - the fix itself.
+   > - the fix itself;
+   > - the plan's `uat.md` (`plan.py uat`) with a check that provokes the incident again, when a person can, and
+   >   expects the session not to stop.
    >
    > Autogrill the plan twice: two full /grill passes in which you decide every branch yourself by INTENT.md, the
    > ADRs and the rule "the more professional, battle-tested option", with no question and no confirmation, every
