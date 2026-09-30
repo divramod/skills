@@ -100,3 +100,40 @@ class Labels(unittest.TestCase):
             self.assertIn("hal2 wt 02, other wt 02", problem)
         finally:
             evidence.agents, evidence.current_repo = real_agents, real_repo
+
+
+class Capture(unittest.TestCase):
+    def test_an_incident_becomes_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            jobs = tmp / "state/agents/autoclear"
+            jobs.mkdir(parents=True)
+            (jobs / "54.json").write_text(json.dumps(
+                {"state": "failed", "reason": "clear-unconfirmed", "pane": "%54", "old_session": "s1"}))
+            (jobs / "54.log").write_text("2026-09-30 10:00:00 clearing\n")
+            (jobs / "s1.guard").write_text(json.dumps({"session_id": "s1", "pane": "%54", "stage": "soft"}))
+            (jobs / "sweep.log").write_text("2026-09-30 10:00:01   %54 02 s1 context 40% state done plan x: skip\n"
+                                            "2026-09-30 10:00:01   %9 03 s9 context 1% state done plan x: skip\n")
+            agent = {"pane_id": "%54", "kind": "claude", "project": "/a/hal2", "slot": "02", "session_id": "s1"}
+            saved = (evidence.JOBS, evidence.agents, evidence.screen, evidence.current_repo, evidence.need)
+            try:
+                evidence.JOBS = jobs
+                evidence.agents = lambda: [agent]
+                evidence.screen = lambda pane: "❯ /clear\n  ─── History 96/100 ───"
+                evidence.current_repo = lambda: "hal2"
+                evidence.need = lambda tool: None
+                args = type("A", (), {"pane": None, "session": None, "worktree": "02", "repo": None,
+                                      "out": str(tmp / "out"), "hours": 1e6})()
+                self.assertEqual(evidence.capture(args), 0)
+            finally:
+                evidence.JOBS, evidence.agents, evidence.screen, evidence.current_repo, evidence.need = saved
+            out = tmp / "out"
+            self.assertIn("History 96/100", (out / "screen.txt").read_text())
+            self.assertEqual(json.loads((out / "job.json").read_text())["reason"], "clear-unconfirmed")
+            self.assertTrue((out / "job.log").exists() and (out / "marker-s1.json").exists())
+            sweep = (out / "sweep.log").read_text()
+            self.assertIn("%54", sweep)
+            self.assertNotIn("%9 ", sweep)
+            readme = (out / "README.md").read_text()
+            self.assertIn("hal2 wt 02", readme)
+            self.assertIn("src/fixtures/screens", readme)

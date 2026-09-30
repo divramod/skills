@@ -6,6 +6,10 @@
       read-only: no screenshot needed), its job record and log, the guard
       markers of its sessions, each session's transcript tail (tools, hook
       denials, the typed requests), the sweep's lines, the settings and binary
+  evidence.py capture --worktree <NN> [--repo <name>] --out <dir> [--hours 3]
+      the same incident as files, to turn into hal2 test fixtures: screen.txt,
+      agent.json, job.json, job.log, marker-<session>.json, transcript-<session>.txt,
+      guard.log, sweep.log (the pane's lines), README.md (what each file is)
   evidence.py doctor [--hours 24]
       every pane's failed or stuck autoclear of the last hours (nobody reported)
   evidence.py selfcheck [--repo <hal2 checkout>]
@@ -257,6 +261,60 @@ def show(args):
     print("## sweep (hal2-api.log)\n" + "\n".join(sweep_lines(pane, args.hours)))
 
 
+def capture(args):
+    """Save one incident's evidence as files in `args.out` (see the docstring)."""
+    need("hal2-cli-agents")
+    pane, agent, problem = resolve_pane(args)
+    if not pane:
+        print(f"no agent found: {problem}", file=sys.stderr)
+        return 1
+    out = Path(args.out).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    name = agent_label(agent) if agent else f"the agent in pane {pane}"
+    files = {}
+
+    def save(file, text, what):
+        (out / file).write_text(text if text.endswith("\n") else text + "\n")
+        files[file] = what
+
+    save("screen.txt", screen(pane), "the pane's screen as text (`hal2-cli-agents capture`): a scrape fixture")
+    if agent:
+        save("agent.json", json.dumps(agent, indent=1), "the agent as `hal2-cli-agents list --json` shows it")
+    stem = pane_stem(pane)
+    job = JOBS / f"{stem}.json"
+    if job.exists():
+        save("job.json", job.read_text(), "the job record: state, reason, message, sessions, times")
+    log = JOBS / f"{stem}.log"
+    if log.exists():
+        save("job.log", "\n".join(log.read_text(errors="replace").splitlines()[-200:]), "the job log (last 200 lines)")
+    since = time.time() - args.hours * 3600
+    sessions = [agent["session_id"]] if agent and agent.get("session_id") else []
+    record = read_json(job) or {}
+    for key in ("old_session", "new_session"):
+        if record.get(key) and record[key] not in sessions:
+            sessions.append(record[key])
+    for path, m in markers():
+        if m.get("pane") == pane and path.stat().st_mtime >= since:
+            save(f"marker-{m['session_id']}.json", json.dumps(m, indent=1), "a guard marker of the pane's sessions")
+            if m["session_id"] not in sessions:
+                sessions.append(m["session_id"])
+    for session in sessions[:4]:
+        path = transcript(session)
+        if path:
+            save(f"transcript-{session}.txt", "\n".join(transcript_tail(path, 60)),
+                 "the session's transcript tail: tools, hook denials, typed prompts")
+    save("guard.log", "\n".join(own_log("guard.log", [pane] + sessions, args.hours, 200)), "the guard's decisions")
+    save("sweep.log", "\n".join(own_log("sweep.log", [f" {pane} "], args.hours, 100)), "the sweep's lines for the pane")
+    readme = [f"# autoclear incident: {name}", "",
+              f"Captured {time.strftime('%Y-%m-%d %H:%M:%S')} by `evidence.py capture` (pane {pane}).", ""]
+    readme += [f"- `{file}`: {what}" for file, what in files.items()]
+    readme += ["", "Turn `screen.txt` into `code/rust/libs/hal2-agents/src/fixtures/screens/<case>.txt` (or a test "
+               "input) and replay the job's record and log in a regression test."]
+    save("README.md", "\n".join(readme), "this file")
+    print(f"{name}: {len(files)} files in {out}")
+    return 0
+
+
 def doctor(args):
     since = time.time() - args.hours * 3600
     problems = 0
@@ -321,6 +379,13 @@ def main():
     s.add_argument("--worktree", help="worktree slot, e.g. 02 or main")
     s.add_argument("--repo", help="repository name (default: this checkout's, else any)")
     s.add_argument("--hours", type=float, default=3)
+    k = sub.add_parser("capture")
+    k.add_argument("--pane")
+    k.add_argument("--session")
+    k.add_argument("--worktree", help="worktree slot, e.g. 02 or main")
+    k.add_argument("--repo", help="repository name (default: this checkout's, else any)")
+    k.add_argument("--out", required=True)
+    k.add_argument("--hours", type=float, default=3)
     d = sub.add_parser("doctor")
     d.add_argument("--hours", type=float, default=24)
     c = sub.add_parser("selfcheck")
@@ -328,6 +393,8 @@ def main():
     args = parser.parse_args()
     if args.cmd == "show":
         show(args)
+    elif args.cmd == "capture":
+        sys.exit(capture(args))
     elif args.cmd == "doctor":
         doctor(args)
     else:

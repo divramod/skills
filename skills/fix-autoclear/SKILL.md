@@ -54,8 +54,12 @@ inputs (the Bash command, the screen text, the records) is the proof. Distinguis
 
 ## 4. Fix and verify
 
-1. Regression test **from the incident**: the real command, screen or record as the test's input, with a comment
-   naming the worktree and date. It fails before the fix.
+1. Regression test **from the incident**: `$E capture --worktree <NN> --out <scratch>/incident` saves the screen,
+   agent, job record and log, markers, transcript tails, guard and sweep lines as files (its README.md says which is
+   which). Turn them into test inputs: `screen.txt` (trimmed to the lines that matter) into
+   `code/rust/libs/hal2-agents/src/fixtures/screens/<case>.txt` for a scrape test, the record, log or command into
+   the test's input, with a comment naming the agent (`hal2 wt 02`) and date. It fails before the fix. Capture
+   while the pane still shows the incident; afterwards only the files remain.
 2. Fix, then `cargo fmt --all`, `cargo nextest run -p hal2-agents`, `cargo clippy -p hal2-agents --all-targets`
    (from `code/rust/`).
 3. `cargo install --path apps/hal2-cli-agents` so the hooks and jobs run the fix now (hal2-api's sweep runs its
