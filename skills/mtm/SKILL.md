@@ -32,7 +32,8 @@ question tool, recommended option first.
 Either is the user's consent to commit in this worktree, land on the default branch and push it. Never start it on
 your own otherwise: not mid-plan, not for a `manual` plan (every research plan is one: its research lands with the
 implementation plan that follows it), not for another worktree or session, not because another
-session says a fix has landed, never again after it ended with exit 5; never ask another session to run it. Once
+session says a fix has landed, never again after it ended with exit 5 (unless your own shell tool's time limit
+caused that exit, not the user: steps 1 and 4); never ask another session to run it. Once
 started, finish it: fix and rerun until it lands.
 
 **A plan's landing asks nothing it can decide.** The user may be away, and while the queue is reserved every other
@@ -51,18 +52,28 @@ you") before asking. A landing that went through only reports.
 
 Run in the worktree; if it is the main checkout on the default branch, stop: `/mtm` lands a worktree.
 
-`hal2-cli-git worktree reserve --json [<slot>]` joins the repo's merge queue, waits for this worktree's turn (FIFO,
-no timeout; run it in the background when your shell tool limits a command's time, and wait for it to finish) and
-keeps the turn as a `reserved` hold. From then on nothing else lands on the default branch until this worktree's
-landing takes the reservation over, so the default branch merged in at step 3 stays current and its conflicts are
-fixed once. Never kill a waiting reserve for taking long. If `hal2-cli-git` is missing, run
-`bash $S/install-prerequisites.sh` once and retry; one that does not know `reserve` yet (exit 2, `unknown worktree command`) is
-older than the reservation: go on without it (the landing then waits in the queue itself at step 4).
+`hal2-cli-git worktree reserve --max-wait 100m --json [<slot>]` joins the repo's merge queue, waits for this
+worktree's turn (FIFO) and keeps the turn as a `reserved` hold. From then on nothing else lands on the default branch
+until this worktree's landing takes the reservation over, so the default branch merged in at step 3 stays current
+and its conflicts are fixed once. If `hal2-cli-git` is missing, run `bash $S/install-prerequisites.sh` once and
+retry; one that does not know `reserve` yet (exit 2, `unknown worktree command`) is older than the reservation: go
+on without it (the landing then waits in the queue itself at step 4).
+
+**The wait has no time limit, however long the landings ahead take.** Your shell tool may limit a command's time
+(Claude Code: a background command ends after its `timeout`, 2 h at most); a reserve that limit ends is `stopped`
+and loses its place. So it waits in slices below the limit: `--max-wait 100m`, run in the background with the
+tool's maximum timeout (Claude Code: `run_in_background` with `timeout` 7200000; a tool with a lower limit gets a
+`--max-wait` 20 minutes below it). When a slice passes before the turn comes, reserve parks the ticket (it keeps
+its place for 10 minutes without a process) and exits 6 `waiting` (`ahead`: tickets still ahead): **rerun the same
+command at once**; the rerun adopts the parked ticket at its place. Rerun as often as it takes, never ask and never
+give up for taking long, and never kill a waiting reserve. One that does not know `--max-wait` yet (exit 2,
+`unknown argument`) is older: run it without, in the background with the tool's maximum timeout.
 
 | Exit | JSON | Do |
 |---|---|---|
 | 0 | `status: reserved` | go to 2. `kept: true`: the worktree already held the queue (its `hold` says why: an earlier failed or interrupted landing, or a reservation); that is fine, go on |
-| 5 | `stopped`, `cancelled`, `interrupted` | the user ended the wait (e.g. cancelled it in hal2-macos, `by` says who): report it and stop, never rerun on your own |
+| 6 | `status: waiting` | the slice passed, the ticket is parked at its place: rerun the same command at once (no limit on the reruns; report `ahead` when it changed) |
+| 5 | `stopped`, `cancelled`, `interrupted` | the user ended the wait (e.g. cancelled it in hal2-macos or with `worktree stop`, `by` says who): report it and stop, never rerun on your own. Exception: your own shell tool's time limit ended it (its notice says the command hit its timeout, not the user): rerun it as for exit 6 (the place may be lost; a longer landing ahead is no reason to stop) |
 | 1 | `error` | report the `message` and stop |
 
 **Holding the reservation.** Every other worktree's landing waits while this one holds: go straight through steps
@@ -112,8 +123,14 @@ The default branch cannot move now, so what you merge in here is what the landin
    are ahead of it in the merge queue (`hal2-cli-git worktree queue` lists the holder, active or held and why, and the waiters;
    hal2-macos shows every repo's queue), then for its deliveries; never kill a waiting landing for taking long.
    While it waits the user may reorder the queue in hal2-macos: a line `moved to #n in the merge queue by <who>`
-   is reported, not acted on. To end a landing (the user asks you to), run `hal2-cli-git worktree stop`; never
-   kill its shell or background task (that leaves it holding the queue as `interrupted`).
+   is reported, not acted on. Run it like the reserve: in the background with your shell tool's maximum timeout
+   (Claude Code: `timeout` 7200000) and wait for it; its gates may take long, and there is no limit on that. When
+   the tool's own limit ends it anyway (its notice says the command hit its timeout, not the user), it ended
+   `stopped` before it merged into the default branch (the queue released) or `interrupted` (the queue held for
+   this worktree): rerun it at once (reserve first again when the queue was released); that is not the user's stop
+   of exit 5. To end a landing (the user asks you to), run
+   `hal2-cli-git worktree stop`; never kill its shell or background task (that leaves it holding the queue as
+   `interrupted`).
 2. Act on the exit code; after every fix go back to 1:
 
 | Exit | JSON `status` | Do |
