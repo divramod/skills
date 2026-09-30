@@ -358,7 +358,7 @@ def selfcheck(args):
     for name in re.findall(r"`([a-z][a-z-]+)`", block):
         if f'"{name}"' not in source:
             drift.append(f"name `{name}` no longer in {SRC}")
-    for fact in re.findall(r"`(REARM_POINTS|MAX_ATTEMPTS|DEFAULT_PROMPT|HANDOFF_PROGRAMS|HANDOFF_SCRIPTS)`", skill):
+    for fact in re.findall(r"`(REARM_POINTS|MAX_ATTEMPTS|DEFAULT_PROMPT|HANDOFF_PROGRAMS|HANDOFF_SCRIPTS|RETRY_BACKOFF|CHECK)`", skill):
         if fact not in source:
             drift.append(f"constant {fact} no longer in {SRC}")
     hooks = (HOME / ".claude/settings.json").read_text() if (HOME / ".claude/settings.json").exists() else ""

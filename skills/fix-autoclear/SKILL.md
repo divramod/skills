@@ -92,7 +92,7 @@ the case added and what changed in this skill.
 
 ## Insider knowledge
 
-As of hal2 plan 0057 (the job), research 0010 and plan 0066 (guard and sweep). Keep this true: `$E selfcheck`.
+As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and plan 0077 (reports, early retries). Keep this true: `$E selfcheck`.
 
 **Three parts, one flow.**
 
@@ -119,6 +119,13 @@ As of hal2 plan 0057 (the job), research 0010 and plan 0066 (guard and sweep). K
    `hal2_api::sweep`): S1 a turn ended above the threshold without a running job → starts the job; S13 a soft stop
    older than `grace_minutes` still working without a hand-off → the job with `--interrupt`. After `MAX_ATTEMPTS`
    (3) jobs for a session it gives up (`attempts` job record, marker `gave_up`: the guard then lets everything pass).
+4. **Reports and early retries** (`report.rs`, hal2-api's `apps/hal2-api/src/sweep.rs`): every 10 s (`CHECK`)
+   hal2-api looks for job records failed in the last 24 h and not yet in `autoclear/reported.json`. Each runs a
+   sweep round early: the first retry at once, the next 1 and 5 minutes after the previous failure
+   (`RETRY_BACKOFF`; the sweep skips with `backing off after a failure` until then). All but `agent-gone`,
+   `session-ended`, `already-running`, `invalid-request` go into the global shotfile `fix-autoclear`, one shot per
+   session (`<repo> wt <NN>: <reason>`, the job's facts, `/fix-autoclear <NN>`); later failures of the session are
+   appended while the shot is open. `sweep.log` gets a `failure ...: reported in fix-autoclear shot <n>` line.
 
 **Names** (job states and fail reasons, as the records write them):
 <!-- names -->
@@ -139,7 +146,8 @@ request's flags, every change of the session's hook record, each hand-off and pl
 reads nothing known); `guard.log` a line per guard decision within 5 points of the threshold or with a marker
 (`<time> <pane> <session> <tool> <command>: <verdict> (<why>), context <p>, marker <stage>`, after the soft stop
 `; not a hand-off: <the command that failed the check>`); `sweep.log` per round, every Claude agent's context,
-state, plan and `skip (<why>)` or what it started.
+state, plan and `skip (<why>)` or what it started, plus a line per reported failure; `reported.json` the reported
+failures and each session's shot number.
 
 **Other files**: the agents' hook records `<state>/agents/<session>.json` (state, last event), the send log
 `<state>/agents/sent/<n>.jsonl` (what hal2 typed, source `autoclear`), transcripts
@@ -147,5 +155,6 @@ state, plan and `skip (<why>)` or what it started.
 (`claude_screen`, the input box).
 
 **Traps**: an old `~/.cargo/bin/hal2-cli-agents` (the hooks run it: check its build time against the fix); a
-Claude Code update that changes the screen (box, `-- INSERT --`, the stop lines); the sweep only notices a
-failure at its next tick, so a failed job can leave the pane stopped for up to `sweep_minutes`.
+Claude Code update that changes the screen (box, `-- INSERT --`, the history box's `─── History n/m ───` rule, the
+stop lines); an old `hal2-api` (the reports and early retries run in it: `hal2-api install` after installing);
+`* Waiting for API response · will retry` is Claude still working, not a failure.
