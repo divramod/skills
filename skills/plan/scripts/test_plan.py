@@ -73,7 +73,7 @@ class PlanTest(unittest.TestCase):
         text = (self.plans / "0003-lean-shooter-cli" / "plan.md").read_text()
         self.assertIn("# Plan 0003: Lean Shooter CLI!", text)
         self.assertIn("Replace the old binary.", text)
-        self.assertEqual(info["total"], 1)
+        self.assertEqual(info["total"], 2)  # the step and the UAT step
         self.assertEqual(info["path"], "plans/0003-lean-shooter-cli/plan.md")
         self.assertEqual([p["slug"] for p in self.plan("list")], ["0002-migrate-daily-tools", "0003-lean-shooter-cli"])
 
@@ -114,11 +114,31 @@ class PlanTest(unittest.TestCase):
         path = self.root / info["path"]
         self.assertEqual(info["finished"], "")
         self.plan("status", "1", "done")
+        self.assertNotIn("Finished:", path.read_text())
+        self.plan("status", "2", "done")
         text = path.read_text()
         self.assertRegex(text, r"\nFinished: \d{4}-\d{2}-\d{2}\n")
         self.assertTrue(self.plan("current")["finished"])
-        self.plan("status", "1", "next")
+        self.plan("status", "2", "next")
         self.assertNotIn("Finished:", path.read_text())
+
+    def test_new_plan_ends_with_the_uat_step_but_a_research_plan_does_not(self):
+        info = self.plan("new", "plugin-plan 3 tabs")
+        self.assertEqual([s["step"].split(":")[0] for s in info["steps"]][-1], "Write the UATs")
+        research = self.plan("new", "Compare tabs", "--research")
+        self.assertFalse(any("UAT" in s["step"] for s in research["steps"]))
+
+    def test_uat_scaffolds_once_with_the_feature_shotfile(self):
+        info = self.plan("new", "plugin-plan 3 tabs")
+        self.assertEqual((info["uat"], info["uat_checks"]), ("", []))
+        info = self.plan("uat")
+        uat = self.root / info["uat"]
+        text = uat.read_text()
+        self.assertTrue(text.startswith(f"# UAT {info['slug'][:4]}: plugin-plan 3 tabs\n"))
+        self.assertIn("\nShotfile: plugin-plan\n", text)
+        self.assertEqual(info["uat_checks"], ["U1"])
+        uat.write_text(text + "\n## U2 Second\nSteps:\n1. x\n\nExpected: y\n")
+        self.assertEqual(self.plan("uat", "--shotfile", "other")["uat_checks"], ["U1", "U2"])  # never overwritten
 
     def test_grilled_auto_counts_autogrill_rounds(self):
         self.write_plan()

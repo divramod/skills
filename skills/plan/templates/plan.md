@@ -21,6 +21,7 @@ starting "after the landing: ...".
 | # | Step | Done when | Status |
 |---|---|---|---|
 | 1 | <step> | <a check anyone can run> | next |
+| 2 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
 ## Decisions
 

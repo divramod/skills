@@ -32,6 +32,17 @@ merge queue). Its research doc and decisions reach the default branch with the i
 in the same worktree (that plan's `Landing: auto` lands both), or when the user runs `/mtm`. Never switch a research
 plan to `auto`; only an implementation plan lands itself.
 
+**Every implementation plan ends with its UATs.** Its last step before the landing (the template's "Write the
+UATs") writes `plans/<NNNN>-<slug>/uat.md` (`plan.py uat` scaffolds it from `templates/uat.md`): the user acceptance
+checks the user runs by hand on the default branch after the landing, in hal2's UAT tab. Only what a human must see
+goes there: derive the checks from the goal, each step's done-when and the diff (new panes, commands, keys, deep
+links), drop what the plan's tests and your own verification already proved, keep what needs eyes and hands (layout,
+feel, real data, other devices), riskiest first (`Priority: p1` = what the goal promises), at most about 10, each
+with `Open:` (a hal2:// deep link) or `Run:` (a command) when one exists, steps and the expected result; tag checks
+that should come back with later plans of the feature `regression`. Ids (`U1`, `U2`, ...) are never reused.
+Results never go into a checkout (hal2 keeps them in its state root); a failed check becomes a shot in the plan's
+feature shotfile (`Shotfile:`). A research plan has no UATs (`new --research` leaves the step out).
+
 **The step table is the plan's state.** `/plan`, `/handoff` and the statusline all read it; nothing else tracks
 progress. Update it the moment a step's check passes, never later.
 
@@ -83,6 +94,7 @@ and its steps are not committed (the folder is no repository) unless the user ke
 | `/plan next` | `/plan n` | [run the plan](#run-the-plan) from its next step to the end, offering `/grill` first |
 | `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
 | `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
+| `/plan uat` | | `python3 $S/plan.py uat`: scaffold the current plan's `uat.md` (see above) |
 | `/plan landing auto\|manual` | `/plan l a\|m` | `python3 $S/plan.py landing <auto\|manual>`: whether the current plan lands itself at its end |
 | `/plan new -g <title>` | `/plan r -g <topic>` | a global plan (see "Global plans" above; `--research` works too) |
 | `/plan s -g <n>`, `/plan n -g <n>`, `/plan d -g <n> [<step>]` | | status, run, finish a step of global plan `<n>` |
