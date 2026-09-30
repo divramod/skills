@@ -8,6 +8,38 @@ Newest first. There is one case per failure class and cause; a recurrence adds a
 - `landed <plan> <date>`;
 - `n/a` (not fixable in hal2).
 
+## 2026-09-30 · F9 permission prompt waiting for the user
+
+- **Signature**: state `blocked-permission`, `waiting_minutes` past the threshold.
+- **Cause**: a tool call needs the user's permission; by design only the user answers it.
+- **Occurrences**:
+  - 2026-09-30 19:41, hal2 slot 03, session 59c32fad, plan 0081 skills 6 new skill fixer, 48 min; escalated by
+    notification.
+- **Fix plan**: n/a (dialogs are the user's).
+- **Would have caught it sooner**: the notification itself.
+
+## 2026-09-30 · F6 false positive: turn ended while waiting on its own background task
+
+- **Signature**: F6 with the session `sleeping`, `last_assistant` saying it waits for a background command
+  (e.g. `watch.py ... --wait`) whose completion notification will wake it; that process is still alive.
+- **Cause**: the scan treats any ended turn inside a plan as early, without checking the session's live background
+  tasks (hal2-agents' `.tasks/` records). Not a hal2 bug: a gap in sanity-watch's scan.
+- **Occurrences**:
+  - 2026-09-30 18:41, hal2 slot 00, session a1530b9c, plan 0082 roadmap coordinator, waiting on plan 0074 in slot
+    12; left alone (`count`).
+  - 2026-09-30 19:11, hal2 slot 11, session 40ec9473, plan 0085 Mac upgrade benchmarks, waiting on its background
+    `bench-landing` run (still running); left alone (`count`).
+  - 2026-09-30 20:41, hal2 slot 00, session a1530b9c, plan 0082 again: its watch timed out and was restarted,
+    slot 12 still waits for the user; left alone (`count`).
+  - 2026-09-30 21:41, hal2 slot 00, session a1530b9c, plan 0082 again, still waiting on its background watch;
+    left alone (`count`).
+  - 2026-09-30 22:41, hal2 slot 00, session a1530b9c, plan 0082 again (watch restarted); left alone (`count`).
+  - 2026-09-30 22:41, hal2 slot 11, session 40ec9473, plan 0085 step 7, waiting on its detached quiet-then-bench
+    waiter (hours, overnight); left alone (`count`).
+- **Fix plan**: n/a (a fix plan never edits this skill). Proposal for the user: skip F6 when the session has a
+  running background task in its hook record's `.tasks/`.
+- **Would have caught it sooner**: the scan reading the session's background tasks.
+
 ## 2026-09-30 · F1 connection lost mid-response, never resumed by hal2
 
 - **Signature**:
@@ -22,9 +54,10 @@ Newest first. There is one case per failure class and cause; a recurrence adds a
     (`hal2-agents` `sweep.rs`), and the hook drops StopFailure's error kind and message.
 - **Occurrences**:
   - 2026-09-30 12:21, hal2 slot 01, session 91b9104c, plan 0075 step 6, resumed by the user at 12:22 (shot 8
-    plugin-agents).
-- **Fix plan**: none. Research 0015's ideas 1 and 2: keep the stop's reason in the record and chronicle, and
-  resume F1–F3 in hal2's sweep with backoff.
+    plugin-agents); seen by the watcher's round at 14:44 as `count`.
+- **Fix plan**: landed 0080 2026-09-30 (fix agent in slot 10, brief
+  ~/skills/sanity-watch/incidents/2026-09-30-f1-connection-lost-never-resumed.md): the stop's reason in the record,
+  resume of F1–F3 by hal2-agents with a budget, billing never.
 - **Would have caught it sooner**: a `reason` on the chronicle's `failed` line; a sweep log line "failed session
   seen, not handled".
 
