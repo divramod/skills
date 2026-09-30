@@ -20,6 +20,7 @@
     "./skills/mtm",
     "./skills/pause",
     "./skills/plan",
+    "./skills/sanity-watch",
     "./skills/shoot",
     "./skills/tell"
   ]
