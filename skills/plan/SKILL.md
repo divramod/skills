@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2, and when its last step is done lands itself with /mtm (`Landing: auto`, what `new` writes for an implementation plan; `manual`, every research plan's, waits for the user's /mtm or lands with the implementation plan that follows)), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (every new plan gets one autogrill round first, then the offer: run now, another autogrill round, manual grill; once started, it runs step after step autonomously, commits after every step, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2, and when its last step is done lands itself with /mtm (`Landing: auto`, what `new` writes for an implementation plan; `manual`, every research plan's, waits for the user's /mtm or lands with the implementation plan that follows)), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -102,9 +102,18 @@ and its steps are not committed (the folder is no repository) unless the user ke
    the decision). No step lands; steps checked after the landing come last ("after the landing: ..."). The plan
    lands itself at its end (`Landing: auto`); when the user wants to land it themselves, `plan.py landing manual`.
    Record decisions taken so far in their one home.
-4. Show the plan in a few lines, then ask with the question tool: grill it now with `/grill` (recommended for
-   anything beyond a small change), [run it](#run-the-plan) from step 1 (it then runs to the end on its own and, `Landing: auto`, lands), or
-   stop here.
+4. **Autogrill it once** before offering it: run [`/grill auto`](../grill/SKILL.md#auto) on the plan (one round
+   without questions: map the design tree, decide every open branch yourself by the repo's rules, record each
+   decision in its home, adjust steps and checks), which stamps `plan.py grilled --auto`.
+5. Show the plan and the round's decisions in a few lines, then ask with the question tool, these three options:
+   - **Run now** (recommended): [run it](#run-the-plan) from step 1; it runs to the end on its own and, with
+     `Landing: auto`, lands;
+   - **Another autogrill round**: `/grill auto` again (it looks for what is still open, deeper branches first),
+     then this offer again;
+   - **Manual grill**: `/grill` with question rounds (the autogrill's decisions are the recommended answers), then
+     this offer again after its shared-understanding check.
+
+   Stopping here is the question tool's free answer, not an option.
 
 ## Status
 
@@ -142,11 +151,11 @@ no approval, no plan mode and no per-step grill offer until the plan's end. What
 - **a step whose done-when check still fails** after reasonable attempts (or a blocker you cannot fix): stop the
   run, push a notification naming the plan and what fails (`PushNotification`), and report; no question.
 
-1. `python3 $S/plan.py current`, then offer grilling with the question tool, once, proportionate to the risk:
-   - plan not grilled yet (`grilled` empty): `/grill` the whole plan first (recommended), or start anyway;
-   - plan grilled: just start (offer `/grill q` only when the next step is risky and was never discussed).
+1. `python3 $S/plan.py current`. A plan that was never grilled (`grilled` empty, e.g. from before this rule) gets
+   one `/grill auto` round first; then, unless the user already chose to run it, the same three-option offer as
+   [New plan](#new-plan) step 5 (Run now, Another autogrill round, Manual grill). A grilled plan the user asked to run
+   just starts. After the start nothing is asked any more (see above).
 
-   On a grill, continue only after it confirms shared understanding.
 2. For each step, starting with the one marked `next`:
    1. Detail it for yourself: the files it touches, the approach, the tests. Use subagents (with worktree
       isolation) for independent parallel parts.

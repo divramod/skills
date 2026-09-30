@@ -15,6 +15,7 @@ the session is self-contained, and decisions are written down so a cleared sessi
 |---|---|
 | `/grill` | grill the current plan (`plans/CURRENT_PLAN`) |
 | `/grill <subject>` | grill a plan file, an idea or a decision |
+| `/grill auto [<subject>]`, `/grill a` | [auto](#auto): one round without questions, every branch decided by you |
 | `/grill q [<subject>]`, `/grill quick` | [quick](#quick): one round on the top risks, for a single step |
 | `/grill h`, `/grill help` | print this table and stop |
 
@@ -58,6 +59,25 @@ ask a single round of at most 4 questions: the decisions most likely to make thi
 and finish as below, but don't mark the plan grilled. If the answers open deeper branches, say so and offer the
 full grill.
 
+## Auto
+
+One autogrill round: the grill without the user. The plan skill runs one on every new plan before offering it
+(and on a never-grilled plan before it runs); the user asks for more rounds with "another autogrill round".
+
+1. Do the **Start** reading and map the design tree as in **Rounds**; a further round starts from what the
+   previous rounds left open or opened (deeper branches first) and never re-decides a recorded decision.
+2. Decide the whole frontier yourself, round after round, until it is empty: facts are looked up; choices follow
+   the repo's rules for choosing between options (in hal2: the more professional, performant, battle-tested one)
+   and its decision record. Ask nothing.
+3. Record each decision in its one home as in **Record**, marked `(autogrill <n>)`, and adjust the plan's steps
+   and done-when checks it changes.
+4. Stamp the round: `python3 <plan-skill-dir>/scripts/plan.py grilled --auto` (`Grilled: <date> (autogrill ×n)`).
+5. Report the round's decisions in a few lines; the caller (the plan skill's offer) asks what next. When a
+   branch can only be settled by the user (taste, how something should look), decide it provisionally, say so,
+   and recommend a manual grill.
+
+A manual `/grill` after autogrill rounds takes their decisions as the recommended answers and may reopen any.
+
 ## Record
 
 After every round, write each decision down in exactly **one home** so it survives `/clear`, and link from the
@@ -77,7 +97,7 @@ decisions in a few lines and ask with the question tool whether you have reached
 implement anything before the user confirms. When grilling a plan, mark it grilled:
 
 ```bash
-python3 <plan-skill-dir>/scripts/plan.py grilled
+python3 <plan-skill-dir>/scripts/plan.py grilled         # after autogrill rounds: `(autogrill ×n, grill)`
 ```
 
 (`<plan-skill-dir>` is the `plan` skill next to this one.)

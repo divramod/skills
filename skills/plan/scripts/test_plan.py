@@ -109,6 +109,20 @@ class PlanTest(unittest.TestCase):
         self.assertRegex(info["grilled"], r"^\d{4}-\d{2}-\d{2}$")
         self.assertEqual(self.plan("grilled")["grilled"], info["grilled"])  # idempotent, one line
 
+    def test_grilled_auto_counts_autogrill_rounds(self):
+        self.write_plan()
+        self.plan("use", "2")
+        self.assertEqual(self.plan("current")["autogrill_rounds"], 0)
+
+        info = self.plan("grilled", "--auto")
+        self.assertRegex(info["grilled"], r"^\d{4}-\d{2}-\d{2} \(autogrill ×1\)$")
+        self.assertEqual(info["autogrill_rounds"], 1)
+        info = self.plan("grilled", "--auto")
+        self.assertRegex(info["grilled"], r"\(autogrill ×2\)$")
+        info = self.plan("grilled")
+        self.assertRegex(info["grilled"], r"\(autogrill ×2, grill\)$")
+        self.assertEqual(self.plan("grilled", "--auto")["autogrill_rounds"], 3)
+
     def test_flat_plan_from_before_the_folder_layout_still_works(self):
         self.plans.mkdir(parents=True)
         (self.plans / "0002-migrate-daily-tools.md").write_text(EXISTING)
