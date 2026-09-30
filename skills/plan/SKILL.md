@@ -123,15 +123,24 @@ sanity-watch made it, and the user is away): no grill offer (the prompt that sta
 question below is decided by you by the repo's rules and recorded in its home, and when you are blocked you push a
 notification naming the plan and stop.
 
-**Once a plan is started it runs to the end on its own, landing included.** The user approves the plan once, when it starts (the
-grill offer below); after that, work through the steps one after another without asking for approval, without plan
-mode and without per-step grill offers. Ask the user only for
+**Once a plan is started it runs to the end on its own, landing included, and never asks the user anything.** The
+user approves the plan once, when it starts (the grill offer below); from then on there is no question-tool call,
+no approval, no plan mode and no per-step grill offer until the plan's end. What would have been a question:
 
-- a decision that is genuinely theirs and not settled by the plan, the decision record (`INTENT.md`), the ADRs or
-  the repo's rules for choosing between options (decide those yourself and record them in their one home);
-- an outward-facing or irreversible action (pushing, publishing, deleting data that is not the plan's own), except
-  the landing of an auto plan at its end ([Land the plan](#land-the-plan)), which the start of the plan agreed to;
-- a step whose done-when check still fails after reasonable attempts: stop and report what fails.
+- **a decision** nothing settles (the plan, the decision record `INTENT.md`, the ADRs, the repo's rules for choosing
+  between options): take the more professional, battle-tested option yourself and record it in its one home (the
+  plan's **Decisions**, or `INTENT.md` when it outlives the plan);
+- **an outward-facing or irreversible action** (pushing, publishing, deleting data that is not the plan's own): skip
+  it and name it in the plan's final report; the landing of an auto plan at its end
+  ([Land the plan](#land-the-plan)) is not one of these: the start of the plan agreed to it;
+- **how to verify** the work: verify it yourself before the landing, never by asking, and never by installing the
+  worktree's build for the user to try ("install from the worktree, you test" is not an option): builds, unit and
+  snapshot tests, UI tests, running the CLIs and the app's own test paths, fake agents or services in a scratch
+  state folder, never the user's live tmux or desktop. What only a human can judge (how it looks and feels on the
+  user's real setup) becomes a check in the plan's `uat.md`, which the user runs on the default branch after the
+  landing; it never blocks the landing;
+- **a step whose done-when check still fails** after reasonable attempts (or a blocker you cannot fix): stop the
+  run, push a notification naming the plan and what fails (`PushNotification`), and report; no question.
 
 1. `python3 $S/plan.py current`, then offer grilling with the question tool, once, proportionate to the risk:
    - plan not grilled yet (`grilled` empty): `/grill` the whole plan first (recommended), or start anyway;
@@ -146,8 +155,8 @@ mode and without per-step grill offers. Ask the user only for
       otherwise go on with the next step.
 3. When no step before the landing is left (`land` is `ready`, `manual` or `none`), the plan's end:
    - `ready`: [land the plan](#land-the-plan) now, in this run: no question, no context check, no handoff.
-   - `manual`: say the plan is done and that the user's `/mtm` lands it (never start it yourself), and ask whether
-     to set another plan current.
+   - `manual`: say the plan is done and that the user's `/mtm` (or, for a research plan, the implementation plan
+     after it) lands it; never start `/mtm` yourself and ask nothing.
    - `none` (a global plan): say it is done.
 
 ## Land the plan
@@ -164,9 +173,10 @@ interrupted).
    what stays unclear is left untracked, no question, and named in the report.
 3. Run the [mtm](../mtm/SKILL.md) skill from its step 1, as a plan's landing: it lands the work, finishes the
    after-landing steps, clears `CURRENT_PLAN` and reports what landed. Fix and rerun as it says while it holds the
-   queue; when it has to ask the user (the attempts limit, a cause you cannot fix), push a notification first
-   (`PushNotification`, e.g. "plan 0063: landing holds the merge queue, needs you"), so the user learns it even when
-   away. A successful landing only reports.
+   queue. Where mtm would ask the user (the attempts limit, a cause you cannot fix), a plan's landing asks
+   nothing: push a notification (`PushNotification`, e.g. "plan 0063: landing holds the merge queue, needs you")
+   and stop with the report; the failed landing keeps holding the queue until the user acts. A successful landing
+   only reports.
 
 ## Finish a step
 

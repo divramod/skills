@@ -25,7 +25,9 @@ question tool, recommended option first.
 - the user asked for it in this session (`/mtm`, "merge to main", "land this"), or
 - the [plan](../plan/SKILL.md) skill's **Land the plan** runs it: the current plan has `Landing: auto`, the user
   started it (in this session, or in the one this session continued with `/handoff c`) and its last step before
-  the landing is done (`plan.py current` shows `land: ready`). That is a **plan's landing**.
+  the landing is done (`plan.py current` shows `land: ready`). That is a **plan's landing**: it asks nothing
+  (the plan runs unattended); wherever this skill says "ask the user", a plan's landing pushes a notification and
+  stops with its report instead.
 
 Either is the user's consent to commit in this worktree, land on the default branch and push it. Never start it on
 your own otherwise: not mid-plan, not for a `manual` plan (every research plan is one: its research lands with the
