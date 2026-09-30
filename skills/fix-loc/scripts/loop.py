@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""fix-loc's loop: one tick watches the running worker and, once its plan landed, spawns the next unit's.
+
+  loop.py tick   --repo R [--model M] [--dry-run] [--json]   one tick (what the cron job's /fix-loc runs)
+  loop.py claim  --repo W --plan <NNNN-slug> [--json]       the worker in checkout W names its plan
+  loop.py record --repo R --started|--stopped [--json]      the loop (re)started (cron re-armed) or stopped
+  loop.py status --repo R [--json]                          the worker, blocked units, history
+
+The state is `<state root>/state.json` (scan.state_root; tick.py documents its fields). `tick --dry-run`
+decides and prints the next spawn without spawning or writing the state. Exit 2: a missing tool.
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import layout  # noqa: E402
+import scan  # noqa: E402
+import tick  # noqa: E402
+
+DEFAULT_MODEL = "claude-sonnet-5-5"
+PROMPT = Path(__file__).resolve().parent.parent / "worker-prompt.md"
+FINISHED = re.compile(r"^Finished:", re.MULTILINE)
+
+
+def now_ms():
+    return int(time.time() * 1000)
+
+
+def state_path(repo):
+    return scan.state_root(repo) / "state.json"
+
+
+def load(repo):
+    path = state_path(repo)
+    state = json.loads(path.read_text()) if path.exists() else {}
+    for key, empty in (("worker", None), ("history", []), ("blocked", {}), ("attempts", {})):
+        state.setdefault(key, empty)
+    return state
+
+
+def save(repo, state):
+    path = state_path(repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=1) + "\n")
+    os.replace(tmp, path)
+
+
+def run_json(args, cwd=None):
+    out = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(f"fix-loc: {' '.join(args[:3])} failed: {out.stderr.strip()}")
+    return json.loads(out.stdout)
+
+
+def main_checkout(repo):
+    """The repository's main checkout (the `project` hal2-cli-agents names)."""
+    common = layout.git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    return str(Path(common).parent)
+
+
+def plan_landed(repo, ref, plan):
+    """Whether `ref` has `plans/<plan>/plan.md` with its `Finished:` line."""
+    if not plan:
+        return False
+    shown = subprocess.run(["git", "-C", str(repo), "show", f"{ref}:plans/{plan}/plan.md"], capture_output=True, text=True)
+    return shown.returncode == 0 and bool(FINISHED.search(shown.stdout))
+
+
+def current_plan(worktree):
+    path = Path(worktree or "", "plans", "CURRENT_PLAN")
+    return path.read_text().strip() if worktree and path.exists() else None
+
+
+def observe(repo, project, worker):
+    """What `tick.decide` needs about the running worker, read from hal2 and git."""
+    ref = layout.default_branch(repo)
+    queue = run_json(["hal2-cli-git", "worktree", "queue", "--json"], cwd=project).get("queue", [])
+    plan = worker.get("plan") or current_plan(worker.get("worktree"))
+    return {
+        "agents": run_json(["hal2-cli-agents", "list", "--json"]),
+        "queue": [t for t in queue if not worker.get("worktree") or t.get("worktree") == worker["worktree"]],
+        "landed": plan_landed(repo, ref, plan if plan and tick.PLAN_SLUG.match(plan) else None),
+        "current_plan": plan,
+    }
+
+
+def fill_prompt(unit, limit):
+    names = ", ".join(f"`{f['path']}` ({f['code']})" for f in unit["files"])
+    values = {"unit": unit["unit"], "name": unit["unit"].rsplit("/", 1)[-1], "limit": str(limit),
+              "files": names, "scripts": str(Path(__file__).resolve().parent)}
+    text = PROMPT.read_text().strip()
+    for key, value in values.items():
+        text = text.replace("{" + key + "}", value)
+    return text
+
+
+def finish(repo, state, now, result):
+    """The worker's plan landed: count the unit again, record it, stop the worker's terminal host."""
+    worker = state["worker"]
+    after = scan.unit_files(repo, worker["unit"], worktree=False)
+    over = [f for f in after["files"] if f["code"] > after["limit"]]
+    state["history"].append({
+        "unit": worker["unit"], "plan": result.get("plan"), "model": worker.get("model"),
+        "started_ms": worker["spawned_ms"], "landed_ms": now, "before": worker.get("before", {}),
+        "after": {f["path"]: f["code"] for f in after["files"] if f["path"] in worker.get("before", {})},
+        "still_over": [f["path"] for f in over],
+    })
+    note = tick.after_landing(state, worker["unit"], bool(over), now)
+    if note:
+        result["notify"].append(note)
+    if str(worker.get("pane", "")).startswith("t:"):
+        subprocess.run(["hal2-cli-agents", "terminal", "kill", worker["pane"][2:]], capture_output=True)
+    state["worker"] = None
+
+
+def watch(repo, state, now, result):
+    """Decide about the running worker; True when a next unit may start."""
+    worker = state["worker"]
+    seen = observe(repo, state["project"], worker)
+    decision = tick.decide(state, now, project=state["project"], **seen)
+    result.update(decision)
+    result["unit"] = worker["unit"]
+    if decision.get("plan") and not worker.get("plan"):
+        worker["plan"] = decision["plan"]
+    if decision["action"] == "landed":
+        finish(repo, state, now, result)
+        return True
+    if decision["action"] == "blocked":
+        state["blocked"][worker["unit"]] = now + tick.BLOCK_FOR
+        result["notify"].append(f"fix-loc: {worker['unit']} blocked ({decision['reason']}), skipped 7 days")
+        state["worker"] = None
+        return True
+    if decision["action"] == "paused" and not worker.get("paused_notified"):
+        worker["paused_notified"] = True
+        result["notify"].append(f"fix-loc: paused, {decision['reason']}")
+    return False
+
+
+def spawn_next(repo, state, now, model, dry_run, result):
+    found = scan.scan(repo)
+    unit = tick.next_unit(found["units"], state, now)
+    if unit is None:
+        result.update(action="idle", reason="no unit over the limit is free", unit=None)
+        return
+    prompt = fill_prompt(unit, found["limit"])
+    command = ["hal2-cli-agents", "spawn", state["project"], "--model", model, "--json", "--prompt", prompt]
+    result.update(action="next", unit=unit["unit"], files=[f["path"] for f in unit["files"]],
+                  command=command[:-1] + ["<prompt>"], prompt=prompt)
+    if dry_run:
+        return
+    spawned = run_json(command)
+    state["worker"] = {
+        "unit": unit["unit"], "files": result["files"], "slot": spawned["slot"], "pane": spawned["pane"],
+        "worktree": spawned.get("worktree"), "plan": None, "model": model, "spawned_ms": now,
+        "before": {f["path"]: f["code"] for f in unit["files"]},
+    }
+    result["slot"] = spawned["slot"]
+
+
+def run_tick(repo, model=DEFAULT_MODEL, dry_run=False, now=None):
+    now = now or now_ms()
+    state = load(repo)
+    state["project"] = main_checkout(repo)
+    state.setdefault("started_ms", now)
+    result = {"action": "wait", "reason": "", "notify": [], "rearm": tick.needs_rearm(state, now)}
+    subprocess.run(["git", "-C", str(repo), "fetch", "-q", "origin"], capture_output=True)
+    if state["worker"] is None or watch(repo, state, now, result):
+        spawn_next(repo, state, now, model, dry_run, result)
+    if not dry_run:
+        save(repo, state)
+    return result
+
+
+def claim(repo, plan):
+    state, top = load(repo), layout.git(repo, "rev-parse", "--show-toplevel").strip()
+    worker = state["worker"]
+    if not worker or Path(worker.get("worktree") or "").resolve() != Path(top).resolve():
+        raise SystemExit(f"fix-loc: no fix-loc worker runs in {top}")
+    worker["plan"] = plan
+    save(repo, state)
+    return {"unit": worker["unit"], "plan": plan}
+
+
+def record(repo, started, stopped):
+    state = load(repo)
+    if started:
+        state["started_ms"] = now_ms()
+    if stopped:
+        state["stopped_ms"] = now_ms()
+    save(repo, state)
+    return {"started_ms": state.get("started_ms"), "stopped_ms": state.get("stopped_ms")}
+
+
+def status(repo):
+    state, now = load(repo), now_ms()
+    blocked = {unit: until for unit, until in state["blocked"].items() if until > now}
+    return {"worker": state["worker"], "blocked": blocked, "history": state["history"][-10:],
+            "landed": len(state["history"]), "started_ms": state.get("started_ms")}
+
+
+def text_of(command, result):
+    if command == "tick":
+        line = f"{result['action']}: {result.get('unit') or '-'}  {result.get('reason', '')}".rstrip()
+        extra = [f"  {path}" for path in result.get("files", [])] + result["notify"]
+        if result.get("command"):
+            extra.append("  " + " ".join(result["command"]))
+        return "\n".join([line, *extra])
+    return json.dumps(result, indent=1)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="loop.py")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("tick", "claim", "record", "status"):
+        p = sub.add_parser(name)
+        p.add_argument("--repo", default=".")
+        p.add_argument("--json", action="store_true")
+    sub.choices["tick"].add_argument("--model", default=DEFAULT_MODEL)
+    sub.choices["tick"].add_argument("--dry-run", action="store_true")
+    sub.choices["claim"].add_argument("--plan", required=True)
+    sub.choices["record"].add_argument("--started", action="store_true")
+    sub.choices["record"].add_argument("--stopped", action="store_true")
+    args = parser.parse_args(argv)
+    missing = [tool for tool in ("git", "scc", "hal2-cli-agents", "hal2-cli-git") if shutil.which(tool) is None]
+    if missing and args.command == "tick":
+        print(f"fix-loc: missing {', '.join(missing)} -> run install-prerequisites.sh", file=sys.stderr)
+        return 2
+    if args.command == "tick":
+        result = run_tick(args.repo, args.model, args.dry_run)
+    elif args.command == "claim":
+        result = claim(args.repo, args.plan)
+    elif args.command == "record":
+        result = record(args.repo, args.started, args.stopped)
+    else:
+        result = status(args.repo)
+    print(json.dumps(result, indent=1) if args.json else text_of(args.command, result))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

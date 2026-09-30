@@ -1,0 +1,91 @@
+"""What one fix-loc tick does, decided from plain inputs (no IO), so every outcome is testable.
+
+The state (`state.json`): `worker` (the running unit: unit, slot, pane, worktree, plan, model, spawned_ms,
+before), `history` (landed units with code lines before/after), `blocked` ({unit: until_ms}), `attempts`
+({unit: landed plans that left it over the limit}), `started_ms` (the loop's start, for the cron re-arm).
+"""
+
+import re
+
+MINUTE = 60_000
+DAY = 24 * 60 * MINUTE
+DIALOG_LIMIT = 30 * MINUTE  # a dialog open this long blocks the worker
+IDLE_LIMIT = 60 * MINUTE  # idle/done/sleeping this long without landing blocks it
+BLOCK_FOR = 7 * DAY
+GIVE_UP_FOR = 30 * DAY
+MAX_ATTEMPTS = 2  # landed plans that still leave a unit over the limit
+REARM_AFTER = 6 * DAY  # recurring cron jobs expire after 7 days
+PLAN_SLUG = re.compile(r"^\d{4}-[\w.-]+$")
+
+
+def worker_agent(agents, project, slot):
+    """The agent running in the worker's slot of `project`, or None."""
+    for agent in agents:
+        if agent.get("project") == project and agent.get("slot") == slot:
+            return agent
+    return None
+
+
+def holds_queue(queue, slot):
+    """The worker's merge-queue ticket when it holds the queue after a failure."""
+    for ticket in queue:
+        if ticket.get("slot") == slot and ticket.get("state") == "held":
+            return ticket
+    return None
+
+
+def decide(state, now_ms, *, project, agents, queue, landed, current_plan):
+    """{action, reason} for a running worker: wait | landed | blocked | paused (| plan to record).
+
+    `landed`: the default branch has the worker's plan with `Finished:`; `current_plan`: the worker's
+    checkout's `plans/CURRENT_PLAN`.
+    """
+    worker = state["worker"]
+    result = {"action": "wait", "reason": "", "plan": worker.get("plan")}
+    if not worker.get("plan") and current_plan and PLAN_SLUG.match(current_plan):
+        result["plan"] = current_plan
+    if landed:
+        return {**result, "action": "landed", "reason": f"plan {result['plan']} landed"}
+    ticket = holds_queue(queue, worker["slot"])
+    if ticket:
+        reason = (ticket.get("hold") or {}).get("reason", "held")
+        return {**result, "action": "paused", "reason": f"the worker's landing holds the merge queue ({reason})"}
+    agent = worker_agent(agents, project, worker["slot"])
+    if agent is None:
+        if now_ms - worker["spawned_ms"] < 5 * MINUTE:
+            return {**result, "reason": "the worker is starting"}
+        return {**result, "action": "blocked", "reason": "the worker's agent is gone and its plan has not landed"}
+    waited = now_ms - int(agent.get("since") or now_ms)
+    agent_state = agent.get("state")
+    if agent_state == "blocked" and waited > DIALOG_LIMIT:
+        return {**result, "action": "blocked", "reason": f"a dialog waits for {waited // MINUTE} min"}
+    if agent_state in ("idle", "done", "sleeping", "ended", "failed") and waited > IDLE_LIMIT:
+        return {**result, "action": "blocked", "reason": f"the worker is {agent_state} for {waited // MINUTE} min"}
+    return {**result, "reason": f"the worker is {agent_state}"}
+
+
+def next_unit(units, state, now_ms):
+    """The first unit of the scan (hotspot order) that is neither busy nor blocked, or None."""
+    blocked = state.get("blocked", {})
+    for unit in units:
+        if not unit["busy"] and blocked.get(unit["unit"], 0) <= now_ms:
+            return unit
+    return None
+
+
+def after_landing(state, unit, still_over, now_ms):
+    """Record a landed unit; block it for a while when `MAX_ATTEMPTS` plans left files over the limit."""
+    attempts = state.setdefault("attempts", {})
+    if still_over:
+        attempts[unit] = attempts.get(unit, 0) + 1
+        if attempts[unit] >= MAX_ATTEMPTS:
+            state.setdefault("blocked", {})[unit] = now_ms + GIVE_UP_FOR
+            return f"{unit} is still over the limit after {attempts[unit]} plans: skipped for 30 days"
+    else:
+        attempts.pop(unit, None)
+    return None
+
+
+def needs_rearm(state, now_ms):
+    """Whether the loop's cron job is old enough to be re-created before it expires."""
+    return now_ms - state.get("started_ms", now_ms) > REARM_AFTER
