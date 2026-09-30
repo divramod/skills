@@ -26,7 +26,11 @@ the session is self-contained, and decisions are written down so a cleared sessi
 2. **Already decided.** Read the subject plus the repo's decision records (`INTENT.md` or equivalent, the plan's
    **Decisions** section, `.adr/`). Anything answered there is settled: never ask it again; only reopen it when
    something new contradicts it, and say why.
-3. **Facts.** Read the code and docs the subject touches. Finding facts is your job: when a question needs a fact
+3. **Research.** A branch whose answer depends on research nobody has done yet (how others do it, a format to
+   choose, options to compare) is not decided blind, neither by the user nor by an autogrill: mark it
+   "needs research", do the research first (subagents, findings into the plan's research doc) and grill it on the
+   findings.
+4. **Facts.** Read the code and docs the subject touches. Finding facts is your job: when a question needs a fact
    from the environment (files, tools, current behaviour), look it up or dispatch a subagent; never ask the user
    what you could find out. Don't block on it: only questions downstream of a running lookup wait.
 

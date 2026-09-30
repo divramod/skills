@@ -93,19 +93,25 @@ and its steps are not committed (the folder is no repository) unless the user ke
 
 1. Understand the idea: read `INTENT.md` (or the repo's decision record) and the code it touches. Settled
    decisions are not questions. Ask only what you can't find out, with the question tool.
-2. Create the plan folder with its `plan.md` and make it current:
+2. **Research before planning.** When the idea needs research (the web, prior art, how others do it, "come up
+   with ideas", comparing options, a format or structure to choose), do it now, before any step is written and
+   before the autogrill: subagents in parallel, findings in a research doc (`research/<NNNN>-<topic>/research.md`,
+   linked under **Context**). Research big enough to change the plan's shape is a research plan of its own first
+   (`new --research`); the implementation plan follows it. **An implementation plan has no research steps**: its
+   steps and grill decisions build on research that is already done, so nothing it decides is decided blind.
+3. Create the plan folder with its `plan.md` and make it current:
    ```bash
    python3 $S/plan.py new "<title>" --goal "<goal>"              # add --research for a research plan
    ```
-3. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. A research
+4. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. A research
    plan's steps end in its research doc (e.g. question and criteria, sources, compare, write `research.md`, record
    the decision). No step lands; steps checked after the landing come last ("after the landing: ..."). The plan
    lands itself at its end (`Landing: auto`); when the user wants to land it themselves, `plan.py landing manual`.
    Record decisions taken so far in their one home.
-4. **Autogrill it once** before offering it: run [`/grill auto`](../grill/SKILL.md#auto) on the plan (one round
+5. **Autogrill it once** before offering it: run [`/grill auto`](../grill/SKILL.md#auto) on the plan (one round
    without questions: map the design tree, decide every open branch yourself by the repo's rules, record each
    decision in its home, adjust steps and checks), which stamps `plan.py grilled --auto`.
-5. Show the plan and the round's decisions in a few lines, then ask with the question tool, these three options:
+6. Show the plan and the round's decisions in a few lines, then ask with the question tool, these three options:
    - **Run now** (recommended): [run it](#run-the-plan) from step 1; it runs to the end on its own and, with
      `Landing: auto`, lands;
    - **Another autogrill round**: `/grill auto` again (it looks for what is still open, deeper branches first),
@@ -153,7 +159,7 @@ no approval, no plan mode and no per-step grill offer until the plan's end. What
 
 1. `python3 $S/plan.py current`. A plan that was never grilled (`grilled` empty, e.g. from before this rule) gets
    one `/grill auto` round first; then, unless the user already chose to run it, the same three-option offer as
-   [New plan](#new-plan) step 5 (Run now, Another autogrill round, Manual grill). A grilled plan the user asked to run
+   [New plan](#new-plan) step 6 (Run now, Another autogrill round, Manual grill). A grilled plan the user asked to run
    just starts. After the start nothing is asked any more (see above).
 
 2. For each step, starting with the one marked `next`:
