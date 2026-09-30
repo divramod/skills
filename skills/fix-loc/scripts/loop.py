@@ -156,6 +156,7 @@ def spawn_next(repo, state, now, model, dry_run, result):
     result.update(action="next", unit=unit["unit"], files=[f["path"] for f in unit["files"]],
                   command=command[:-1] + ["<prompt>"], prompt=prompt)
     if dry_run:
+        result["dry_run"] = True
         return
     spawned = run_json(command)
     state["worker"] = {
@@ -213,6 +214,8 @@ def text_of(command, result):
         extra = [f"  {path}" for path in result.get("files", [])] + result["notify"]
         if result.get("command"):
             extra.append("  " + " ".join(result["command"]))
+        if result.get("dry_run") and result.get("prompt"):
+            extra += ["", result["prompt"]]
         return "\n".join([line, *extra])
     return json.dumps(result, indent=1)
 
