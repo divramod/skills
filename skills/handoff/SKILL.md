@@ -155,14 +155,14 @@ then lets hal2 clear this Claude Code session and type `/handoff c` into the fre
    the handoff names what must be rerun): their notifications would wake the fresh session.
 2. Start it and end your turn right after with one line ("clearing, continuing with /handoff c"):
    ```bash
-   hal2-cli-agents clear-and-continue --detach --json    # pane/session from $TMUX_PANE, $CLAUDE_CODE_SESSION_ID
+   hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
    ```
    It waits for your turn to end, waits out a draft the user is typing (and the user's own turns), types `/clear`
    only into an empty prompt, confirms the new session through its hook record, then types `/handoff c`; the
    job shows on the agent in hal2's Agents pane, where it can be cancelled (`--cancel`).
 3. It clears only while the checkout's `plans/CURRENT_PLAN` names a plan with steps left, and checks again right
    before it types `/clear` (a finished plan's last output, e.g. the merge-to-main report, stays on screen). It
-   exits non-zero when it cannot start (`no-open-plan`, autoclear disabled in agents.toml, not Claude Code, not in
-   tmux, no hal2): report its message and fall back to telling the user to `/clear` and paste the prompt.
+   exits non-zero when it cannot start (`no-open-plan`, autoclear disabled in agents.toml, not Claude Code, neither
+   in tmux nor a hal2 terminal, no hal2): report its message and fall back to telling the user to `/clear` and paste the prompt.
    `already-running` is no failure: a job waits already (hal2's guard started it when it stopped the session at the
    threshold); just end the turn.

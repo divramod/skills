@@ -186,7 +186,7 @@ interrupted).
         session clears and continues with `/handoff c`; do nothing after it (the clear waits for your turn to end,
         waits out a draft the user types, and never types into a non-empty prompt):
         ```bash
-        hal2-cli-agents clear-and-continue --detach --json    # pane and session from $TMUX_PANE, $CLAUDE_CODE_SESSION_ID
+        hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
         ```
         `already-running` is fine: hal2's guard already started the job (it stops a session above the threshold at
         its next tool, research 0010 in hal2): just end your turn. When it fails to start otherwise (`no-open-plan`,
@@ -194,7 +194,7 @@ interrupted).
      A tool denied with "hal2: context at N% ... run /handoff now" is that guard: stop the step where it is, do
      points 1-2 (only the hand-off's tools run now; name in the handoff what was cut off), then end your turn: the
      job is already waiting, so skip point 3.
-     4. `autoclear` is false (its `autoclear_reason` says why: disabled, not Claude Code, not in tmux, no hal2):
+     4. `autoclear` is false (its `autoclear_reason` says why: disabled, not Claude Code, neither in tmux nor a hal2 terminal, no hal2):
         tell the user to run `/clear` and then `/handoff c` to continue.
    - `known` is false (not Claude Code, no transcript): judge the fill level yourself and say so; when in doubt,
      stop and hand off as above.

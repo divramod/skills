@@ -15,7 +15,8 @@ window), exactly like the Claude Code statusline shows it; `raw_percent` is agai
 The threshold is --threshold, else hal2's `[autoclear] percent` (`hal2-cli-agents settings --json`, agents.toml),
 else 35. `autoclear` says whether the session can clear and continue on its own after a hand-off
 (`hal2-cli-agents clear-and-continue --detach`): hal2's autoclear is enabled and the agent is Claude Code in a tmux
-pane ($CLAUDE_CODE_SESSION_ID, $TMUX_PANE); `autoclear_reason` says why not. $HAL2_CLI_AGENTS names the program
+pane or a hal2 terminal host ($CLAUDE_CODE_SESSION_ID, and $TMUX_PANE or $HAL2_TERMINAL: clear-and-continue takes
+the pane `%<n>` or `t:<id>` from them itself); `autoclear_reason` says why not. $HAL2_CLI_AGENTS names the program
 (default `hal2-cli-agents` on the PATH).
 
 Prints JSON: {"known", "used", "window", "percent", "raw_percent", "threshold", "stop", "source", "autoclear",
@@ -92,10 +93,20 @@ def autoclear(settings: dict | None, why: str) -> tuple[bool, str]:
         return False, why
     if not settings.get("enabled", True):
         return False, "autoclear is disabled in agents.toml"
-    for name, what in (("CLAUDE_CODE_SESSION_ID", "not Claude Code"), ("TMUX_PANE", "not in a tmux pane")):
-        if not os.environ.get(name, "").strip():
-            return False, f"{what} (${name} unset)"
+    if not os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip():
+        return False, "not Claude Code ($CLAUDE_CODE_SESSION_ID unset)"
+    if not agent_pane():
+        return False, "not in a tmux pane or hal2 terminal ($TMUX_PANE and $HAL2_TERMINAL unset)"
     return True, ""
+
+
+def agent_pane() -> str:
+    """The agent's address as hal2 names it: `$TMUX_PANE` (`%<n>`), else `t:$HAL2_TERMINAL`; "" outside both."""
+    pane = os.environ.get("TMUX_PANE", "").strip()
+    if pane:
+        return pane
+    terminal = os.environ.get("HAL2_TERMINAL", "").strip()
+    return f"t:{terminal}" if terminal else ""
 
 
 def measure(args: argparse.Namespace, home: Path) -> dict:

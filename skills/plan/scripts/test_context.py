@@ -130,6 +130,15 @@ class ContextTest(unittest.TestCase):
             "HAL2_CLI_AGENTS": enabled, "CLAUDE_CODE_SESSION_ID": "s1"})
         self.assertFalse(result["autoclear"])
         self.assertIn("TMUX_PANE", result["autoclear_reason"])
+        self.assertIn("HAL2_TERMINAL", result["autoclear_reason"])
+
+    def test_autoclear_in_a_hal2_terminal_host(self):
+        path = self.transcript(assistant(100_000))
+        enabled = self.fake_agents('{"autoclear": {"enabled": true, "percent": 35}}')
+        result = self.run_context("--transcript", str(path), env={
+            "HAL2_CLI_AGENTS": enabled, "CLAUDE_CODE_SESSION_ID": "s1", "HAL2_TERMINAL": "tabc1"})
+        self.assertTrue(result["autoclear"])
+        self.assertEqual(result["autoclear_reason"], "")
 
 
 if __name__ == "__main__":
