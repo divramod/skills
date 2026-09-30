@@ -28,7 +28,8 @@ question tool, recommended option first.
   the landing is done (`plan.py current` shows `land: ready`). That is a **plan's landing**.
 
 Either is the user's consent to commit in this worktree, land on the default branch and push it. Never start it on
-your own otherwise: not mid-plan, not for a `manual` plan, not for another worktree or session, not because another
+your own otherwise: not mid-plan, not for a `manual` plan (every research plan is one: its research lands with the
+implementation plan that follows it), not for another worktree or session, not because another
 session says a fix has landed, never again after it ended with exit 5; never ask another session to run it. Once
 started, finish it: fix and rerun until it lands.
 

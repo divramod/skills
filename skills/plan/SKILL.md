@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2, and when its last step is done lands itself with /mtm (`Landing: auto`, what `new` writes; `manual` waits for the user's /mtm)), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (offering /grill first when the plan hasn't been grilled; once started, it runs step after step autonomously, commits after every step, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2, and when its last step is done lands itself with /mtm (`Landing: auto`, what `new` writes for an implementation plan; `manual`, every research plan's, waits for the user's /mtm or lands with the implementation plan that follows)), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -26,6 +26,12 @@ already starts with "research" is not prefixed twice). Its deliverable is the re
 **Context**; decisions it yields go to their one home. Research that gets no plan writes `research-<topic>` into
 `CURRENT_PLAN`. When unsure whether a request is research or implementation, ask.
 
+**A research plan never lands itself.** The user's workflow is research → an implementation plan → its landing:
+`new --research` writes `Landing: manual`, so a finished research plan stops at its end (no `/mtm`, not into the
+merge queue). Its research doc and decisions reach the default branch with the implementation plan that follows it
+in the same worktree (that plan's `Landing: auto` lands both), or when the user runs `/mtm`. Never switch a research
+plan to `auto`; only an implementation plan lands itself.
+
 **The step table is the plan's state.** `/plan`, `/handoff` and the statusline all read it; nothing else tracks
 progress. Update it the moment a step's check passes, never later.
 
@@ -35,7 +41,7 @@ where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise 
 **A plan lands once, at its end.** `new` writes `Landing: auto` below the title: when the plan's last step is done,
 the plan lands itself with `/mtm` in the same run (the user's start of the plan is the consent to land it; hal2's
 merge-hooks ADR, "Who starts a landing"). `Landing:
-manual` (`new --manual-landing`, `plan.py landing manual`, and every plan without the line) waits for the user's
+manual` (`new --manual-landing`, every research plan, `plan.py landing manual`, and every plan without the line) waits for the user's
 `/mtm`. So write plans that land only when they are finished:
 
 - no step lands, merges to the default branch or asks for `/mtm` (no "one part per landing"): work that should land
