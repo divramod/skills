@@ -1,31 +1,34 @@
 ---
 name: fix-autoclear
-description: Analyze and fix a failure of hal2's autoclear (the context guard, the clear-and-continue job and the sweep that hand off, /clear and continue a plan-running Claude session at the context threshold) — from screenshots of the stuck pane and a short description of what happened. Collects the evidence (job record and log, guard markers, the session's transcript tail, the sweep's log), matches it against known failure cases, finds the root cause in hal2's code, fixes it with a regression test replaying the incident, installs the fix, gets the stuck session going again and records the case so the skill learns. `/fix-autoclear doctor` looks for autoclear failures nobody reported; `/fix-autoclear selfcheck` checks this skill's insider knowledge against the code. Use when the user says /fix-autoclear, "autoclear did not work / is stuck / did not continue", or shows a pane stopped by `hal2 stopped this turn` / `stopped for the hand-off`. `/fix-autoclear h` shows help.
+description: Analyze and fix a failure of hal2's autoclear (the context guard, the clear-and-continue job and the sweep that hand off, /clear and continue a plan-running Claude session at the context threshold) — from the worktree it happened in (`/fix-autoclear 02`; screenshots optional, the pane's screen is captured read-only) or a shot hal2 reported in the global `fix-autoclear` shotfile. Collects the evidence (job record and log, guard markers, the session's transcript tail, the sweep's log), matches it against known failure cases, finds the root cause in hal2's code, fixes it with a regression test replaying the incident, installs the fix, gets the stuck session going again and records the case so the skill learns. `/fix-autoclear doctor` looks for autoclear failures nobody reported; `/fix-autoclear selfcheck` checks this skill's insider knowledge against the code. Use when the user says /fix-autoclear, "autoclear did not work / is stuck / did not continue", or shows a pane stopped by `hal2 stopped this turn` / `stopped for the hand-off`. `/fix-autoclear h` shows help.
 ---
 
 # fix-autoclear
 
-The user shows what went wrong (screenshots, a few words: which worktree or pane, what it did instead). You find
+The user names the agent (`02` or `hal2 wt 02`, a few words on what it did instead; screenshots optional), or hal2
+reported the failure itself as a shot in the global shotfile `fix-autoclear` (`<repo> wt <NN>: <reason>`, with the
+command to run). Name agents by repository and worktree (`hal2 wt 02`), never by pane id. You find
 why hal2's autoclear did not hand off, clear and continue, fix it in hal2 and make the case known to this skill.
 `S=<skill-dir>/scripts`, `E="python3 $S/evidence.py"`. Ask every question with the question tool, recommended
 option first.
 
 | Call | Does |
 |---|---|
-| `/fix-autoclear [<worktree or pane>] <description>` + screenshots | analyze one incident and fix it |
+| `/fix-autoclear <worktree> [<description>]` | analyze one incident (`02`, `main`; `--repo <name>` outside that repo) and fix it |
 | `/fix-autoclear doctor [<hours>]` | list autoclear failures of the last hours (default 24) nobody reported, offer to analyze each |
 | `/fix-autoclear selfcheck` | check the insider knowledge below against hal2's code; fix the drift |
 | `/fix-autoclear h`, `/fix-autoclear help` | print this table and stop |
 
 ## 1. Collect the evidence
 
-1. Read the screenshots: the pane's last lines (the hook denial, `hal2 stopped this turn ...`, `Interrupted`, the
-   input box, a dialog), the statusline (worktree slot, context %, plan). Note the times shown.
-2. `$E show --worktree <NN> | --pane %<n> | --session <id> [--hours 3]` prints the settings and installed binary,
-   the agent now, the pane's job record and job log, the guard markers of its sessions, each session's transcript
+1. `$E show --worktree <NN> [--repo <name>] [--hours 3]` (or `--pane`, `--session` when the agent is gone) prints
+   the settings and installed binary, the agent now, **its screen** (captured with `hal2-cli-agents capture`,
+   read-only: never type into the pane), the pane's job record and job log, the guard markers of its sessions, each session's transcript
    tail (tools, hook denials, typed requests), the guard's decisions (`guard.log`), the sweep's rounds for the pane
    (`sweep.log`) and hal2-api's sweep lines. A missing tool exits 2: run
    `bash $S/install-prerequisites.sh`.
+2. Read the screen (and screenshots when the user gave some): the pane's last lines (the hook denial, `hal2
+   stopped this turn ...`, `Interrupted`, the input box, a dialog), the statusline (context %, plan).
 3. `$E doctor --hours 6` shows whether other panes failed the same way.
 4. Build the **timeline**: soft stop → what the model did → hard stop? → job phases → sweep ticks → where it
    stopped. The failure is the first step that did not do what the insider knowledge below says it does.

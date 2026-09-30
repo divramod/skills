@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Collect what hal2's autoclear left behind, for the fix-autoclear skill.
 
-  evidence.py show [--pane %46] [--session <id>] [--worktree <NN|dir>] [--hours 3]
-      one incident: the pane's job record and log, the guard markers of its
-      sessions, each session's transcript tail (tools, hook denials, the typed
-      requests), the sweep's lines from hal2-api.log, the settings and binary
+  evidence.py show [--worktree <NN> [--repo <name>]] [--pane %46] [--session <id>] [--hours 3]
+      one incident, named `<repo> wt <NN>`: the pane's screen (captured here,
+      read-only: no screenshot needed), its job record and log, the guard
+      markers of its sessions, each session's transcript tail (tools, hook
+      denials, the typed requests), the sweep's lines, the settings and binary
   evidence.py doctor [--hours 24]
       every pane's failed or stuck autoclear of the last hours (nobody reported)
   evidence.py selfcheck [--repo <hal2 checkout>]
@@ -140,37 +141,100 @@ def own_log(name, needles, hours, keep=40):
     return lines[-keep:] or [f"(nothing in {JOBS / name} for {', '.join(filter(None, needles)) or 'the period'})"]
 
 
+def label(project, slot):
+    """An agent's name: `<repo> wt <NN>`, `<repo> main` (never a pane id)."""
+    repo = Path(project).name if project else "?"
+    return f"{repo} main" if slot == "main" else f"{repo} wt {slot}"
+
+
+def agent_label(agent):
+    if agent and agent.get("slot"):
+        return label(agent.get("project"), agent["slot"])
+    return f"the agent in pane {agent.get('pane_id')}" if agent else "an unknown agent"
+
+
+def place(cwd):
+    """(project, slot) of the checkout containing `cwd`, as hal2 derives it."""
+    out = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"],
+        cwd=cwd, capture_output=True, text=True,
+    )
+    lines = [l.strip() for l in out.stdout.splitlines() if l.strip()]
+    if out.returncode != 0 or len(lines) < 2 or Path(lines[1]).name != ".git":
+        return None
+    checkout, project = Path(lines[0]), Path(lines[1]).parent
+    return str(project), "main" if checkout == project else checkout.name
+
+
+def session_label(session):
+    """The label of `session` from its hook record's folder, else None."""
+    record = read_json(STATE / "agents" / f"{session}.json") or {}
+    where = place(record["cwd"]) if record.get("cwd") and Path(record["cwd"]).is_dir() else None
+    return label(*where) if where else None
+
+
+def current_repo():
+    where = place(os.getcwd())
+    return Path(where[0]).name if where else None
+
+
+def find_agent(all_agents, worktree, repo=None):
+    """The Claude agent of worktree slot `worktree` (`02`, `main`) of `repo`
+    (a name; any repository when None). Several matches: None and the labels."""
+    hits = [a for a in all_agents if a.get("kind") == "claude" and a.get("slot") == worktree
+            and (repo is None or Path(a.get("project") or "").name == repo)]
+    if len(hits) == 1:
+        return hits[0], []
+    return None, [agent_label(a) for a in hits]
+
+
 def resolve_pane(args):
+    """(pane, agent, problem) for show's arguments."""
+    all_agents = agents()
     if args.pane:
-        return args.pane
+        return args.pane, next((a for a in all_agents if a.get("pane_id") == args.pane), None), None
     if args.session:
+        for a in all_agents:
+            if a.get("session_id") == args.session:
+                return a.get("pane_id"), a, None
         for _, m in markers():
             if m.get("session_id") == args.session and m.get("pane"):
-                return m["pane"]
+                return m["pane"], None, None
     if args.worktree:
-        wt = args.worktree
-        for a in agents():
-            checkout = a.get("checkout") or ""
-            if a.get("slot") == wt or checkout.rstrip("/").endswith("/" + wt) or checkout == wt:
-                if a.get("kind") == "claude":
-                    return a.get("pane_id")
-    return None
+        repo = args.repo or current_repo()
+        agent, many = find_agent(all_agents, args.worktree, repo)
+        if agent is None and not many and args.repo is None:
+            agent, many = find_agent(all_agents, args.worktree)
+        if agent:
+            return agent.get("pane_id"), agent, None
+        if many:
+            return None, None, f"several agents in worktree {args.worktree}: {', '.join(many)}; pass --repo"
+        return None, None, f"no Claude agent in worktree {args.worktree}{' of ' + repo if repo else ''}"
+    return None, None, "pass --worktree <NN> (or --pane, --session)"
+
+
+def screen(pane):
+    """The pane's screen as text, read-only (`hal2-cli-agents capture`: a
+    tmux pane or a terminal host)."""
+    out = subprocess.run(["hal2-cli-agents", "capture", pane], capture_output=True, text=True)
+    return out.stdout.rstrip() if out.returncode == 0 else f"(no screen: {out.stderr.strip()})"
 
 
 def show(args):
-    pane = resolve_pane(args)
-    print(f"# autoclear evidence ({time.strftime('%Y-%m-%d %H:%M:%S')})\n")
     need("hal2-cli-agents")
+    pane, agent, problem = resolve_pane(args)
+    name = agent_label(agent) if agent else "?"
+    print(f"# autoclear evidence: {name} ({time.strftime('%Y-%m-%d %H:%M:%S')})\n")
     settings = subprocess.run(["hal2-cli-agents", "settings"], capture_output=True, text=True).stdout
     binary = shutil.which("hal2-cli-agents") or "hal2-cli-agents"
     print(f"## settings\n{settings.strip()}\nbinary {binary}, built {stamp(os.path.getmtime(binary) * 1000)}\n")
     if not pane:
-        print("no pane found: pass --pane, --session or --worktree")
+        print(f"no agent found: {problem}")
         return
-    agent = next((a for a in agents() if a.get("pane_id") == pane), None)
     if agent:
         keys = ["checkout", "slot", "plan", "state", "context_percent", "session_id", "autoclear"]
         print("## agent now\n" + json.dumps({k: agent.get(k) for k in keys}, indent=1) + "\n")
+    print(f"## screen now (captured, read-only)\n```\n{screen(pane)}\n```\n")
     stem = pane_stem(pane)
     print(f"## job {JOBS / (stem + '.json')}\n{json.dumps(read_json(JOBS / (stem + '.json')), indent=1)}\n")
     log = JOBS / f"{stem}.log"
@@ -196,6 +260,14 @@ def show(args):
 def doctor(args):
     since = time.time() - args.hours * 3600
     problems = 0
+    by_pane = {a.get("pane_id"): a for a in agents()}
+
+    def who(pane, session):
+        # The session's own folder first: the pane may host another agent now.
+        agent = by_pane.get(pane)
+        return (session and session_label(session)) or (
+            agent_label(agent) if agent else f"the agent in pane {pane}")
+
     for record in sorted(JOBS.glob("*.json")):
         job = read_json(record)
         if not job or record.stat().st_mtime < since:
@@ -204,12 +276,13 @@ def doctor(args):
             job.get("state") in ("waiting", "requesting") and time.time() - record.stat().st_mtime > 1800
         ):
             problems += 1
-            print(f"{job.get('pane')}: {job.get('state')} {job.get('reason') or ''} {job.get('message') or ''} "
+            print(f"{who(job.get('pane'), job.get('old_session'))}: {job.get('state')} {job.get('reason') or ''} "
+                  f"{job.get('message') or ''} "
                   f"({stamp(job.get('updated_at'))})")
     for path, m in markers():
         if path.stat().st_mtime >= since and (m.get("gave_up") or m.get("attempts", 0) >= 2):
             problems += 1
-            print(f"{m.get('pane')}: session {m['session_id']} attempts {m.get('attempts', 0)}"
+            print(f"{who(m.get('pane'), m['session_id'])}: session {m['session_id']} attempts {m.get('attempts', 0)}"
                   f"{' gave up' if m.get('gave_up') else ''}")
     print(f"{problems} problem(s) in the last {args.hours} h")
 
@@ -245,7 +318,8 @@ def main():
     s = sub.add_parser("show")
     s.add_argument("--pane")
     s.add_argument("--session")
-    s.add_argument("--worktree")
+    s.add_argument("--worktree", help="worktree slot, e.g. 02 or main")
+    s.add_argument("--repo", help="repository name (default: this checkout's, else any)")
     s.add_argument("--hours", type=float, default=3)
     d = sub.add_parser("doctor")
     d.add_argument("--hours", type=float, default=24)

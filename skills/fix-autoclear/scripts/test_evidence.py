@@ -61,3 +61,42 @@ class Selfcheck(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Labels(unittest.TestCase):
+    AGENTS = [
+        {"pane_id": "%1", "kind": "claude", "project": "/a/hal2", "slot": "02"},
+        {"pane_id": "%2", "kind": "codex", "project": "/a/hal2", "slot": "03"},
+        {"pane_id": "%3", "kind": "claude", "project": "/a/other", "slot": "02"},
+        {"pane_id": "%4", "kind": "claude", "project": "/a/hal2", "slot": "main"},
+    ]
+
+    def test_agents_are_named_by_repo_and_worktree(self):
+        self.assertEqual(evidence.label("/a/hal2", "02"), "hal2 wt 02")
+        self.assertEqual(evidence.label("/a/hal2", "main"), "hal2 main")
+        self.assertEqual(evidence.agent_label(self.AGENTS[0]), "hal2 wt 02")
+        self.assertEqual(evidence.agent_label({"pane_id": "%9"}), "the agent in pane %9")
+
+    def test_a_worktree_finds_its_claude_agent(self):
+        agent, many = evidence.find_agent(self.AGENTS, "02", "hal2")
+        self.assertEqual((agent["pane_id"], many), ("%1", []))
+        agent, many = evidence.find_agent(self.AGENTS, "02")
+        self.assertIsNone(agent)
+        self.assertEqual(many, ["hal2 wt 02", "other wt 02"])
+        self.assertEqual(evidence.find_agent(self.AGENTS, "03", "hal2"), (None, []))
+        self.assertEqual(evidence.find_agent(self.AGENTS, "main", "hal2")[0]["pane_id"], "%4")
+
+    def test_show_resolves_a_worktree_of_this_repo_first(self):
+        real_agents, real_repo = evidence.agents, evidence.current_repo
+        try:
+            evidence.agents = lambda: self.AGENTS
+            evidence.current_repo = lambda: "hal2"
+            args = type("A", (), {"pane": None, "session": None, "worktree": "02", "repo": None})()
+            pane, agent, problem = evidence.resolve_pane(args)
+            self.assertEqual((pane, problem), ("%1", None))
+            evidence.current_repo = lambda: None
+            pane, agent, problem = evidence.resolve_pane(args)
+            self.assertIsNone(pane)
+            self.assertIn("hal2 wt 02, other wt 02", problem)
+        finally:
+            evidence.agents, evidence.current_repo = real_agents, real_repo
