@@ -13,6 +13,7 @@
   "skills": [
     "./skills/cleanup",
     "./skills/continue",
+    "./skills/digest-todolist-picture",
     "./skills/fix-autoclear",
     "./skills/fix-loc",
     "./skills/grill",
