@@ -30,8 +30,8 @@ starting "after the landing: ...".
 | # | Step | Done when | Status |
 |---|---|---|---|
 | 1 | Shot writer script `skills/digest-todolist-picture/scripts/shots.py`: `targets [--repo <dir>]` (the repo's and the global shotfiles with their next shot number and open shot titles, as JSON), `preview` (the next number per shotfile for a list of items in order) and `write` (the confirmed items: `hal2-cli-shooter shots create` when installed, else the same format written by the script itself), plus `check-prerequisites.sh` / `install-prerequisites.sh` | `python3 -m unittest discover -s skills/digest-todolist-picture/scripts` passes (fallback writer matches `insert_shot`'s format; numbers in order) | done |
-| 2 | `SKILL.md`: read the picture (every item, crossed-out/ticked ones skipped, unreadable words flagged), route each item to a shotfile, clarify unclear items, then one yes/no/edit question per item showing the full shot text, shotfile and shot number (4 items per question-tool call), write only the confirmed ones and report them; works from the Claude mobile apps (Remote Control into the Mac, or a cloud session where only the repo's shotfiles exist) | `python3 scripts/check-plugins.py` prints ok and lists the skill | next |
-| 3 | Register it: `.claude-plugin/plugin.json` skills, README table, link with `scripts/install-skills.py` | `python3 scripts/check-plugins.py` ok; `ls ~/.claude/skills/digest-todolist-picture/SKILL.md` | |
+| 2 | `SKILL.md`: read the picture (every item, crossed-out/ticked ones skipped, unreadable words flagged), route each item to a shotfile, clarify unclear items, then one yes/no/edit question per item showing the full shot text, shotfile and shot number (4 items per question-tool call), write only the confirmed ones and report them; works from the Claude mobile apps (Remote Control into the Mac, or a cloud session where only the repo's shotfiles exist) | `python3 scripts/check-plugins.py` prints ok and lists the skill | done |
+| 3 | Register it: `.claude-plugin/plugin.json` skills, README table, link with `scripts/install-skills.py` | `python3 scripts/check-plugins.py` ok; `ls ~/.claude/skills/digest-todolist-picture/SKILL.md` | next |
 | 4 | Try it end to end on a test picture of a handwritten-style list (rendered to PNG) in a scratch repo with a `shotfiles/` folder: headless `claude -p "/digest-todolist-picture --dry-run <png>"`, then `shots.py write` with its previews | the dry run lists every item with shotfile and number and writes nothing; the write puts exactly those items in as `## shot <n> <title>` shots | |
 | 5 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
@@ -64,4 +64,7 @@ starting "after the landing: ...".
 
 ## Notes
 
-- <anything learned along the way that changes the plan>
+- Step 1: `shots.py write` without the CLI writes byte for byte what `hal2-cli-shooter shots create` writes
+  (`test_fallback_writes_exactly_what_the_cli_writes`), so cloud sessions produce the same shotfiles.
+- Step 2: its old check (check-plugins ok) needed step 3's registration; it now checks only the skill's own
+  frontmatter and scripts.
