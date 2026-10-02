@@ -75,6 +75,7 @@ starting "after the landing: ...".
   a named existing session, then `shots mark-sent --worktree <slot>`. hal2 has no single send-a-shot command
   (hal2-nvim's `<space>NN` only targets existing slots and builds the prompt in Lua), so the skill composes it.
   Never typed into a `blocked` session (the text would answer its dialog). (2026-10-02)
+- The report is a table in paper order with the columns #, Item, Result, Shotfile, Shot (user, 2026-10-02).
 - Numbers: previewed in order per shotfile (two items into one shotfile get n and n+1, counting only the confirmed
   ones before them); the write reports the real number and says so when it differs (someone wrote meanwhile).
   (autogrill 1, 2026-10-02)

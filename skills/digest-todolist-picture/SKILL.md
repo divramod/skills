@@ -197,6 +197,19 @@ has no repository to start a worktree in).
 
 ## 7. Report
 
-In paper order, one line per item: written (`<shotfile>` shot `<n>`, plus `→ slot <NN>` when it was sent to an
-agent), skipped by the user, done on paper, or not walked through (after a stop), so the user can cross them off the
-paper.
+One table in paper order, one row per item, so the user can cross the items off the paper:
+
+| # | Item | Result | Shotfile | Shot |
+|---|---|---|---|---|
+| 1 | Tabs: sort alphabetically btn | written, sent to slot 05 | app-macos-components | 6 |
+| 2 | buy coffee filters | done on paper | – | – |
+| 3 | Inter agent message board | written | hal2:plugin-agents | 29 |
+
+- **#**: the item's number on the paper (the `Item <i>` of the walk); **Item**: the note as written, shortened.
+- **Result**: `written`, `written, sent to slot <NN>` / `... sent to <slot>'s session`, `skipped`, `done on paper`,
+  `merged into <shotfile> shot <n>`, or `not walked through` (after a stop).
+- **Shotfile** and **Shot**: where the shot now is, the shotfile's name (`<repo>:` before it when not the current
+  repo, `global:` for a global one) and its number. An item that became two shots gets both, in the same order in
+  both cells (`plugin-ai-evals, plugin-software-evals` / `1, 1`); no shot: `–` in both.
+
+Keep the Item and Result cells short: the table has to fit a phone screen.
