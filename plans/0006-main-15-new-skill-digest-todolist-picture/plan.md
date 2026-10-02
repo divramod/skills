@@ -1,5 +1,7 @@
 # Plan 0006: main 15 new skill digest-todolist-picture
 
+Finished: 2026-10-02
+
 Grilled: 2026-10-02 (autogrill ×1)
 
 Landing: auto
@@ -33,7 +35,7 @@ starting "after the landing: ...".
 | 2 | `SKILL.md`: read the picture (every item, crossed-out/ticked ones skipped, unreadable words flagged), route each item to a shotfile, clarify unclear items, then one yes/no/edit question per item showing the full shot text, shotfile and shot number (4 items per question-tool call), write only the confirmed ones and report them; works from the Claude mobile apps (Remote Control into the Mac, or a cloud session where only the repo's shotfiles exist) | `python3 scripts/check-plugins.py` prints ok and lists the skill | done |
 | 3 | Register it: `.claude-plugin/plugin.json` skills, README table, link with `scripts/install-skills.py` | `python3 scripts/check-plugins.py` ok; `ls ~/.claude/skills/digest-todolist-picture/SKILL.md` | done |
 | 4 | Try it end to end on a test picture of a handwritten-style list (rendered to PNG) in a scratch repo with a `shotfiles/` folder: headless `claude -p "/digest-todolist-picture --dry-run <png>"`, then `shots.py write` with its previews | the dry run lists every item with shotfile and number and writes nothing; the write puts exactly those items in as `## shot <n> <title>` shots | done |
-| 5 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | next |
+| 5 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | done |
 
 ## Decisions
 
