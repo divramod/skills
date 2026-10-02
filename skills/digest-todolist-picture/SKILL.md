@@ -81,7 +81,7 @@ Items: `[{"shotfile": "main", "title": "...", "body": "...", "global": false, "r
 It returns each with `number`, `header` (`## shot <n> <title>`) and `new_file`, and writes nothing.
 
 `--dry-run` stops here: print every draft in paper order as it would be written (shotfile, `new shotfile` when new,
-the header and the body), the done items where they stand, the unclear points (for an unclear repository: the
+the header and the body, quoted as in step 4, never in a code block), the done items where they stand, the unclear points (for an unclear repository: the
 candidate repos), and end.
 
 ## 4. Walk through the list, top to bottom
@@ -89,7 +89,8 @@ candidate repos), and end.
 One item per message, strictly in the order the items stand on the paper (top to bottom, page after page), so the
 user can follow along on the handwritten list. Never reorder, group by shotfile or batch items. A done (crossed
 out, ticked) item is not asked: name it in one line at the top of the next message where it stands
-(`Item 3 "buy coffee filters" is crossed out: skipped.`), so the count still matches the paper.
+(`Item 3 "buy coffee filters" is crossed out: skipped.`), so the count still matches the paper:
+`<i> of <n>` counts every item on the paper, done ones included, top to bottom.
 
 Before each item, `preview` it alone (earlier items are already written, so its number is exact). The message:
 
@@ -101,13 +102,19 @@ Before each item, `preview` it alone (earlier items are already written, so its 
 2. <the other likely one>
 
 **Proposal**: <repo>:<shotfile> (new shotfile), shot <n>
-<the shot exactly as it will be written: the header line, the body directly below it, no blank line between>
+
+> **## shot <n> <title>**
+> <the body, line by line as it will be written, every line quoted with `> `>
 
 <only for a likely duplicate: "Similar to <shotfile> shot <n> <title>: I'd skip it.">
 Say yes, skip, another number, another shotfile, or what to change.
 ```
 
-Plain Markdown, the shot as a short quote or code block; keep the message short enough to read on a phone. The
+Plain Markdown, and the shot always as a quote (`> `), never in a code block: the Claude app does not wrap code
+blocks, so a long line is cut off and the user has to expand the block on every item. The quote wraps like the
+text around it. Its first line is the header in bold, written out literally (`**## shot 6 tabs: sort
+alphabetically button**`; inside bold it is not turned into a heading); every body line follows as its own `> `
+line, a blank body line as a bare `>`. Keep the message short enough to read on a phone without scrolling. The
 `<repo>:` part is left out for the current repo and is `global:` for a global shotfile.
 
 Read the answer (spoken, so leniently):

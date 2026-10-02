@@ -63,6 +63,8 @@ starting "after the landing: ...".
   numbered choices inside the item's message, the recommended one already in the proposal; spoken answers read
   leniently (yes/ja/passt, skip/weiter, a number, another place, a dictated change, stop). A confirmed item is
   written at once, so its shown number is its real number and an early end loses nothing.
+- Shots are shown as a quote with the literal header in bold, never in a code block: the Claude app does not wrap
+  code blocks, so the user had to expand each one (user, 2026-10-02, from a phone screenshot).
 - Numbers: previewed in order per shotfile (two items into one shotfile get n and n+1, counting only the confirmed
   ones before them); the write reports the real number and says so when it differs (someone wrote meanwhile).
   (autogrill 1, 2026-10-02)
