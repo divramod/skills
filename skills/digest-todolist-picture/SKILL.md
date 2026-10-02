@@ -1,6 +1,6 @@
 ---
 name: digest-todolist-picture
-description: Turn a photo of a handwritten to-do list into shots — reads every item of the picture (sent from the Claude iOS or Android app, or a path), routes each to the right repository and shotfile (the current repo's `shotfiles/*.md`, another of the user's repos, or the global shotfiles; it never assumes an item belongs to the repo it was started in), asks about unreadable items and items whose repository or shotfile is unclear, then asks yes/no for every item showing the exact shot it would write (`## shot <n> <title>` and body), its shotfile and number, and writes only the confirmed ones with `hal2-cli-shooter shots create` (or the same format by hand where hal2 is missing). Ticked or crossed-out items are skipped; items that match an open shot are flagged. Use when the user sends a picture of a to-do list, a notebook page or a whiteboard and wants the items as shots. `/digest-todolist-picture --dry-run` shows the shots without writing, `/digest-todolist-picture h` shows help.
+description: Turn a photo of a handwritten to-do list into shots — reads every item of the picture (sent from the Claude iOS or Android app, or a path), routes each to the right repository and shotfile (the current repo's `shotfiles/*.md`, another of the user's repos, or the global shotfiles; it never assumes an item belongs to the repo it was started in), then walks the user through the list top to bottom in the order it is written on paper, one item per message in plain text (no question dialogs, so every answer can be dictated with the app's microphone): the handwritten text, any unclear reading or repository, the exact shot it would write (`## shot <n> <title>` and body), its shotfile and number; a spoken yes writes it right away, skip, another shotfile or a dictated change are understood too; it writes only the confirmed ones with `hal2-cli-shooter shots create` (or the same format by hand where hal2 is missing). Ticked or crossed-out items are skipped; items that match an open shot are flagged. Use when the user sends a picture of a to-do list, a notebook page or a whiteboard and wants the items as shots. `/digest-todolist-picture --dry-run` shows the shots without writing, `/digest-todolist-picture h` shows help.
 ---
 
 # digest-todolist-picture
@@ -12,7 +12,7 @@ work, it does not start it: it never writes `plans/CURRENT_PLAN`, `.gitignore` o
 
 | Call | Does |
 |---|---|
-| `/digest-todolist-picture` + a picture | read the list, ask, write the confirmed shots |
+| `/digest-todolist-picture` + a picture | read the list, walk through it item by item, write the confirmed shots |
 | `/digest-todolist-picture <path> [<path> ...]` | the same for picture files (several pages: one list) |
 | `/digest-todolist-picture --dry-run ...` | read and route the list, print the shots it would write with their numbers, write nothing and ask nothing |
 | `/digest-todolist-picture h` | print this table and stop |
@@ -23,6 +23,11 @@ Mostly from the Claude iOS or Android app, in a Claude Code session: either Remo
 user's Mac (this repo, the global shotfiles and `hal2-cli-shooter` are there) or a cloud session (only the repo
 and its `shotfiles/`; `shots.py` writes the format itself and `global` is `null`). Without a git repository (a plain
 claude.ai chat) there is nowhere to write: say so and stop. No picture attached and no path given: ask for it.
+
+**Plain text only, never the question tool.** The user answers with the phone's microphone (speech to text), and
+the app's question dialog only takes typed answers. So every question is a short plain-text message the user can
+answer by speaking, and answers are read leniently: dictation garbles words, mixes German and English
+(`ja`, `passt`, `nein`, `weiter`) and adds filler.
 
 ## 1. Read the picture
 
@@ -54,8 +59,8 @@ For every open item:
   handwritten list mixes projects. An item belongs to the current repo only when it clearly does (it names the
   repo, one of its skills, apps or shotfiles, or its heading does). An item that names another repo (`hal2: ...`,
   a heading `hal2`) goes to that one from `repos`. A personal task with no project (`call the dentist`) goes to a
-  global shotfile. Everything else, and every item that could belong to two repos, is **unclear**: it gets a
-  repository question in step 4, never a guess.
+  global shotfile. Everything else, and every item that could belong to two repos, is **unclear**: its message in step 4
+  asks for the repository, never a guess.
 - **Shotfile**: the one whose name and open shots match the item's topic (the feature it belongs to); a skill's
   name, a repo or an app named in the item decides. Personal tasks with no repo go to a global shotfile. Nothing
   fits: propose a new shotfile with a short kebab-case name (`shots.py` creates it).
@@ -66,7 +71,7 @@ For every open item:
 - **Duplicate**: when an open shot of the target shotfile already asks for the same thing, mark it "similar to
   `<shotfile>` shot `<n>`".
 
-Then number the drafts in list order (items for one shotfile get consecutive numbers):
+Then number the drafts in the order they are written on paper (items for one shotfile get consecutive numbers):
 
 ```bash
 echo '<items JSON>' | python3 $S/shots.py preview
@@ -75,50 +80,70 @@ echo '<items JSON>' | python3 $S/shots.py preview
 Items: `[{"shotfile": "main", "title": "...", "body": "...", "global": false, "repo": "<dir, other repos only>"}]`.
 It returns each with `number`, `header` (`## shot <n> <title>`) and `new_file`, and writes nothing.
 
-`--dry-run` stops here: print every draft as it would be written (shotfile, `new shotfile` when new, the header and
-the body), then the skipped done items and the unclear points (for an unclear repository: the candidate repos), and end.
+`--dry-run` stops here: print every draft in paper order as it would be written (shotfile, `new shotfile` when new,
+the header and the body), the done items where they stand, the unclear points (for an unclear repository: the
+candidate repos), and end.
 
-## 4. Clarify the unclear items
+## 4. Walk through the list, top to bottom
 
-Before any confirmation, ask about every item that has `[?word?]` words, could mean two things, has no clear
-repository (step 3) or no clear shotfile. A repository question offers the likely repos from `repos` (the current
-one included when it is a candidate) and the global shotfiles; then the shotfile in that repo is drafted as above.
-One question each through the question tool (4 per call), the question quoting the note as read,
-options the readings or shotfiles you consider likely, the most likely first and marked "(Recommended)". Redraft
-those items from the answers and run `preview` again.
+One item per message, strictly in the order the items stand on the paper (top to bottom, page after page), so the
+user can follow along on the handwritten list. Never reorder, group by shotfile or batch items. A done (crossed
+out, ticked) item is not asked: name it in one line at the top of the next message where it stands
+(`Item 3 "buy coffee filters" is crossed out: skipped.`), so the count still matches the paper.
 
-## 5. Confirm every item
+Before each item, `preview` it alone (earlier items are already written, so its number is exact). The message:
 
-One question per item through the question tool, 4 per call, in list order, every question carrying all it needs
-(no text before the calls: the question dialog hides it):
+```
+**Item <i> of <n>**: "<the text as written on paper>"
 
-- header `Item <i>/<n>`;
-- question: `Write this shot to <shotfile>` (`(new shotfile)` when new; `global:<name>` or `<repo>:<name>` when not
-  the current repo) followed by the full shot exactly as it will be written: the header line and the body;
-- options: **Write it (Recommended)**, **Skip**, **Other shotfile** (consequence each: written as shown / left out
-  / asked next which shotfile); for an item similar to an open shot, **Skip** comes first as the recommendation and
-  the question names the similar shot.
+<only when something is unclear: what, and the choices, numbered, the recommended one first and in the proposal>
+1. <recommended reading, repository or shotfile> (recommended)
+2. <the other likely one>
 
-The free-text answer replaces the shot's text (`<title>` on its first line, the body below it, or an instruction
-how to change it): apply it, then ask that item once more with the new text. "Other shotfile": ask which (the
-likely ones as options), then confirm again. A skipped item changes the numbers after it in the same shotfile, so
-run `preview` again before writing. Nothing is written before every item is answered.
+**Proposal**: <repo>:<shotfile> (new shotfile), shot <n>
+<the shot exactly as it will be written: the header line, the body directly below it, no blank line between>
 
-## 6. Write the confirmed shots
-
-```bash
-echo '<confirmed items JSON, with their previewed "number">' | python3 $S/shots.py write
+<only for a likely duplicate: "Similar to <shotfile> shot <n> <title>: I'd skip it.">
+Say yes, skip, another number, another shotfile, or what to change.
 ```
 
-It writes them in order (`hal2-cli-shooter shots create`, else the same format itself) and returns each with its
-`path`, `number`, `line` and `via`; `previewed` is set when the real number differs from the one shown (the
-shotfile changed meanwhile): say so in the report.
+Plain Markdown, the shot as a short quote or code block; keep the message short enough to read on a phone. The
+`<repo>:` part is left out for the current repo and is `global:` for a global shotfile.
+
+Read the answer (spoken, so leniently):
+
+- **yes** (`yes`, `yeah`, `ok`, `write it`, `ja`, `passt`, `go`): write this item now (see 5), then the next item.
+  For an item with an unclear point, yes takes the recommended choice, which the proposal already shows.
+- **skip** (`skip`, `no`, `next`, `nein`, `weiter`, `drop it`): nothing is written, next item. For a likely
+  duplicate, skip is the expectation; yes still writes it.
+- **a number** (`two`, `the second`, `option 2`): take that choice of the unclear point, redraft, and show the item
+  again.
+- **another place** (`put it in hal2`, `tell shotfile`, `global ideas`): redraft for that repository or shotfile and
+  show the item again with its new number.
+- **anything else** is a change to the shot (dictated new wording, "shorter title", "add that it must work on
+  Linux"): apply exactly that, nothing more, and show the item again. An answer you cannot make sense of: say what
+  you understood in one line and ask again.
+- **stop** (`stop`, `enough`, `that's it`): end the walk; the report names the items not yet walked through.
+
+## 5. Write each confirmed shot
+
+Write a confirmed item at once, before showing the next one, so the number shown is the number written and nothing
+is lost when the session ends early:
+
+```bash
+echo '[<the confirmed item, with its previewed "number">]' | python3 $S/shots.py write
+```
+
+It writes it (`hal2-cli-shooter shots create`, else the same format itself) and returns it with its `path`,
+`number`, `line` and `via`; `previewed` is set when the real number differs from the one shown (the shotfile changed
+meanwhile). The next message always starts with the result, so the user hears what happened:
+`Written: <shotfile> shot <n>.` (`..., not <m> as shown.` when `previewed` is set), or `Skipped item <i>.`
 
 Commits: on the user's Mac never (shotfiles are working notes, hal2-nvim does not commit them either). In a cloud
-session (`CLAUDE_CODE_REMOTE` is set) the shots are lost with the session unless they are pushed: commit only the
-written shotfiles (`shotfiles: <n> shots from a to-do list picture`) and push the session's branch.
+session (`CLAUDE_CODE_REMOTE` is set) the shots are lost with the session unless they are pushed: after the walk,
+commit only the written shotfiles (`shotfiles: <n> shots from a to-do list picture`) and push the session's branch.
 
-## 7. Report
+## 6. Report
 
-A table of the written shots (`Shotfile`, `Shot`, `Title`), then one line each for the skipped items (by the user,
-done on paper, duplicates) so the user can cross them off the paper.
+In paper order, one line per item: written (`<shotfile>` shot `<n>`), skipped by the user, done on paper, or not
+walked through (after a stop), so the user can cross them off the paper.

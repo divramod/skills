@@ -57,6 +57,12 @@ starting "after the landing: ...".
   written (`## shot <n> <title>` + body) and `<shotfile>`; options "Write it (Recommended)", "Skip", "Other
   shotfile"; the free "Other" answer edits the text. Nothing is written before every item is answered.
   (autogrill 1, 2026-10-02)
+- Walk-through (user, 2026-10-02, supersedes the "Confirmation" decision and the clarify-first pass): no question
+  tool, because the Claude app's question dialog only takes typed answers and the user dictates; one plain-text
+  message per item, strictly top to bottom as on paper (done items named where they stand), unclear points as
+  numbered choices inside the item's message, the recommended one already in the proposal; spoken answers read
+  leniently (yes/ja/passt, skip/weiter, a number, another place, a dictated change, stop). A confirmed item is
+  written at once, so its shown number is its real number and an early end loses nothing.
 - Numbers: previewed in order per shotfile (two items into one shotfile get n and n+1, counting only the confirmed
   ones before them); the write reports the real number and says so when it differs (someone wrote meanwhile).
   (autogrill 1, 2026-10-02)

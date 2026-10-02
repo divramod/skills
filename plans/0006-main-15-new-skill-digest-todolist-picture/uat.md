@@ -20,8 +20,8 @@ Steps:
 1. In the app, take a photo of the paper list and send it with `/digest-todolist-picture`.
 2. Answer the questions; skip one item on purpose.
 
-Expected: every unticked item is asked once, each question shows the full `## shot <n> <title>` and body, the
-shotfile and the number; only the confirmed shots appear in their shotfiles with those numbers, the skipped and
+Expected: the items come one per message, top to bottom as on the paper, each showing the handwritten text, the full
+`## shot <n> <title>` and body, the shotfile and the number; every answer works by voice; only the confirmed shots appear in their shotfiles with those numbers, the skipped and
 ticked ones are listed in the report and nowhere else.
 
 ## U2 Items from another repository are not put into this one
@@ -42,15 +42,17 @@ Timebox: 10 min
 Charter: send a dense, messy page (arrows, sub-items, abbreviations); check that unreadable words are asked about
 instead of guessed, sub-items stay with their item, and no shot body says more than the note.
 
-## U4 The question dialogs on the phone
-Priority: p2
+## U4 Answering by voice
+Priority: p1
+Tags: regression
 Kind: scripted
 
 Steps:
-1. During U1, read the confirmation questions on the phone screen.
+1. During U1, answer only with the microphone: "ja", "skip", "zwei" for an unclear item, "put it in hal2", a
+   dictated new wording, and "stop" before the last item.
 
-Expected: the full shot text of each question is readable on the phone (not cut off), and the 4-per-dialog batches
-are comfortable to answer; if not, file a shot to shorten them.
+Expected: no question dialog appears; each spoken answer does what it says; after "stop" the report lists the items
+not yet walked through; every message is readable on the phone without scrolling much.
 
 ## U5 Cloud session fallback
 Priority: p3
