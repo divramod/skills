@@ -9,7 +9,7 @@ managed with `hal2-cli-hooks`. The model, the commands, default scripts per stac
 
 Run `hal2-cli-hooks` in the worktree (`H=hal2-cli-hooks`; missing? `bash <skill-dir>/scripts/install-prerequisites.sh`).
 Script and `hooks.toml` changes land with the next `/mtm` like any other work (calling `/mtm config` is no consent to
-land). Ask every question with the question tool, recommended option first.
+land). Ask questions by the global question rule (background first; ~/.claude/CLAUDE.md), recommended option first.
 
 | Call | Does |
 |---|---|

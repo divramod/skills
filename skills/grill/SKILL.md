@@ -1,12 +1,13 @@
 ---
 name: grill
-description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds via the question tool, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in its one home (plan, intent doc or ADR) so nothing is asked twice; `/grill q` asks a single round for one step. Use when the user says grill (me) / stress-test / poke holes, or when /plan offers it before implementing a plan. `/grill h` shows help.
+description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds of questions, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in its one home (plan, intent doc or ADR) so nothing is asked twice; `/grill q` asks a single round for one step. Use when the user says grill (me) / stress-test / poke holes, or when /plan offers it before implementing a plan. `/grill h` shows help.
 ---
 
 # grill
 
 Adapted from Matt Pocock's `grill-me` / `grilling` skills
-([mattpocock/skills](https://github.com/mattpocock/skills), MIT). Changes: questions go through the question tool,
+([mattpocock/skills](https://github.com/mattpocock/skills), MIT). Changes: questions follow the global question rule (background first; the
+question tool only when each question and its options carry their own background),
 the session is self-contained, and decisions are written down so a cleared session never re-asks them.
 
 ## Usage
@@ -97,7 +98,7 @@ Mark superseded decisions instead of deleting them. Don't commit; the user or `/
 ## Finish
 
 The session is done when the frontier is empty: every branch visited, nothing silently assumed. Then summarise the
-decisions in a few lines and ask with the question tool whether you have reached a shared understanding. Do not
+decisions in a few lines and end the reply with a plain-text question whether you have reached a shared understanding. Do not
 implement anything before the user confirms. When grilling a plan, mark it grilled:
 
 ```bash

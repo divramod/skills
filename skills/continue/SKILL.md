@@ -25,7 +25,7 @@ the files its **Task** links (the plan, the step).
 
 Compare with the record: `git branch --show-current`, `git rev-parse --short HEAD`, `git status --short`. New
 commits or changes the record doesn't list mean someone worked meanwhile: read them and say how they change the
-**Next** list before resuming anything. A different branch: stop and ask with the question tool.
+**Next** list before resuming anything. A different branch: stop, say what differs, and ask.
 
 ## 3. Resume the moving parts
 

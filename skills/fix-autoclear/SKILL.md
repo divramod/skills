@@ -9,8 +9,8 @@ The user names the agent (`02` or `hal2 wt 02`, a few words on what it did inste
 reported the failure itself as a shot in the global shotfile `fix-autoclear` (`<repo> wt <NN>: <reason>`, with the
 command to run). Name agents by repository and worktree (`hal2 wt 02`), never by pane id. You find
 why hal2's autoclear did not hand off, clear and continue, fix it in hal2 and make the case known to this skill.
-`S=<skill-dir>/scripts`, `E="python3 $S/evidence.py"`. Ask every question with the question tool, recommended
-option first.
+`S=<skill-dir>/scripts`, `E="python3 $S/evidence.py"`. Ask questions by the global question
+rule (background first; ~/.claude/CLAUDE.md), recommended option first.
 
 | Call | Does |
 |---|---|

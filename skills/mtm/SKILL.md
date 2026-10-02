@@ -17,8 +17,8 @@ reserves the worktree's turn in the queue first (`worktree reserve`), then commi
 the default branch in while nothing else can land, so conflicts are fixed once, and lands with
 `--keep-reserved`: after the landing the queue stays reserved while it finishes the plan and lands that too, and
 only then releases it. **The goal: when `/mtm` ends, the worktree has no commit and no change that is not on the
-default branch.** It handles what needs judgment. `S=<skill-dir>/scripts`. Ask every question with the
-question tool, recommended option first.
+default branch.** It handles what needs judgment. `S=<skill-dir>/scripts`. Ask questions by the global question
+rule (background first; ~/.claude/CLAUDE.md), recommended option first.
 
 **Only the human starts a landing, directly or through a finished plan.** Run merge-to-main only when
 

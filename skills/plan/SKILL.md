@@ -10,7 +10,7 @@ notes, data), so the folder is self-contained; no phase folders, no state files,
 *in which order*; each step is detailed only when it is next. `S=<skill-dir>/scripts`; every command prints the
 plan as JSON (`slug`, `path`, `research`, `grilled`, `done`, `total`, `next`, `landing`, `land`, `problems`, `steps`).
 
-Ask every question with the question tool, recommended option first.
+Ask questions by the global question rule (background first; ~/.claude/CLAUDE.md), recommended option first.
 
 **`plans/CURRENT_PLAN` names what the worktree works on**, so the statusline shows it: `new` and `use` write the
 plan's slug into it. Other work writes it too (a shot `<shotfile>/<n>/<title-slug>`, a task name); then `current` fails with
@@ -104,7 +104,7 @@ and its steps are not committed (the folder is no repository) unless the user ke
 ## New plan
 
 1. Understand the idea: read `INTENT.md` (or the repo's decision record) and the code it touches. Settled
-   decisions are not questions. Ask only what you can't find out, with the question tool.
+   decisions are not questions. Ask only what you can't find out.
 2. **Research before planning.** When the idea needs research (the web, prior art, how others do it, "come up
    with ideas", comparing options, a format or structure to choose), do it now, before any step is written and
    before the autogrill: subagents in parallel, findings in a research doc (`research/<NNNN>-<topic>/research.md`,
@@ -123,7 +123,8 @@ and its steps are not committed (the folder is no repository) unless the user ke
 5. **Autogrill it once** before offering it: run [`/grill auto`](../grill/SKILL.md#auto) on the plan (one round
    without questions: map the design tree, decide every open branch yourself by the repo's rules, record each
    decision in its home, adjust steps and checks), which stamps `plan.py grilled --auto`.
-6. Show the plan and the round's decisions in a few lines, then ask with the question tool, these three options:
+6. Show the plan and the round's decisions in a few lines, then end the reply with a plain-text question (never
+   the question tool here: it would hide the plan), these three numbered options:
    - **Run now** (recommended): [run it](#run-the-plan) from step 1; it runs to the end on its own and, with
      `Landing: auto`, lands;
    - **Another autogrill round**: `/grill auto` again (it looks for what is still open, deeper branches first),
@@ -131,7 +132,7 @@ and its steps are not committed (the folder is no repository) unless the user ke
    - **Manual grill**: `/grill` with question rounds (the autogrill's decisions are the recommended answers), then
      this offer again after its shared-understanding check.
 
-   Stopping here is the question tool's free answer, not an option.
+   Stopping here is the user's free answer, not an option.
 
 ## Status
 
