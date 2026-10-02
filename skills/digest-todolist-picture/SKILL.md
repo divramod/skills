@@ -1,6 +1,6 @@
 ---
 name: digest-todolist-picture
-description: Turn a photo of a handwritten to-do list into shots — reads every item of the picture (sent from the Claude iOS or Android app, or a path), routes each to the right repository and shotfile (the current repo's `shotfiles/*.md`, another of the user's repos, or the global shotfiles; it never assumes an item belongs to the repo it was started in), then walks the user through the list top to bottom in the order it is written on paper, one item per message in plain text (no question dialogs, so every answer can be dictated with the app's microphone): the handwritten text, any unclear reading or repository, the exact shot it would write (`## shot <n> <title>` and body), its shotfile and number; a spoken yes writes it right away, skip, another shotfile or a dictated change are understood too; it writes only the confirmed ones with `hal2-cli-shooter shots create` (or the same format by hand where hal2 is missing). Ticked or crossed-out items are skipped; items that match an open shot are flagged. Use when the user sends a picture of a to-do list, a notebook page or a whiteboard and wants the items as shots. `/digest-todolist-picture --dry-run` shows the shots without writing, `/digest-todolist-picture h` shows help.
+description: Turn a photo of a handwritten to-do list into shots — reads every item of the picture (sent from the Claude iOS or Android app, or a path), routes each to the right repository and shotfile (the current repo's `shotfiles/*.md`, another of the user's repos, or the global shotfiles; it never assumes an item belongs to the repo it was started in), then walks the user through the list top to bottom in the order it is written on paper, one item per message in plain text (no question dialogs, so every answer can be dictated with the app's microphone): the handwritten text, any unclear reading or repository, the exact shot it would write (`## shot <n> <title>` and body), its shotfile and number; the user answers by voice with 1 add, 2 add and implement (sent at once to a new worktree via hal2, or to an existing agent session the user names), 3 skip or 4 more input (a dictated change); it writes only the confirmed ones with `hal2-cli-shooter shots create` (or the same format by hand where hal2 is missing). Ticked or crossed-out items are skipped; items that match an open shot are flagged. Use when the user sends a picture of a to-do list, a notebook page or a whiteboard and wants the items as shots. `/digest-todolist-picture --dry-run` shows the shots without writing, `/digest-todolist-picture h` shows help.
 ---
 
 # digest-todolist-picture
@@ -97,9 +97,9 @@ Before each item, `preview` it alone (earlier items are already written, so its 
 ```
 **Item <i> of <n>**: "<the text as written on paper>"
 
-<only when something is unclear: what, and the choices, numbered, the recommended one first and in the proposal>
-1. <recommended reading, repository or shotfile> (recommended)
-2. <the other likely one>
+<only when something is unclear: what, and the choices as letters, the recommended one first and in the proposal>
+A. <recommended reading, repository or shotfile> (recommended)
+B. <the other likely one>
 
 **Proposal**: <repo>:<shotfile> (new shotfile), shot <n>
 
@@ -109,7 +109,7 @@ Before each item, `preview` it alone (earlier items are already written, so its 
 > <the body, line by line as it will be written, every line quoted with `> `>
 
 <only for a likely duplicate: "Similar to <shotfile> shot <n> <title>: I'd skip it.">
-Say yes, skip, another number, another shotfile, or what to change.
+**1** add · **2** add and implement · **3** skip · **4** more input
 ```
 
 Plain Markdown, and the shot always as a quote (`> `), never in a code block: the Claude app does not wrap code
@@ -118,23 +118,30 @@ text around it. Its first line is the full path of the shotfile the shot is writ
 `preview`, the home folder as `~`), as plain text, not inline code (plain text wraps on the phone; escape `_` as
 `\_`), then a bare `>` line, then the header in bold, written out literally (`**## shot 6 tabs: sort
 alphabetically button**`; inside bold it is not turned into a heading); every body line follows as its own `> `
-line, a blank body line as a bare `>`. Keep the message short enough to read on a phone without scrolling. The
+line, a blank body line as a bare `>`. The options line always shows all four numbers in this order; when option 2
+cannot work here (a global shotfile, or no `hal2-cli-agents`: a cloud session) it reads `**2** add and implement
+(not here: <why>)`. Keep the message short enough to read on a phone without scrolling. The
 `<repo>:` part is left out for the current repo and is `global:` for a global shotfile.
 
-Read the answer (spoken, so leniently):
+Read the answer (spoken, so leniently; numbers come as `one`, `eins`, `the first`, `option 2`):
 
-- **yes** (`yes`, `yeah`, `ok`, `write it`, `ja`, `passt`, `go`): write this item now (see 5), then the next item.
-  For an item with an unclear point, yes takes the recommended choice, which the proposal already shows.
-- **skip** (`skip`, `no`, `next`, `nein`, `weiter`, `drop it`): nothing is written, next item. For a likely
-  duplicate, skip is the expectation; yes still writes it.
-- **a number** (`two`, `the second`, `option 2`): take that choice of the unclear point, redraft, and show the item
-  again.
+- **1, add** (`one`, `yes`, `yeah`, `ok`, `add`, `write it`, `ja`, `passt`): write this item now (see 5), then the
+  next item. For an item with an unclear point, it takes the recommended choice, which the proposal already shows.
+- **2, add and implement** (`two`, `implement`, `add and implement`, `do it now`): write it (see 5), then send it to
+  an agent at once (see 6): a new worktree, or the existing session the answer names (`two, to 03`, `implement it
+  in the n8n session`, `send it to main`). Then the next item.
+- **3, skip** (`three`, `skip`, `no`, `next`, `nein`, `weiter`, `drop it`): nothing is written, next item. For a
+  likely duplicate, skip is the expectation; 1 still writes it.
+- **4, more input** (`four`, `more`, `wait`, or straight away the input itself): the user dictates more for the shot
+  (new wording, "shorter title", "add that it must work on Linux"). After a bare `four`, ask `Go ahead.` and take
+  the next answer as the input. Apply exactly that, nothing more, and show the item again.
+- **a letter** (`A`, `B`, `the second one`): take that choice of the unclear point, redraft, and show the item again.
 - **another place** (`put it in hal2`, `tell shotfile`, `global ideas`): redraft for that repository or shotfile and
   show the item again with its new number.
-- **anything else** is a change to the shot (dictated new wording, "shorter title", "add that it must work on
-  Linux"): apply exactly that, nothing more, and show the item again. An answer you cannot make sense of: say what
-  you understood in one line and ask again.
 - **stop** (`stop`, `enough`, `that's it`): end the walk; the report names the items not yet walked through.
+
+Anything else is more input (4). An answer you cannot make sense of: say what you understood in one line and ask
+again.
 
 ## 5. Write each confirmed shot
 
@@ -148,13 +155,48 @@ echo '[<the confirmed item, with its previewed "number">]' | python3 $S/shots.py
 It writes it (`hal2-cli-shooter shots create`, else the same format itself) and returns it with its `path`,
 `number`, `line` and `via`; `previewed` is set when the real number differs from the one shown (the shotfile changed
 meanwhile). The next message always starts with the result, so the user hears what happened:
-`Written: <shotfile> shot <n>.` (`..., not <m> as shown.` when `previewed` is set), or `Skipped item <i>.`
+`Written: <shotfile> shot <n>.` (`..., not <m> as shown.` when `previewed` is set), plus the send's result after
+option 2 (see 6), or `Skipped item <i>.`
 
 Commits: on the user's Mac never (shotfiles are working notes, hal2-nvim does not commit them either). In a cloud
 session (`CLAUDE_CODE_REMOTE` is set) the shots are lost with the session unless they are pushed: after the walk,
 commit only the written shotfiles (`shotfiles: <n> shots from a to-do list picture`) and push the session's branch.
 
-## 6. Report
+## 6. Implement: send the shot to an agent (option 2)
 
-In paper order, one line per item: written (`<shotfile>` shot `<n>`), skipped by the user, done on paper, or not
-walked through (after a stop), so the user can cross them off the paper.
+Right after the write, the shot goes to an agent the way hal2-nvim sends a shot: its shot template (`# shot <n>
+<title> (<shotfile>)`, the body, the `# context` lines telling the agent to run `/mfm`, not to touch the shotfile and
+to make the shot a plan titled `<shotfile> <n> <title>`), saved as a bullet file; then the shot is marked sent
+(`## x shot ... [<slot>]`). Only on the user's Mac: it needs hal2 (`hal2-cli-agents`, `hal2-cli-shooter`; exit 2
+names the missing one, `bash $S/install-prerequisites.sh` installs them) and a repository shotfile (a global shot
+has no repository to start a worktree in).
+
+- **No session named: a new worktree.**
+  ```bash
+  python3 $S/implement.py send --repo <repo dir> --shotfile <name> --number <n>
+  ```
+  `hal2-cli-agents spawn` starts Claude in the repository's lowest free worktree slot from 01 (created when missing,
+  its setup run) with the shot as its first prompt. The JSON names the `slot`, `pane` and `remote_control` (the
+  Remote Control name `<repo>-<slot>`, so the user finds the new session in the Claude app). Say:
+  `Sent to a new worktree: slot <NN>, in the app as <remote_control>.`
+- **A session named: that session.** List the repository's live sessions:
+  ```bash
+  python3 $S/implement.py sessions --repo <repo dir>
+  ```
+  Each has `pane_id`, `slot` (`main`, `01`, ...), `state`, `title`, `plan` and `context_percent`. Match the answer by
+  slot (`03`, `three`, `main`) or by words of its plan or title. One match:
+  `python3 $S/implement.py send --repo <repo dir> --shotfile <name> --number <n> --pane <pane_id>` types
+  `@<bullet>` into it. No or several matches: list them in plain text, one line each (`A. slot 03, plan 0094 ...,
+  done`), offer `new worktree` too, and take the next answer. A session in state `blocked` (waiting for a
+  permission or an answer) is never typed into: the text would answer its dialog; say so and offer a new worktree.
+  `working` is fine (the agent queues the input), but say so: `Sent to slot 03; it is still working, it reads the
+  shot when done.`
+- The shot stays written even when the send fails; say what failed and go on with the next item.
+- A repository outside a folder Claude Code trusts (not below `~/a`) starts its new session on Claude Code's
+  "trust this folder" dialog: then say `Open <remote_control> in the app and confirm the folder once.`
+
+## 7. Report
+
+In paper order, one line per item: written (`<shotfile>` shot `<n>`, plus `→ slot <NN>` when it was sent to an
+agent), skipped by the user, done on paper, or not walked through (after a stop), so the user can cross them off the
+paper.

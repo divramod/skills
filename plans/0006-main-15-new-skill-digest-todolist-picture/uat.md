@@ -54,6 +54,19 @@ Steps:
 Expected: no question dialog appears; each spoken answer does what it says; after "stop" the report lists the items
 not yet walked through; every message is readable on the phone without scrolling much.
 
+## U6 Add and implement
+Priority: p1
+Tags: regression
+Kind: scripted
+
+Steps:
+1. During U1, answer "zwei" for an item of a repo below `~/a`.
+2. For another item, answer "zwei, in <a slot with a done session>".
+
+Expected: the first starts a new worktree session that shows up in the Claude app as `<repo>-<NN>`, begins with
+`/mfm` and makes the shot a plan; the second types the shot into that session; both shots are marked sent
+(`## x shot ... [<slot>]`) and the walk goes on with the next item.
+
 ## U5 Cloud session fallback
 Priority: p3
 Kind: scripted

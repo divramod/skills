@@ -67,6 +67,14 @@ starting "after the landing: ...".
   code blocks, so the user had to expand each one (user, 2026-10-02, from a phone screenshot).
 - The quote starts with the shotfile's full path (`~/...`), so the user sees exactly where a shot goes (user,
   2026-10-02).
+- Four options per item, by voice: 1 add, 2 add and implement, 3 skip, 4 more input; unclear choices became
+  letters (A, B) so they don't clash with the option numbers (user, 2026-10-02).
+- "Add and implement" sends the shot like hal2-nvim does, through `scripts/implement.py`: the shot template filled
+  (byte-identical to hal2-nvim's bullet for main shot 15), a bullet file, `hal2-cli-agents spawn <repo> --prompt`
+  for a new worktree (lowest free slot, Remote Control `<repo>-<NN>`) or `hal2-cli-agents send` of `@<bullet>` into
+  a named existing session, then `shots mark-sent --worktree <slot>`. hal2 has no single send-a-shot command
+  (hal2-nvim's `<space>NN` only targets existing slots and builds the prompt in Lua), so the skill composes it.
+  Never typed into a `blocked` session (the text would answer its dialog). (2026-10-02)
 - Numbers: previewed in order per shotfile (two items into one shotfile get n and n+1, counting only the confirmed
   ones before them); the write reports the real number and says so when it differs (someone wrote meanwhile).
   (autogrill 1, 2026-10-02)
@@ -84,5 +92,8 @@ starting "after the landing: ...".
   (`test_fallback_writes_exactly_what_the_cli_writes`), so cloud sessions produce the same shotfiles.
 - Step 4: the user added mid-run that a to-do may not belong to the repository the skill was started in;
   `shots.py repos` and the "Repository first" rule came from that.
+- Real test of option 2 (2026-10-02): spawn from the walk started slot 01 of the scratch repo with the shot prompt,
+  marked the shot `[01]`, and the agent began with `/mfm`; a repo outside `~/a` first shows Claude Code's folder
+  trust dialog (real repos below `~/a` are trusted, worktree slots go by their main checkout).
 - Step 2: its old check (check-plugins ok) needed step 3's registration; it now checks only the skill's own
   frontmatter and scripts.

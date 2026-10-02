@@ -15,14 +15,16 @@ for tool in git python3; do
   fi
 done
 
-if ! command -v hal2-cli-shooter >/dev/null 2>&1 || ! hal2-cli-shooter --help | grep -q 'shots create'; then
-  if ! command -v cargo >/dev/null 2>&1; then
-    echo "optional hal2-cli-shooter needs Rust (https://rustup.rs); shots.py works without it" >&2
-  elif [ -d "$HOME/a/hal2/code/rust/apps/hal2-cli-shooter" ]; then
-    cargo install --path "$HOME/a/hal2/code/rust/apps/hal2-cli-shooter"
-  else
-    cargo install --git https://github.com/divramod/hal2 hal2-cli-shooter
+for app in hal2-cli-shooter hal2-cli-agents; do
+  if ! command -v "$app" >/dev/null 2>&1; then
+    if ! command -v cargo >/dev/null 2>&1; then
+      echo "optional $app needs Rust (https://rustup.rs); shots.py works without it" >&2
+    elif [ -d "$HOME/a/hal2/code/rust/apps/$app" ]; then
+      cargo install --path "$HOME/a/hal2/code/rust/apps/$app"
+    else
+      cargo install --git https://github.com/divramod/hal2 "$app"
+    fi
   fi
-fi
+done
 
 bash "$here/check-prerequisites.sh"
