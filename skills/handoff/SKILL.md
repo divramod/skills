@@ -16,9 +16,9 @@ is lost. `S=<skill-dir>/scripts`.
 
 | Call | Short | Does |
 |---|---|---|
-| `/handoff` | | [write](#write): record decisions, rewrite `HANDOFF.md`, commit the decision docs |
+| `/handoff` | `/h` | [write](#write): record decisions, rewrite `HANDOFF.md`, commit the decision docs |
 | `/handoff clear` | `/handoff x` | [write](#write), then [clear this session and continue](#clear-and-continue) with `/handoff c` on its own |
-| `/handoff continue`, `/handoff resume` | `/handoff c` | [continue](#continue) in a fresh session |
+| `/handoff continue`, `/handoff resume` | `/handoff c`, `/c` | [continue](#continue) in a fresh session |
 | `/handoff help` | `/handoff h` | print this table and stop |
 
 ## Continue

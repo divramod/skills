@@ -23,6 +23,18 @@ and every other harness that reads the [Agent Skills](https://agentskills.io) `S
 | [digest-todolist-picture](./skills/digest-todolist-picture/SKILL.md) | Turn a photo of a handwritten to-do list (sent from the Claude iOS or Android app) into shots: reads every item, routes each to the right shotfile (the repo's, the global ones or another repo's), then walks you through the list top to bottom as written on paper, one item per plain-text message you can answer by voice (the handwritten text, unclear points, the exact shot `## shot <n> <title>` with body, shotfile and number), and writes each one you confirm right away with `hal2-cli-shooter shots create` (or the same format by hand in a cloud session). Ticked items are skipped, duplicates of open shots flagged; `--dry-run` writes nothing. |
 | [tell](./skills/tell/SKILL.md) | Summarize anything from a URL or a path into `~/skills/tell/`: a video, playlist or channel (YouTube, TikTok, X, podcasts, any yt-dlp site; captions or local Whisper, background download), a web page (trafilatura + defuddle, Jina and Wayback fallbacks), a GitHub repo, issue, PR or discussion (`--deep` packs the repo with repomix), an X post or thread with its replies and video, a Hacker News thread or a Reddit post (article + discussion; Reddit falls back to an app token or the Arctic Shift archive when it blocks anonymous requests), or a document (PDF, DOCX, PPTX, EPUB, … via markitdown). A topic instead of a link (`/tell okf`) searches YouTube, the web, GitHub, Hacker News and your local documents for it, summarizes the relevant finds and writes a digest in `topics/<topic>/`. Several inputs at once get a digest. Every summary links back into its source (timestamps, paragraphs, line numbers, permalinks, pages), checks its quotes and links, lists related items, and gets a page in a browsable library with a source filter and a read-aloud button (local Supertonic-3 text-to-speech). Modes tldr/summary/chapters/detailed/wisdom/qa. Each source checks its own tools: run `scripts/<source>/install-prerequisites.sh` (or `scripts/install-prerequisites.sh` for all). |
 
+## Shortcuts
+
+| Shortcut | Runs |
+|---|---|
+| `/h` | `/handoff` |
+| `/c` | `/handoff continue` |
+
+A shortcut is a tiny generated skill (`skills/<shortcut>/SKILL.md`) that hands over to its skill, with any
+arguments appended; only typing it runs it, the model never picks it on its own. To add one, put it in
+[`aliases.json`](./aliases.json) (`{"c": {"skill": "handoff", "args": "continue"}}`) and run
+`python3 scripts/gen-aliases.py`; `scripts/check-plugins.py` fails while the generated skills are out of date.
+
 ## Install
 
 Pick **one** route per agent. The plugin and a skills copy together give you every skill twice.

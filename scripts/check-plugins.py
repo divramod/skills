@@ -8,9 +8,11 @@
 - every scripts folder whose own scripts call external tools (scripts/ itself, or a per-source
   scripts/<folder>/) ships executable check-prerequisites.sh and install-prerequisites.sh; when any
   scripts/<folder>/ does, scripts/ also ships both as aggregators (see CLAUDE.md, "Skill script rules")
+- the shortcut skills generated from aliases.json are up to date (scripts/gen-aliases.py --check)
 
 Run: python3 scripts/check-plugins.py   (exit 1 on any problem)
 """
+import importlib.util
 import json
 import os
 import re
@@ -58,8 +60,15 @@ def prereq_errors(skill: Path) -> list[str]:
     return errors
 
 
+def alias_errors() -> list[str]:
+    spec = importlib.util.spec_from_file_location("gen_aliases", ROOT / "scripts" / "gen-aliases.py")
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    return [] if gen.main(["--check"]) == 0 else ["shortcut skills are out of date: run scripts/gen-aliases.py"]
+
+
 def main() -> int:
-    errors = []
+    errors = alias_errors()
     claude = load(".claude-plugin/plugin.json")
     codex = load(".codex-plugin/plugin.json")
     claude_mkt = load(".claude-plugin/marketplace.json")
