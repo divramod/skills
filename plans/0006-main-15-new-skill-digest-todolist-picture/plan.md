@@ -65,6 +65,8 @@ starting "after the landing: ...".
   written at once, so its shown number is its real number and an early end loses nothing.
 - Shots are shown as a quote with the literal header in bold, never in a code block: the Claude app does not wrap
   code blocks, so the user had to expand each one (user, 2026-10-02, from a phone screenshot).
+- The quote starts with the shotfile's full path (`~/...`), so the user sees exactly where a shot goes (user,
+  2026-10-02).
 - Numbers: previewed in order per shotfile (two items into one shotfile get n and n+1, counting only the confirmed
   ones before them); the write reports the real number and says so when it differs (someone wrote meanwhile).
   (autogrill 1, 2026-10-02)

@@ -103,6 +103,8 @@ Before each item, `preview` it alone (earlier items are already written, so its 
 
 **Proposal**: <repo>:<shotfile> (new shotfile), shot <n>
 
+> <the shotfile's full path from preview's `path`, home as ~: ~/a/hal2/shotfiles/app-macos-components.md>
+>
 > **## shot <n> <title>**
 > <the body, line by line as it will be written, every line quoted with `> `>
 
@@ -112,7 +114,9 @@ Say yes, skip, another number, another shotfile, or what to change.
 
 Plain Markdown, and the shot always as a quote (`> `), never in a code block: the Claude app does not wrap code
 blocks, so a long line is cut off and the user has to expand the block on every item. The quote wraps like the
-text around it. Its first line is the header in bold, written out literally (`**## shot 6 tabs: sort
+text around it. Its first line is the full path of the shotfile the shot is written to (`path` from
+`preview`, the home folder as `~`), as plain text, not inline code (plain text wraps on the phone; escape `_` as
+`\_`), then a bare `>` line, then the header in bold, written out literally (`**## shot 6 tabs: sort
 alphabetically button**`; inside bold it is not turned into a heading); every body line follows as its own `> `
 line, a blank body line as a bare `>`. Keep the message short enough to read on a phone without scrolling. The
 `<repo>:` part is left out for the current repo and is `global:` for a global shotfile.
