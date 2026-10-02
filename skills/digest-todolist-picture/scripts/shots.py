@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shotfile work for /digest-todolist-picture: where shots can go, which numbers they get, and writing them.
 
+  shots.py repos [--root DIR]                   the git repositories an item could belong to (default ~/a), as JSON
   shots.py targets [--repo DIR] [--no-global]   the shotfiles (next number, open shots) as JSON
   shots.py preview < items.json                 the items with the shot number each would get, in order
   shots.py write   < items.json                 write the items as open shots, in order
@@ -18,6 +19,7 @@ import sys
 from pathlib import Path
 
 CLI = "hal2-cli-shooter"
+DEFAULT_REPOS_ROOT = Path("~/a").expanduser()
 DEFAULT_GLOBAL_ROOT = Path("~/Documents/hal2/shotfiles").expanduser()
 HEADER = re.compile(r"^##\s+(?:x\s+)?shot\s+(\S+)(?:\s+(.*))?$")
 STAMP = re.compile(r"\s*\(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\).*$")
@@ -139,6 +141,20 @@ def cmd_targets(argv: list[str]) -> dict:
     }
 
 
+def cmd_repos(argv: list[str]) -> dict:
+    """The repositories below the root (default ~/a): name, dir, whether it has shotfiles, which one is current."""
+    root = Path(argv[argv.index("--root") + 1]).expanduser() if "--root" in argv else DEFAULT_REPOS_ROOT
+    current = git("rev-parse", "--show-toplevel", cwd=Path.cwd())
+    current_main = repo_shotfiles(Path.cwd()) if current else None
+    repos = []
+    for d in sorted(root.iterdir()) if root.is_dir() else []:
+        if d.is_dir() and (d / ".git").exists():
+            folder = d / "shotfiles"
+            repos.append({"name": d.name, "dir": str(d), "shotfiles": folder.is_dir(),
+                          "current": current_main is not None and current_main.parent.resolve() == d.resolve()})
+    return {"root": str(root), "current": str(current_main.parent) if current_main else None, "repos": repos}
+
+
 def item_path(item: dict) -> Path:
     name = item["shotfile"].removesuffix(".md")
     if item.get("global"):
@@ -195,7 +211,9 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         return 0
     cmd = argv[0]
-    if cmd == "targets":
+    if cmd == "repos":
+        result = cmd_repos(argv[1:])
+    elif cmd == "targets":
         result = cmd_targets(argv[1:])
     elif cmd in ("preview", "write"):
         items = json.loads(sys.stdin.read() or "[]")
@@ -212,7 +230,7 @@ def main(argv: list[str]) -> int:
         except ValueError as e:
             die(str(e))
     else:
-        die(f"unknown command {cmd!r} (targets, preview, write)")
+        die(f"unknown command {cmd!r} (repos, targets, preview, write)")
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 

@@ -101,6 +101,14 @@ class TestCommands(unittest.TestCase):
         self.assertEqual(p[2]["header"], "## shot 5 c")
         self.assertEqual((self.repo / "shotfiles" / "main.md").read_text(), FILE)  # preview writes nothing
 
+    def test_repos_lists_git_repos_and_marks_the_current_one(self):
+        root = Path(self.tmp.name)
+        (root / "plain").mkdir()
+        subprocess.run(["git", "init", "-q", str(root / "noshots")], check=True)
+        r = run(["repos", "--root", str(root)], cwd=self.repo)
+        self.assertEqual([(x["name"], x["shotfiles"], x["current"]) for x in r["repos"]],
+                         [("noshots", False, False), ("repo", True, True)])
+
     def test_fallback_write_without_the_cli(self):
         items = [{"shotfile": "main", "title": "a", "body": "do a", "repo": str(self.repo), "number": 4},
                  {"shotfile": "ideas", "title": "b", "repo": str(self.repo)}]

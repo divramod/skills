@@ -1,13 +1,14 @@
 ---
 name: digest-todolist-picture
-description: Turn a photo of a handwritten to-do list into shots — reads every item of the picture (sent from the Claude iOS or Android app, or a path), routes each to the right shotfile (the repo's `shotfiles/*.md`, the global shotfiles, or another repo's the item names), asks about unreadable or unclear items, then asks yes/no for every item showing the exact shot it would write (`## shot <n> <title>` and body), its shotfile and number, and writes only the confirmed ones with `hal2-cli-shooter shots create` (or the same format by hand where hal2 is missing). Ticked or crossed-out items are skipped; items that match an open shot are flagged. Use when the user sends a picture of a to-do list, a notebook page or a whiteboard and wants the items as shots. `/digest-todolist-picture --dry-run` shows the shots without writing, `/digest-todolist-picture h` shows help.
+description: Turn a photo of a handwritten to-do list into shots — reads every item of the picture (sent from the Claude iOS or Android app, or a path), routes each to the right repository and shotfile (the current repo's `shotfiles/*.md`, another of the user's repos, or the global shotfiles; it never assumes an item belongs to the repo it was started in), asks about unreadable items and items whose repository or shotfile is unclear, then asks yes/no for every item showing the exact shot it would write (`## shot <n> <title>` and body), its shotfile and number, and writes only the confirmed ones with `hal2-cli-shooter shots create` (or the same format by hand where hal2 is missing). Ticked or crossed-out items are skipped; items that match an open shot are flagged. Use when the user sends a picture of a to-do list, a notebook page or a whiteboard and wants the items as shots. `/digest-todolist-picture --dry-run` shows the shots without writing, `/digest-todolist-picture h` shows help.
 ---
 
 # digest-todolist-picture
 
 A handwritten list becomes shots, and nothing goes into a shotfile that the user has not seen and confirmed in its
 final form. `S=<skill-dir>/scripts`. A shot is `## shot <n> <title>` with its body below it, in a shotfile
-(`shotfiles/<name>.md`); `shots.py` writes it exactly as hal2-nvim's shooter does, so never edit shotfiles by hand.
+(`shotfiles/<name>.md`); `shots.py` writes it exactly as hal2-nvim's shooter does, so never edit shotfiles by hand. The skill captures
+work, it does not start it: it never writes `plans/CURRENT_PLAN`, `.gitignore` or anything but the confirmed shots.
 
 | Call | Does |
 |---|---|
@@ -33,21 +34,28 @@ Read every item, top to bottom, page after page. For each note:
 - an arrow, indent or sub-bullet makes a note part of the item above it (one shot), not an item of its own;
 - a heading over a group of items (a repo, a project, "hal2:", "skills") is routing for the items below it.
 
-## 2. Find the shotfiles
+## 2. Find the repositories and shotfiles
 
 ```bash
-python3 $S/shots.py targets            # add --repo <dir> for another repository
+python3 $S/shots.py repos              # the user's git repositories (~/a; --root <dir>), which has shotfiles, which is current
+python3 $S/shots.py targets            # the current repo's and the global shotfiles; --repo <dir> for another repository
 ```
 
-JSON: `repo` (its shotfiles, each with `name`, `next` number and `open` shots `{number, title}`), `global` (the
-global shotfiles, `null` when there are none here) and `cli` (whether `hal2-cli-shooter` is installed). Exit 2
-names a missing tool: run `bash $S/install-prerequisites.sh` once and retry. An item or heading that names another
-repository goes to that repo's shotfiles when `~/a/<name>` is a git repository (`targets --repo ~/a/<name>`).
+`targets` JSON: `repo` (its shotfiles, each with `name`, `next` number and `open` shots `{number, title}`), `global`
+(the global shotfiles, `null` when there are none here) and `cli` (whether `hal2-cli-shooter` is installed). Exit 2
+names a missing tool: run `bash $S/install-prerequisites.sh` once and retry. Run `targets --repo <dir>` for every
+other repository an item may belong to (step 3), so its shotfiles and open shots are known too.
 
 ## 3. Draft each shot
 
 For every open item:
 
+- **Repository first.** Starting the skill in a repository does not make every item that repository's: a
+  handwritten list mixes projects. An item belongs to the current repo only when it clearly does (it names the
+  repo, one of its skills, apps or shotfiles, or its heading does). An item that names another repo (`hal2: ...`,
+  a heading `hal2`) goes to that one from `repos`. A personal task with no project (`call the dentist`) goes to a
+  global shotfile. Everything else, and every item that could belong to two repos, is **unclear**: it gets a
+  repository question in step 4, never a guess.
 - **Shotfile**: the one whose name and open shots match the item's topic (the feature it belongs to); a skill's
   name, a repo or an app named in the item decides. Personal tasks with no repo go to a global shotfile. Nothing
   fits: propose a new shotfile with a short kebab-case name (`shots.py` creates it).
@@ -68,12 +76,14 @@ Items: `[{"shotfile": "main", "title": "...", "body": "...", "global": false, "r
 It returns each with `number`, `header` (`## shot <n> <title>`) and `new_file`, and writes nothing.
 
 `--dry-run` stops here: print every draft as it would be written (shotfile, `new shotfile` when new, the header and
-the body), then the skipped done items and the unclear points, and end.
+the body), then the skipped done items and the unclear points (for an unclear repository: the candidate repos), and end.
 
 ## 4. Clarify the unclear items
 
-Before any confirmation, ask about every item that has `[?word?]` words, could mean two things, or has no clear
-shotfile: one question each through the question tool (4 per call), the question quoting the note as read,
+Before any confirmation, ask about every item that has `[?word?]` words, could mean two things, has no clear
+repository (step 3) or no clear shotfile. A repository question offers the likely repos from `repos` (the current
+one included when it is a candidate) and the global shotfiles; then the shotfile in that repo is drafted as above.
+One question each through the question tool (4 per call), the question quoting the note as read,
 options the readings or shotfiles you consider likely, the most likely first and marked "(Recommended)". Redraft
 those items from the answers and run `preview` again.
 
