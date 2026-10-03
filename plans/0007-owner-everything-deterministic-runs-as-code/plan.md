@@ -40,8 +40,8 @@ starting "after the landing: ...".
 | 9 | Measure: one hour of ticks on hal2, model tokens of the owner session before vs after | the owner's transcript shows ≤ 1 wake per real J item; noted in the plan | done (goal missed, see 9a–9c) |
 | 9a | Noise: an idle-in-plan stop or an F6 judge in a slot that waits in the merge queue or is paused for a landing is no wake (`tick.waiting_noise`, `tick.paused`) | tests; a dry run plans no such wake | done |
 | 9b | Small context per wake: the tick types `/clear` before `/owner act` when the owner's context passes 10% (`wake.small_context`); Act records open threads in the log | tests with a fake session | done |
-| 9c | Measure again: one hour of ticks after 9a/9b against the 11:15–12:15 baseline | model input per hour well below the baseline (target ≤ 20%); ≤ 1 wake per real J item | next |
-| 10 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
+| 9c | Measure again: one hour of ticks after 9a/9b against the 11:15–12:15 baseline | model input per hour well below the baseline (target ≤ 20%); ≤ 1 wake per real J item | done (52%, target missed) |
+| 10 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | done |
 
 ## Decisions
 
@@ -171,3 +171,10 @@ starting "after the landing: ...".
   calls, 26.06M input, 41.6k output. Wakes: one per tick with items (14:53 two, 15:13 eleven, 15:22 ten); 07's F6
   judge came in two wakes (paused, not real J), and most lead items were queue waiters. The owner handled each wake in
   1–3 min. Causes and fixes: 9a, 9b.
+- Step 9c (2026-10-03): 15:50–16:50 with 9a/9b: 5 wakes (one per tick with items, each after a `/clear`), 17 turns
+  (5 acts, 6 peer messages, the clears), 84 calls, cache reads 10.4M (step 9: 27.4M). Weighted (cache read 0.1,
+  write 1.25, output 5): 1.53M against the loop's 2.96M = 52%; the ≤ 20% target is missed. A cleared owner session
+  starts at ~118k tokens (system prompt, tools, skills list, hal2's and the global CLAUDE.md), so every call costs
+  that floor; peer replies (35% of the calls) and real J work (a merge train: 27 calls) are the rest. No wake
+  repeated an item; 16's F6 came in two wakes for two different stops (both `count`). Levers left, the user's call:
+  a lighter model for the owner session, a smaller start context (the owner slot loads hal2's whole CLAUDE.md).
