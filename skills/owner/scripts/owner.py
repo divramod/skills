@@ -25,13 +25,16 @@ import shutil
 import sys
 from pathlib import Path
 
+import boss
 import due
 import tick
 
 HERE = Path(__file__).resolve().parent
 TOOLS = ("git", "hal2-cli-git", "hal2-cli-hooks", "hal2-cli-agents")
 MODES = ("claude", "timer")
-HANDLERS: dict = {}  # "duty:<name>" / "task:<name>" → item → planned actions (steps 2-5)
+HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned actions
+    "duty:mtm": boss.handler,
+}
 
 
 def state(repo: str) -> Path:
@@ -74,8 +77,8 @@ def print_round(r: dict) -> None:
     for a in r["planned"]:
         what = a.get("text") or " ".join(a.get("argv", [])) or a.get("name", "")
         print(f"- {a['do']:6} {a['duty']}/{a['kind']} {a['slot']}: {what}")
-    for key in ("wake", "notify"):
-        if r[key]:
+    for key in ("relay", "delegate", "wake", "notify"):
+        if r.get(key):
             print(f"{key}: " + "; ".join(a.get("text", "") for a in r[key]))
     if r.get("summary"):
         print(f"summary: {r['summary']}")

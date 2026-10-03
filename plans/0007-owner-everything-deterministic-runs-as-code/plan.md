@@ -30,8 +30,8 @@ starting "after the landing: ...".
 | # | Step | Done when | Status |
 |---|---|---|---|
 | 1 | `owner.py` skeleton: `start-check` and `tick` running the round frame (stay current, the OWNER-ROLE.md edit, due, a log line per action, the summary from the log), plus `--dry-run` | `python3 skills/owner/scripts/owner.py tick --dry-run` in the owner slot prints the due items and the planned actions; unit tests pass | done |
-| 2 | The D/T actions of merge-to-main-boss in `tick` (priority front, wake → release rule, waiter-gone, load-high pause/go, flaky ledger, work-without-agent with HANDOFF), messages through `hal2-cli-agents send` to idle sessions only | tests per action on fixtures; a dry run on the live queue names the right actions | next |
-| 3 | The D/T actions of development-lead, ci (transient-rerun regex, runners, hung runs, slot-red), watch (sanity-watch `scan.py resume`), autoclear (known continuations) | tests per action; dry runs on live data | |
+| 2 | The D/T actions of merge-to-main-boss in `tick` (priority front, wake → release rule, waiter-gone, load-high pause/go, flaky ledger, work-without-agent with HANDOFF), messages through `hal2-cli-agents send` to idle sessions only | tests per action on fixtures; a dry run on the live queue names the right actions | done |
+| 3 | The D/T actions of development-lead, ci (transient-rerun regex, runners, hung runs, slot-red), watch (sanity-watch `scan.py resume`), autoclear (known continuations) | tests per action; dry runs on live data | next |
 | 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; one live delegation in hal2 logged | |
 | 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted (in the owner branch) | `due.py check` validates the new form; tick runs hal2's tasks with no wake | |
 | 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | |
@@ -72,6 +72,12 @@ starting "after the landing: ...".
 - 2026-10-03 (autogrill 1): no landing step: the plan runs in the skills repo's main checkout (shared with another
   session), so each step is committed with its files only and pushed (the user's standing go for the skills); the
   plan skill's landing finds nothing to land and says so.
+- 2026-10-03 (step 2): a templated message is typed only into a resting session (`idle|done|sleeping`) whose
+  prompt box is empty (`deliver.py`, the rule of hal2-agents' `scrape::claude_input`, ported); otherwise it becomes a
+  `relay` that the woken session sends verbatim with SendMessage (Claude Code queues it for a busy session).
+  Proposal for hal2: `hal2-cli-agents send --if-empty`, so the rule lives once.
+- 2026-10-03 (step 2): a slot with an open `ask` in the owner's log (no `answered` after it) gets no message, wake
+  or new session from the tick (the live owner held slot 11's benchmarks for the user's go).
 
 ## Notes
 - Step 1 (2026-10-03): `owner.py start-check|tick [--dry-run]|mode`, `tick.py` (the frame: planned actions as data,
@@ -79,3 +85,8 @@ starting "after the landing: ...".
   handler are planned as `wake` items `no-handler`, so the frame runs end to end before steps 2-5 fill the handlers
   (`owner.HANDLERS`). A live dry run in hal2's owner slot planned all 9 items. Trap: `git status --porcelain` needs
   its leading space kept (`tick.git` does not strip it).
+- Step 2 (2026-10-03): `boss.py` (the boss's rules as `Planner`, keyed actions deduplicated against the log:
+  wake → release after 10 min, priority front/land-now/clear, load pause → go when the landing ends, waiter-gone,
+  flaky under load → `delegate`, else wake, orphan with HANDOFF.md → `worktree run --prompt "/handoff c"`; active-long,
+  work-not-queued, long-queue and paused wake at most hourly), `deliver.py`, `snapshot(fetch=False)` for dry runs.
+  `active-long` stays J for now (reading the landing's step is step 3's kind of work).

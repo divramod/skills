@@ -231,12 +231,13 @@ def findings(snap: dict) -> list[dict]:
     return out
 
 
-def snapshot(repo: str, hours: float) -> dict:
+def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
     now = time.time()
     main = main_checkout(repo)
     default = (run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], main).strip()
                .removeprefix("origin/") or "main")
-    run(["git", "fetch", "--quiet", "origin", default], main)
+    if fetch:
+        run(["git", "fetch", "--quiet", "origin", default], main)
     q = (run_json(["hal2-cli-git", "worktree", "queue", "--json"], main) or {}).get("queue", [])
     agents_raw = run_json(["hal2-cli-agents", "list", "--json"]) or {}
     agents = agents_raw.get("list", []) if isinstance(agents_raw, dict) else agents_raw

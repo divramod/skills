@@ -9,8 +9,14 @@ with `do` one of
   run     argv: run a command (the result decides follow-ups, see `stay_current`)
   ran     name: due.py's run record for a duty or task
   record  text: a log line only
+  send    pane, text: a templated message typed into an idle session's empty prompt (deliver.py); refused
+          (busy, a draft, a dialog) it becomes a `relay`
+  relay   text: a templated message the woken session sends verbatim with SendMessage (busy sessions)
+  delegate text, brief: a fix for a worker (step 4 starts the worker; until then it wakes the model)
   wake    text: an item that needs the model (step 6 hands these to the woken session)
   notify  text: a notice for the user (the woken session pushes them, batched)
+
+An action may carry a `key`: the log keeps it, and planners skip what an earlier round already did.
 
 Every executed action except `ran` goes into the owner's log with `"by": "tick"`.
 """
@@ -20,6 +26,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import deliver
 import due
 import mtm_scan
 
@@ -93,23 +100,31 @@ def due_items(top: str, now: dt.datetime | None = None) -> tuple[list[dict], dic
     return rows, settings, []
 
 
-def item_actions(item: dict, handlers: dict) -> list[dict]:
-    """The planned actions of one due duty or task, ending with its run record."""
+def item_actions(item: dict, handlers: dict, ctx: dict) -> list[dict]:
+    """The planned actions of one due duty or task, ending with its run record. A handler gets the item and
+    `ctx` (top, main, now, dry, log: the owner's log entries) and returns planned actions."""
     kind, _, name = item["name"].partition(":")
     handler = handlers.get(item["name"])
-    planned = handler(item) if handler else [
+    planned = handler(item, ctx) if handler else [
         act(name if kind == "duty" else "task", "no-handler", "wake",
             text=f"{item['name']} has no tick handler yet: run it as the skill says")]
     return planned + [act(name if kind == "duty" else "task", "ran", "ran", name=item["name"])]
 
 
-def plan_round(top: str, handlers: dict, now: dt.datetime | None = None) -> dict:
+def read_log(main: str) -> list[dict]:
+    f = mtm_scan.DATA / Path(main).name / "log.jsonl"
+    return [json.loads(line) for line in f.read_text().splitlines() if line.strip()] if f.exists() else []
+
+
+def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bool = True) -> dict:
     """Plan everything after the frame's git work: the due items and their actions."""
     items, settings, problems = due_items(top, now)
     if problems:
         return {"due": [], "settings": settings, "actions": [act("frame", "role-invalid", "notify",
                                                                  text="; ".join(problems))], "stop": True}
-    actions = [a for item in items for a in item_actions(item, handlers)]
+    main = mtm_scan.main_checkout(top)
+    ctx = {"top": top, "main": main, "now": now or dt.datetime.now(), "dry": dry, "log": read_log(main)}
+    actions = [a for item in items for a in item_actions(item, handlers, ctx)]
     return {"due": items, "settings": settings, "actions": actions, "stop": False}
 
 
@@ -121,11 +136,15 @@ def execute(a: dict, top: str, main: str, out: dict) -> None:
     if a["do"] == "run":
         code, text = sh(a["argv"], top)
         a["exit"], a["output"] = code, text[-2000:]
-    if a["do"] in ("wake", "notify"):
-        out[a["do"]].append(a)
+    if a["do"] == "send":
+        refused = deliver.send(a["pane"], a["text"]) if a.get("pane") else "no session"
+        if refused:
+            a.update(do="relay", why=f"{a.get('why', '')} not typed: {refused}".strip())
+    if a["do"] in ("wake", "notify", "relay", "delegate"):
+        out.setdefault(a["do"], []).append(a)
     note = a.get("why", "") + (f" (exit {a['exit']})" if a.get("exit") else "")
     mtm_scan.log(main, {"kind": a["kind"], "slot": a["slot"], "what": a.get("text") or " ".join(a.get("argv", [])),
-                        "note": note, "by": "tick", "duty": a["duty"]})
+                        "note": note, "by": "tick", "duty": a["duty"], "do": a["do"], "key": a.get("key", "")})
 
 
 def stay_current(top: str, main: str, out: dict) -> None:
@@ -169,7 +188,7 @@ def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None) ->
         out["done"].append(out["planned"][0])
     edit, go_on = role_edit(top)
     out["planned"] += edit
-    rnd = plan_round(top, handlers, now) if go_on else {"due": [], "settings": {}, "actions": [], "stop": True}
+    rnd = plan_round(top, handlers, now, dry) if go_on else {"due": [], "settings": {}, "actions": [], "stop": True}
     out["planned"] += rnd["actions"]
     out.update(due=rnd["due"], settings=rnd["settings"], stop=rnd["stop"])
     if not dry:

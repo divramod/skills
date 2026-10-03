@@ -88,7 +88,7 @@ class Slot(Repo):
 
 class Round(Repo):
     def test_due_items_get_their_handler_or_a_wake_and_end_with_ran(self):
-        handlers = {"duty:mtm": lambda item: [tick.act("mtm", "front", "record", "07", text="x")]}
+        handlers = {"duty:mtm": lambda item, ctx: [tick.act("mtm", "front", "record", "07", text="x")]}
         rnd = tick.plan_round(str(self.slot), handlers, NOW)
         self.assertEqual([i["name"] for i in rnd["due"]], ["duty:mtm", "task:probe"])
         self.assertEqual([(a["kind"], a["do"]) for a in rnd["actions"]],
