@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Find and delete the build artifacts of a git worktree, without asking.
 
-Usage: cleanup.py <command> [options]
+Usage: cleanup.py <command> [options] [--worktree NAME|PATH]
   list [--json]            this worktree's git-ignored paths: `artifact` (delete takes it), `kept` or `unknown`,
                            with size and how it comes back
   busy                     processes whose command line names this worktree (a build still running); exit 1 if any
@@ -14,6 +14,9 @@ What counts: the repo's `.hal/cleanup` (one glob per line relative to the worktr
 build folders (target/, build/, .build/, dist/, __pycache__/, ...; fetched dependencies like node_modules/ are
 kept). Ignored paths no rule names are `unknown` and never deleted in bulk. Protected, never listed or deleted:
 .git, .hal, .secrets, .env*, plans/, shotfiles/, *.machine.toml. Exit 2: git is missing.
+
+--worktree works on another checkout of the current repository than the one it runs in: a worktree's folder name
+or branch (`03`, `main`) as `git worktree list` shows it, or a path to any checkout.
 """
 import fnmatch
 import json
@@ -42,11 +45,33 @@ def git(*args, check=True):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=check).stdout
 
 
+TARGET = None  # --worktree: the checkout to clean instead of the current one
+
+
+def worktree_named(name: str) -> Path:
+    """The checkout of the current repository whose folder name or branch is name."""
+    found = []
+    for block in git("worktree", "list", "--porcelain").split("\n\n"):
+        fields = dict(line.partition(" ")[::2] for line in block.splitlines() if line)
+        path, branch = fields.get("worktree"), fields.get("branch", "").removeprefix("refs/heads/")
+        if path and name in (Path(path).name, branch):
+            found.append(Path(path))
+    if len(found) != 1:
+        why = "no worktree" if not found else "several worktrees"
+        print(f"cleanup.py: {why} named {name} in this repository", file=sys.stderr)
+        sys.exit(1)
+    return found[0]
+
+
 def toplevel() -> Path:
+    where = []
+    if TARGET:
+        target = Path(TARGET).expanduser()
+        where = ["-C", str(target if target.is_dir() else worktree_named(TARGET))]
     try:
-        return Path(git("rev-parse", "--show-toplevel").strip())
+        return Path(git(*where, "rev-parse", "--show-toplevel").strip())
     except subprocess.CalledProcessError:
-        print("cleanup.py: not inside a git worktree", file=sys.stderr)
+        print(f"cleanup.py: not inside a git worktree{' (' + TARGET + ')' if TARGET else ''}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -219,7 +244,15 @@ def cmd_delete(args):
 COMMANDS = {"list": cmd_list, "busy": cmd_busy, "delete": cmd_delete}
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
+    argv = sys.argv[1:]
+    if "--worktree" in argv:
+        i = argv.index("--worktree")
+        if i + 1 >= len(argv):
+            print("cleanup.py: --worktree needs a name or path", file=sys.stderr)
+            sys.exit(1)
+        TARGET = argv[i + 1]
+        del argv[i:i + 2]
+    if not argv or argv[0] not in COMMANDS:
         print(__doc__.strip(), file=sys.stderr)
         sys.exit(1)
-    sys.exit(COMMANDS[sys.argv[1]](sys.argv[2:]))
+    sys.exit(COMMANDS[argv[0]](argv[1:]))

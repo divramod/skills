@@ -1,6 +1,6 @@
 ---
 name: cleanup
-description: Delete the build artifacts of the current git worktree to free disk space — every git-ignored, untracked build output and generated file (Rust target/, Xcode and SwiftPM build folders, .build/, generated .xcodeproj and xcframeworks, dist/, caches), without asking. What goes is the repo's `.hal/cleanup` (globs to delete, `!` globs to keep, e.g. fetched dependencies), else generic build folders; it deletes only git-ignored paths that hold no tracked file — never secrets, .env, .hal/, plans/ or shotfiles/ — and reports sizes and how each comes back. /mtm runs it after a fully landed worktree. Refuses while a build or test still runs in the worktree. Use when the user says /cleanup, "clean the worktree", "delete build artifacts", "free disk space" or a disk is full. `/cleanup h` shows help.
+description: Delete the build artifacts of the current git worktree, or another worktree of the repository named by its folder name, branch or path (`/cleanup 03`, so it runs from another session), to free disk space — every git-ignored, untracked build output and generated file (Rust target/, Xcode and SwiftPM build folders, .build/, generated .xcodeproj and xcframeworks, dist/, caches), without asking. What goes is the repo's `.hal/cleanup` (globs to delete, `!` globs to keep, e.g. fetched dependencies), else generic build folders; it deletes only git-ignored paths that hold no tracked file — never secrets, .env, .hal/, plans/ or shotfiles/ — and reports sizes and how each comes back. /mtm runs it after a fully landed worktree. Refuses while a build or test still runs in the worktree. Use when the user says /cleanup, "clean the worktree", "delete build artifacts", "free disk space" or a disk is full. `/cleanup h` shows help.
 ---
 
 # cleanup
@@ -13,7 +13,11 @@ The script decides what counts as an artifact and refuses unsafe paths; this ski
 | `/cleanup` | delete every artifact of this worktree, then report |
 | `/cleanup <path>...` | delete just these (worktree-relative), after the same safety checks |
 | `/cleanup list` | only the table, delete nothing |
+| `/cleanup <worktree> [list\|<path>...]` | the same for another checkout of this repository: its folder name or branch as `git worktree list` shows it (`03`, `main`) or its path; add `--worktree <it>` to every `$C` call |
 | `/cleanup h`, `/cleanup help` | print this table and stop |
+
+A first argument that `git worktree list` names (a folder name or branch) or that is a checkout's path is the
+worktree; anything else is a path inside the current one.
 
 ## What counts
 
@@ -45,7 +49,10 @@ back; delete them only when asked.
 
 1. `$C busy` lists the processes whose command line names this worktree (a `cargo`, `xcodebuild`, a hook's
    `test-unit.sh`). When it exits 1, deleting their output breaks them: say which run and stop (from /mtm: skip
-   the cleanup and say so). Your own background tasks in this worktree count too.
+   the cleanup and say so). Your own background tasks in this worktree count too. For another worktree, also check
+   `hal2-cli-agents list --json` (when installed) for an agent in it whose `state` is `working`: it may start a
+   build any moment, so say so and ask before deleting (plain text: 1. wait until it is idle (recommended), 2.
+   clean now).
 2. `$C delete`, or `$C delete <path>...`: no question first. It prints `deleted <size> <path>` per path, `skip
    <path>: <why>` for a refused one (exit 1) and the space freed. A large `target/` takes a while: run it in the
    background when the harness allows and say so.

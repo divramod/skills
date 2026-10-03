@@ -114,6 +114,23 @@ class CleanupTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertFalse((self.repo / "web/node_modules").exists())
 
+    def test_another_worktree_by_name_or_path(self):
+        others = tempfile.TemporaryDirectory()
+        self.addCleanup(others.cleanup)
+        wt = Path(os.path.realpath(others.name)) / "03"
+        subprocess.run(["git", "worktree", "add", "-q", "-b", "03", str(wt)], cwd=self.repo, env=ENV, check=True)
+        (wt / "code/rust/target").mkdir(parents=True)
+        (wt / "code/rust/target/big").write_text("x")
+        r = self.run_("delete", "--worktree", "03")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse((wt / "code/rust/target").exists())
+        self.assertTrue((self.repo / "code/rust/target").exists())
+        r = self.run_("list", "--worktree", str(self.repo), "--json")
+        self.assertEqual(json.loads(r.stdout)["worktree"], str(self.repo))
+        r = self.run_("busy", "--worktree", "07")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no worktree named 07", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
