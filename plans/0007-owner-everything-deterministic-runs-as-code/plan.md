@@ -95,6 +95,11 @@ starting "after the landing: ...".
 - 2026-10-03 (step 5): hal2's OWNER-ROLE.md is the user's file (the handoff's rule): the converted tasks are a
   proposal, [owner-role-hal2-tasks.md](owner-role-hal2-tasks.md) (also in `~/skills/owner/hal2/pending/`), applied
   by the user; until then the tick wakes the model for them as today.
+- 2026-10-03 (user): the task proposal is applied: hal2's OWNER-ROLE.md in the owner slot has the four tasks in the
+  machine form (c48f5625 on branch `owner`, committed by this session on the user's go); `due.py check`: all four
+  run by the tick.
+- 2026-10-03 (user): the empty-prompt check moves into hal2 as `hal2-cli-agents send --if-empty` (shot
+  plugin-agents 29); once it lands, `deliver.py` calls it and drops its Python copy.
 
 ## Notes
 - Step 1 (2026-10-03): `owner.py start-check|tick [--dry-run]|mode`, `tick.py` (the frame: planned actions as data,
