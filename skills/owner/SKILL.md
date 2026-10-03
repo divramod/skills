@@ -1,6 +1,6 @@
 ---
 name: owner
-description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. The user's stand-in over every agent session of a repository, from a dedicated Claude session in its own worktree slot `owner` that runs only what the repo's OWNER-ROLE.md opts in to, each duty (a subskill) and repo task on its own cron and keeps a log of everything it does. It never changes anything in its own branch. Fixes go to worker sessions it starts itself (create-worktree-session, list-free-worktrees, delete-worktree-session), each writing a plan with the plan skill, autogrilling it and running it to its landing, without asking the user. The duties: merge-to-main-boss gets every worktree's finished work onto main fast (wakes failed landings, tells sessions to land now, disables load-flaky tests, pauses heavy work or the queue, forms merge trains). development-lead helps stuck sessions (answers what the repo's decisions answer, reviews, batches product questions for the user). ci watches GitHub Actions and starts fixes for red or stuck workflows. sanity-watch resumes abnormally stopped sessions. fix-autoclear catches autoclear failures. It talks to the sessions over Claude Code's cross-session socket (ListAgents + SendMessage), and each round writes a gitignored summary to plans/owner/. Use when the user says /owner, "owner", "merge boss", "development lead", "watch CI", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/owner start` starts the loop, `/owner h` shows help.
+description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. The user's stand-in over every agent session of a repository, from a dedicated Claude session in its own worktree slot `owner` that runs only what the repo's OWNER-ROLE.md opts in to, each duty (a subskill) and repo task on its own cron and keeps a log of everything it does. It never changes anything in its own branch except committing the user's OWNER-ROLE.md, which lives in the owner branch and syncs with main on every landing (two hooks). Fixes go to worker sessions it starts itself (create-worktree-session, list-free-worktrees, delete-worktree-session), each writing a plan with the plan skill, autogrilling it and running it to its landing, without asking the user. The duties: merge-to-main-boss gets every worktree's finished work onto main fast (wakes failed landings, tells sessions to land now, disables load-flaky tests, pauses heavy work or the queue, forms merge trains). development-lead helps stuck sessions (answers what the repo's decisions answer, reviews, batches product questions for the user). ci watches GitHub Actions and starts fixes for red or stuck workflows. sanity-watch resumes abnormally stopped sessions. fix-autoclear catches autoclear failures. It talks to the sessions over Claude Code's cross-session socket (ListAgents + SendMessage), and each round writes a gitignored summary to plans/owner/. Use when the user says /owner, "owner", "merge boss", "development lead", "watch CI", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/owner start` starts the loop, `/owner h` shows help.
 ---
 
 # owner
@@ -21,9 +21,10 @@ worktree slot `owner`** (`~/.hal/git/worktree/<repo>/owner`, branch `owner`). St
 `owner` slot. It never runs in the main checkout or in a numbered slot, because
 the numbered slots are the user's workers.
 
-**The owner never changes anything in its own branch.** It reads, decides, talks and records. Every change, whether
-a fix, a disabled test or a rule, is made by a worker session it starts with a plan ([Delegate](#delegate-a-fix)), or
-by the session whose work it concerns. Its slot stays exactly origin/main, merged from main every round.
+**The owner never changes anything in its own branch, except committing the user's `OWNER-ROLE.md`.** It reads,
+decides, talks and records. Every change, whether a fix, a disabled test or a rule, is made by a worker session it
+starts with a plan ([Delegate](#delegate-a-fix)), or by the session whose work it concerns. Its branch is main plus
+the user's `OWNER-ROLE.md` commits, merged with main both ways ([the owner branch](#the-owner-branch)).
 
 **Nothing is implicit.** The owner runs only what the repository's [OWNER-ROLE.md](#owner-rolemd) opts in to:
 the duties it lists and the tasks it defines, each on its own cron. Without the file it runs nothing. The skill
@@ -67,8 +68,10 @@ share the round, the state folder, the log, the delegation rules and the summary
 
 ## OWNER-ROLE.md
 
-Each repository's own owner settings and tasks live in `OWNER-ROLE.md` in its root (committed;
-[template](templates/OWNER-ROLE.md)). The owner reads it at the start of every round.
+Each repository's own owner settings and tasks live in `OWNER-ROLE.md` in its root ([template](templates/OWNER-ROLE.md)).
+It is **maintained in the `owner` branch**: the user edits it in the owner slot
+(`~/.hal/git/worktree/<repo>/owner/OWNER-ROLE.md`), and the owner reads it from there at the start of every
+round. A change counts from the next round, without waiting for a landing.
 
 - **Front matter: settings, all required.**
   - `duties`: maps each duty it opts in to to its cron (`mtm: "*/15 * * * *"`). A duty left out does not run.
@@ -91,6 +94,22 @@ Each repository's own owner settings and tasks live in `OWNER-ROLE.md` in its ro
 - **Missing or invalid:** the owner runs nothing: no duty, no task, no loop. It tells the user what is missing,
   offers the [template](templates/OWNER-ROLE.md), and ends. It never writes or drafts the file unasked.
 
+## The owner branch
+
+The `owner` branch is main plus the user's `OWNER-ROLE.md` commits, and it syncs with main on every landing:
+
+- **owner → main:** the repository's `.hal/hooks/merge-to-main/worktree-pre-merge.sh`
+  ([template](templates/hooks/worktree-pre-merge.sh)) merges the `owner` branch into every branch being landed, but
+  only when `owner` changes nothing except `OWNER-ROLE.md`, so no code skips the gates.
+- **main → owner:** `.hal/hooks/merge-to-main/main-post-commit.sh` ([template](templates/hooks/main-post-commit.sh))
+  merges the new main into the owner slot after each landing. The owner also merges main every round.
+- **The user's edits:** each round, when `OWNER-ROLE.md` in the slot differs from the committed one,
+  `python3 $S/due.py check` decides:
+  - valid: commit it, that file alone (`owner-role: the user's change`), and log it;
+  - invalid: leave it uncommitted, notify the user with the problems, and run nothing this round.
+- **Missing hooks:** when the repository lacks either hook, the owner delegates one worker to add them from the
+  templates (logged). Until they have landed, the owner's commits only reach main when the user lands them.
+
 ## Authority
 
 The user gave the owner this authority on 2026-10-03 (hal2 INTENT.md). The owner may:
@@ -105,7 +124,7 @@ The user gave the owner this authority on 2026-10-03 (hal2 INTENT.md). The owner
 
 It **never**:
 
-- changes, commits or lands anything in its own branch;
+- changes, commits or lands anything in its own branch (except committing the user's `OWNER-ROLE.md`);
 - decides product questions (they go to the user, batched);
 - deploys to production unless the user asked;
 - force-pushes, or deletes a slot's work or branch;
@@ -170,10 +189,9 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 1. Check that this is the `owner` slot (`git rev-parse --show-toplevel` ends in `/owner`). Anywhere else, stop and
    say "start me in my own slot: `hal2-cli-git worktree run owner --agent claude`". Write `owner` into
    `plans/CURRENT_PLAN`.
-2. Check that the slot is clean and at origin/main: `git status --porcelain` is empty and
-   `git rev-list --count origin/<default>..HEAD` is 0. If not, never commit or land it. Save the commits as patches
-   in `pending/` (`git format-patch origin/<default>..HEAD -o ~/skills/owner/<repo>/pending/`), reset with
-   `git reset --hard origin/<default>`, log it, and delegate the patches.
+2. Check that the slot holds nothing but `OWNER-ROLE.md` changes: `git diff --name-only origin/<default>...HEAD`
+   and `git status --porcelain` name no other file. If they do, change nothing: notify the user what is there, and
+   delegate it as a patch if the user wants it landed.
 3. `bash $S/check-prerequisites.sh`. On exit 1, run `bash $S/install-prerequisites.sh` once.
    Then `python3 $S/due.py check --json`. Exit 3 (no OWNER-ROLE.md) or 1 (invalid): tell the user what is missing,
    point to the template, and stop. **No loop starts.**
@@ -190,9 +208,9 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 
 ## The round
 
-0. **Stay current**: `git fetch -q origin && git merge --ff-only origin/<default>` in the owner slot. It has no
-   commits of its own, so this always fast-forwards. Then the setup tasks if main changed, the way `/mfm` runs
-   them.
+0. **Stay current**: `git fetch -q origin && git merge --no-edit origin/<default>` in the owner slot. Its own
+   commits only touch `OWNER-ROLE.md`, so this merges cleanly. Then run the setup tasks if main changed, the way
+   `/mfm` runs them, and handle the user's `OWNER-ROLE.md` edit ([the owner branch](#the-owner-branch)).
    **What is due**: `python3 $S/due.py due --json`, which reads OWNER-ROLE.md as merged from main. Invalid, or
    gone: notify the user, run nothing, end the round. Otherwise **run only the due items** in the steps below
    (`duty:<name>`, `task:<name>`; a step whose duty is not due is skipped), and after each run
@@ -231,7 +249,8 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
 
 - The goal: get things running and keep them running, autonomously wherever possible. The owner is the user's
   helper, started only by the user.
-- One owner per repository, in its `owner` slot. It never changes its own branch, and every fix goes to a worker
+- One owner per repository, in its `owner` slot. It never changes its own branch (except committing the user's
+  OWNER-ROLE.md), and every fix goes to a worker
   with a plan.
 - Workers: at most `worker_limit` at a time (hal2: 5); idle sessions first (the user's too), else new ones. They run the same model as the
   user's workers (create-worktree-session's default).
@@ -239,7 +258,9 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
 - **Nothing implicit**: every duty and task is an opt-in in OWNER-ROLE.md, each with its own cron (5-field
   notation). The settings are required, and without the file the owner runs nothing. The loop runs at the
   shortest interval, and a round runs only what is due (`due.py`).
-- `OWNER-ROLE.md`: settings plus the repository's tasks, in the root (allowlisted). It is the user's word and may
-  widen authority per task. Only the user edits it.
+- `OWNER-ROLE.md`: settings plus the repository's tasks, in the root (allowlisted), **maintained in the `owner`
+  branch** so a change counts from the next round. Every landing carries it to main, and main flows back into
+  `owner` (two hooks). It is the user's word and may widen authority per task. Only the user edits it; the owner
+  commits the edit.
 - sanity-watch and fix-autoclear run as the owner's duties, replacing their own loops.
 - A busy session without `plans/CURRENT_PLAN` is told to fill it in (development-lead).
