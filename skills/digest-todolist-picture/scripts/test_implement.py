@@ -26,9 +26,14 @@ elif args[:1] == ["list"]:
     print(json.dumps([{"pane_id": "%7", "slot": "03", "kind": "claude", "state": "working", "title": "t",
                        "project": repo}, {"pane_id": "%9", "slot": "01", "kind": "claude", "state": "idle",
                        "project": "/elsewhere"}]))
-elif args[:1] == ["spawn"]:
-    print(json.dumps({"project": repo, "slot": "05", "kind": "claude", "mode": "terminal", "pane": "t:abc",
-                      "worktree": "/wt/05"}))
+elif args[:2] == ["terminal", "list"]:
+    print("[]")
+elif args[:2] == ["worktree", "list"]:
+    print(json.dumps({"worktrees": [{"name": "main", "main": True}, {"name": "01", "plan": "0001-busy"}]}))
+elif args[:2] == ["worktree", "queue"]:
+    print(json.dumps({"queue": []}))
+elif args[:2] == ["worktree", "run"]:
+    print(json.dumps({"mode": "terminal", "pane": "t:abc", "slot": args[2], "worktree": "/wt/" + args[2]}))
 '''
 
 
@@ -43,9 +48,11 @@ class TestImplement(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "remote", "add", "origin", "git@github.com:me/app.git"], check=True)
         self.bin = t / "bin"
         self.bin.mkdir()
-        for name in ("hal2-cli-shooter", "hal2-cli-agents"):
+        for name in ("hal2-cli-shooter", "hal2-cli-agents", "hal2-cli-git"):
             (self.bin / name).write_text(FAKE)
             (self.bin / name).chmod(0o755)
+        (self.bin / "fakeshell").write_text('#!/bin/sh\nexec /bin/sh -c "$2"\n')
+        (self.bin / "fakeshell").chmod(0o755)
         self.log = t / "log"
         self.home = t / "home"
         self.home.mkdir()
@@ -54,7 +61,7 @@ class TestImplement(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_imp(self, *args, ok=True):
-        env = dict(os.environ, PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}", HOME=str(self.home),
+        env = dict(os.environ, PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}", HOME=str(self.home), SHELL=str(self.bin / "fakeshell"),
                    FAKE_LOG=str(self.log), FAKE_REPO=str(self.repo.resolve()))
         r = subprocess.run([sys.executable, str(HERE / "implement.py"), *args], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode == 0, ok, r.stderr)
@@ -65,8 +72,8 @@ class TestImplement(unittest.TestCase):
 
     def test_new_worktree_gets_the_shot_prompt_then_the_shot_is_marked(self):
         out = self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4")
-        self.assertEqual((out["mode"], out["slot"], out["remote_control"]), ("new", "05", "app-05"))
-        spawn = next(c for c in self.calls() if c[1] == "spawn")
+        self.assertEqual((out["mode"], out["slot"], out["remote_control"]), ("new", "02", "app-02"))
+        spawn = next(c for c in self.calls() if c[1:3] == ["worktree", "run"])
         prompt = spawn[spawn.index("--prompt") + 1]
         self.assertIn("# shot 4 tabs: sort button (app)\nA button that sorts tabs.", prompt)
         self.assertIn('This is shot 4 of the feature "app" in repo me/app.', prompt)
@@ -74,7 +81,7 @@ class TestImplement(unittest.TestCase):
         self.assertEqual(Path(out["bullet"]).read_text().strip(), prompt)
         mark = self.calls()[-1]
         self.assertEqual(mark[1:4] + mark[mark.index("--worktree"):mark.index("--worktree") + 2],
-                         ["shots", "mark-sent", "app", "--worktree", "05"])
+                         ["shots", "mark-sent", "app", "--worktree", "02"])
 
     def test_existing_session_gets_the_bullet_typed_in(self):
         out = self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4", "--pane", "%7")
@@ -90,6 +97,19 @@ class TestImplement(unittest.TestCase):
                            ok=False)
         self.assertIn("no live agent session %9", err)
         self.assertFalse(any(c[1] in ("send", "mark-sent") or c[1:3] == ["shots", "mark-sent"] for c in self.calls()))
+
+    def test_a_global_shot_is_read_and_marked_in_the_global_folder(self):
+        out = self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4", "--global")
+        self.assertEqual(out["slot"], "02")
+        listed = next(c for c in self.calls() if c[1:3] == ["shots", "list-open"])
+        self.assertIn("--global", listed)
+        spawn = next(c for c in self.calls() if c[1:3] == ["worktree", "run"])
+        prompt = spawn[spawn.index("--prompt") + 1]
+        self.assertIn('the global shotfile "app", carried out in repo me/app', prompt)
+        self.assertIn("titled `global app 4 tabs: sort button`", prompt)
+        mark = self.calls()[-1]
+        self.assertIn("--global", mark)
+        self.assertEqual(mark[mark.index("--worktree") + 1], "app/02")
 
 
 if __name__ == "__main__":

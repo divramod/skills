@@ -4,11 +4,12 @@
   implement.py sessions --repo DIR                         the repo's live agent sessions (pane, slot, state, title)
   implement.py send --repo DIR --shotfile NAME --number N  start an agent in the next free worktree slot with the shot
                     [--pane %N|t:<id>]                       ... or type it into that existing session instead
+                    [--global]                               a shot of the global shotfiles, carried out in DIR
 
 The prompt is hal2-nvim's shot template (`shot-template-single.md`: the repo's `.hal/util/shooter/config/nvim/`,
 then `~/.config/hal/util/shooter/nvim/`, then hal2-nvim's own `templates/`, else the copy below) filled with the
 shot; it is also written as a bullet file (`~/.config/hal/util/shooter/nvim/bullets/<repo>/...`). A new session gets
-it as its first prompt (`hal2-cli-agents spawn <repo> --prompt`), an existing one gets `@<bullet>` typed in
+it as its first prompt (create-worktree-session's create.py: the first slot without a session and without work), an existing one gets `@<bullet>` typed in
 (`hal2-cli-agents send`). Then the shot is marked sent (`hal2-cli-shooter shots mark-sent --worktree <slot>`).
 Prints JSON; exit 2 when a hal2 CLI is missing.
 """
@@ -40,6 +41,8 @@ FALLBACK_TEMPLATE = """<!-- IMPORTANT: First, output the file content starting f
 7. Make this shot a plan before you start: create it with the plan skill (`/plan new`), titled `{{plan_title}}`, so `plans/CURRENT_PLAN` names it (a shot that asks for research rather than implementation: `/plan new --research`, so the slug starts with `research-`); then carry it out.{{theme_context_line}}
 """
 READY = {"idle", "done", "sleeping"}  # states an agent takes new input in without interrupting work
+# A new session goes to the first slot without a session and without work (create-worktree-session's script).
+CREATE = Path(__file__).resolve().parents[2] / "create-worktree-session" / "scripts" / "create.py"
 
 
 def die(message: str, code: int = 1) -> None:
@@ -90,7 +93,8 @@ def render(tmpl: str, values: dict[str, str]) -> str:
     return re.sub(r"\{\{(\w+)\}\}", lambda m: values.get(m.group(1), m.group(0)), tmpl).strip()
 
 
-def prompt_values(shotfile: Path, number: str, title: str, body: str, repo: str) -> dict[str, str]:
+def prompt_values(shotfile: Path, number: str, title: str, body: str, repo: str,
+                  is_global: bool = False) -> dict[str, str]:
     text = shotfile.read_text()
     heading = next((line[2:].strip() for line in text.splitlines() if line.startswith("# ")), shotfile.stem)
     return {
@@ -99,14 +103,19 @@ def prompt_values(shotfile: Path, number: str, title: str, body: str, repo: str)
         "shot_content": body,
         "file_title": heading,
         "file_path": shorten_home(shotfile),
-        "shot_origin": f'the feature "{heading}" in repo {repo}',
-        "plan_title": f"{shotfile.stem} {number} {title}".strip(),
+        "shot_origin": (f'the global shotfile "{heading}", carried out in repo {repo}' if is_global
+                        else f'the feature "{heading}" in repo {repo}'),
+        "plan_title": f"{'global ' if is_global else ''}{shotfile.stem} {number} {title}".strip(),
         "theme_context_line": "",
     }
 
 
-def find_shot(main: Path, shotfile: str, number: str) -> dict:
-    data = json.loads(run("hal2-cli-shooter", "shots", "list-open", shotfile, "--repo", str(main), "--json"))
+def where(main: Path, is_global: bool) -> list[str]:
+    return ["--global"] if is_global else ["--repo", str(main)]
+
+
+def find_shot(main: Path, shotfile: str, number: str, is_global: bool = False) -> dict:
+    data = json.loads(run("hal2-cli-shooter", "shots", "list-open", shotfile, *where(main, is_global), "--json"))
     for shot in data.get("shots", []):
         if str(shot["number"]) == str(number):
             return shot
@@ -138,11 +147,11 @@ def type_into(pane: str, kind: str, bullet: Path) -> None:
         send("enter", "--key")
 
 
-def cmd_send(main: Path, shotfile_name: str, number: str, pane: str | None) -> dict:
-    shot = find_shot(main, shotfile_name, number)
+def cmd_send(main: Path, shotfile_name: str, number: str, pane: str | None, is_global: bool = False) -> dict:
+    shot = find_shot(main, shotfile_name, number, is_global)
     shotfile = Path(shot["path"])
     text = render(template(main), prompt_values(shotfile, str(shot["number"]), shot.get("title") or "",
-                                                 shot.get("body") or "", repo_name(main)))
+                                                 shot.get("body") or "", repo_name(main), is_global))
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     bullet = BULLETS / main.name / f"{shotfile.stem}_{stamp}_shot-{number}.md"
     bullet.parent.mkdir(parents=True, exist_ok=True)
@@ -158,12 +167,13 @@ def cmd_send(main: Path, shotfile_name: str, number: str, pane: str | None) -> d
         result.update(mode="existing", pane=pane, slot=slot, state=agent.get("state"),
                       busy=agent.get("state") not in READY)
     else:
-        spawned = json.loads(run("hal2-cli-agents", "spawn", str(main), "--prompt", text, "--json"))
+        spawned = json.loads(run(sys.executable, str(CREATE), "--repo", str(main), "--prompt", text, "--exact"))
         slot = spawned["slot"]
         result.update(mode="new", pane=spawned.get("pane"), slot=slot, worktree=spawned.get("worktree"),
                       remote_control=f"{main.name}-{slot}")
-    run("hal2-cli-shooter", "shots", "mark-sent", shotfile_name, number, "--worktree", slot,
-        "--repo", str(main), "--json")
+    mark = f"{main.name}/{slot}" if is_global else slot
+    run("hal2-cli-shooter", "shots", "mark-sent", shotfile_name, number, "--worktree", mark,
+        *where(main, is_global), "--json")
     return result
 
 
@@ -184,7 +194,7 @@ def main(argv: list[str]) -> int:
         shotfile, number = arg(argv, "--shotfile"), arg(argv, "--number")
         if not shotfile or not number:
             die("send needs --shotfile and --number")
-        result = cmd_send(main_dir, shotfile.removesuffix(".md"), number, arg(argv, "--pane"))
+        result = cmd_send(main_dir, shotfile.removesuffix(".md"), number, arg(argv, "--pane"), "--global" in argv)
     else:
         die(f"unknown command {argv[0]!r} (sessions, send)")
     print(json.dumps(result, indent=2, ensure_ascii=False))
