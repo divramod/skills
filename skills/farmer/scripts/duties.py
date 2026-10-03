@@ -21,7 +21,7 @@ sys.path.insert(0, str(SKILLS / "fix-autoclear" / "scripts"))
 import evidence  # noqa: E402  (fix-autoclear)
 import scan as watch_scan  # noqa: E402  (sanity-watch)
 
-LEAD = "owner (development lead)"
+LEAD = "farmer (development lead)"
 TEXT = {
     "no-plan": LEAD + ": write your task into plans/CURRENT_PLAN now: the plan's <NNNN>-<slug>, the shot's "
                       "<shotfile>/<n>/<title-slug>, or a short kebab-case task name (global CLAUDE.md).",
@@ -30,7 +30,7 @@ TEXT = {
     "failed": "Your last turn failed ({why}). Check git status and your last tool result, then continue.",
     "resume": "Your last response was cut off ({error}). Check git status and the result of your last tool call, "
               "then continue where you stopped.",
-    "slot-red": "owner (ci): your branch's CI is red: {workflow} ({jobs}) {url}. Fix it in your plan.",
+    "slot-red": "farmer (ci): your branch's CI is red: {workflow} ({jobs}) {url}. Fix it in your plan.",
 }
 # A last message that just announces the next step: the session stopped by accident, not to wait.
 GOING_ON = re.compile(r"\b(next,? I'?ll|now I'?ll|I'?ll now|moving on to|continuing with)\b", re.I)

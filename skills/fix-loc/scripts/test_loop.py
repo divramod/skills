@@ -85,22 +85,22 @@ class Loop(unittest.TestCase):
         self.assertFalse(loop.state_path(self.repo).exists())
         self.assertFalse([c for c in self.calls() if " spawn " in c])
 
-    def test_next_spawns_and_records_the_worker(self):
+    def test_next_spawns_and_records_the_servant(self):
         self.spawn(1_000)
-        worker = loop.load(self.repo)["worker"]
-        self.assertEqual((worker["slot"], worker["pane"], worker["before"]), ("01", "t:abc", {f"{BIG}/src/a.ts": 40}))
+        servant = loop.load(self.repo)["servant"]
+        self.assertEqual((servant["slot"], servant["pane"], servant["before"]), ("01", "t:abc", {f"{BIG}/src/a.ts": 40}))
         self.assertTrue(any("--prompt" in c for c in self.calls()))
 
-    def test_wait_while_the_worker_works(self):
+    def test_wait_while_the_servant_works(self):
         self.spawn(1_000)
         self.answer(agents=[{"project": str(self.repo), "slot": "01", "state": "working", "since": 1_000}])
-        self.assertEqual(loop.run_tick(self.repo, now=1_000 + 10 * tick.MINUTE)["reason"], "the worker is working")
+        self.assertEqual(loop.run_tick(self.repo, now=1_000 + 10 * tick.MINUTE)["reason"], "the servant is working")
 
     def test_claim_names_the_plan(self):
         self.spawn(1_000)
         run(self.repo, "git", "worktree", "add", "-q", "-b", "01", str(self.worktree))
         self.assertEqual(loop.claim(self.worktree, "0090-fix-loc-big")["plan"], "0090-fix-loc-big")
-        self.assertEqual(loop.load(self.repo)["worker"]["plan"], "0090-fix-loc-big")
+        self.assertEqual(loop.load(self.repo)["servant"]["plan"], "0090-fix-loc-big")
 
     def test_paused_notifies_once(self):
         self.spawn(1_000)
@@ -120,7 +120,7 @@ class Loop(unittest.TestCase):
     def test_landed_records_the_counts_kills_the_host_and_moves_on(self):
         self.spawn(1_000)
         state = loop.load(self.repo)
-        state["worker"]["plan"] = "0090-fix-loc-big"
+        state["servant"]["plan"] = "0090-fix-loc-big"
         loop.save(self.repo, state)
         self.land("0090-fix-loc-big", lines(8))
         result = loop.run_tick(self.repo, now=2_000)

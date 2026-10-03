@@ -5,9 +5,9 @@ from unittest import mock
 
 import tick
 import wake
-from test_owner import NOW, Repo
+from test_farmer import NOW, Repo
 
-AGENTS = json.dumps([{"pane_id": "%9", "checkout": "/x/wt/owner", "state": "idle"}])
+AGENTS = json.dumps([{"pane_id": "%9", "checkout": "/x/wt/farmer", "state": "idle"}])
 
 
 def judgment(text="07 asks which API to keep"):
@@ -15,7 +15,7 @@ def judgment(text="07 asks which API to keep"):
 
 
 class Wake(Repo):
-    """hand_over against a fake send: what the owner session gets and how often it is woken."""
+    """hand_over against a fake send: what the farmer session gets and how often it is woken."""
 
     def setUp(self):
         super().setUp()
@@ -28,13 +28,13 @@ class Wake(Repo):
             return None
 
         for p in (mock.patch.object(wake.deliver, "send", send),
-                  mock.patch.object(wake, "owner_pane", return_value="%9")):
+                  mock.patch.object(wake, "farmer_pane", return_value="%9")):
             p.start()
             self.addCleanup(p.stop)
         self.main = str(self.main)
 
     def over(self, out, at=NOW):
-        return wake.hand_over("/x/wt/owner", self.main, out, at)
+        return wake.hand_over("/x/wt/farmer", self.main, out, at)
 
     def test_nothing_to_judge_adds_no_turn_and_no_file(self):
         r = self.over({"wake": [], "notify": [], "relay": [], "delegations": [{"state": "running"}]})
@@ -43,7 +43,7 @@ class Wake(Repo):
 
     def test_a_judgment_item_wakes_once_until_it_is_handled(self):
         self.assertTrue(self.over({"wake": [judgment()]})["woken"])
-        self.assertEqual(self.sent, [("%9", "/owner act")])
+        self.assertEqual(self.sent, [("%9", "/farmer act")])
         self.over({})
         notice = tick.act("frame", "role-invalid", "notify", text="bad role")
         self.over({"notify": [notice]}, NOW + dt.timedelta(minutes=15))
@@ -76,7 +76,7 @@ class Wake(Repo):
         items = wake.read(self.main)["items"]
         self.assertEqual([(i["do"], i["kind"]) for i in items], [("relay", "front"), ("wake", "delegate-failed")])
         self.assertEqual(items[1]["evidence"]["error"], "create.py failed")
-        self.assertEqual(items[1]["instructions"], wake.instructions("owner", "delegate-failed"))
+        self.assertEqual(items[1]["instructions"], wake.instructions("farmer", "delegate-failed"))
 
 
 class SmallContext(unittest.TestCase):
@@ -99,16 +99,16 @@ class SmallContext(unittest.TestCase):
 
 class Instructions(unittest.TestCase):
     def test_every_duty_has_its_instructions(self):
-        for duty in ("mtm", "lead", "ci", "watch", "autoclear", "task", "frame", "owner"):
+        for duty in ("mtm", "lead", "ci", "watch", "autoclear", "task", "frame", "farmer"):
             self.assertTrue(wake.instructions(duty, "any").endswith(f"instructions/{duty}.md"), duty)
 
 
 class Ticks(Repo):
-    """Whole rounds: a quiet one wakes nobody, one with a judgment item wakes the owner session once."""
+    """Whole rounds: a quiet one wakes nobody, one with a judgment item wakes the farmer session once."""
 
     def round(self, handlers, sent, at=NOW):
         def cli(*args, timeout=30):
-            return 0, AGENTS.replace("/x/wt/owner", str(self.slot))
+            return 0, AGENTS.replace("/x/wt/farmer", str(self.slot))
 
         with mock.patch.object(tick, "sh", return_value=(0, '{"status": "ok"}')), \
                 mock.patch.object(tick, "summarize"), mock.patch.object(wake.deliver, "cli", cli), \
@@ -124,7 +124,7 @@ class Ticks(Repo):
         self.assertFalse(wake.wake_file(str(self.main)).exists())
         r = self.round({"duty:mtm": lambda i, c: [judgment()], "task:*": lambda i, c: []}, sent,
                        NOW + dt.timedelta(minutes=15))
-        self.assertEqual((r["woke"]["woken"], sent), (True, [("%9", "/owner act")]))
+        self.assertEqual((r["woke"]["woken"], sent), (True, [("%9", "/farmer act")]))
         self.assertEqual(r["wake"][0]["kind"], "question")
 
     def test_a_dry_run_lists_the_items_and_wakes_nobody(self):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One snapshot of a repository's road to main, for the owner skill's merge-to-main boss.
+"""One snapshot of a repository's road to main, for the farmer skill's merge-to-main boss.
 
   scan.py scan [--repo <dir>] [--hours 24] [--json]
       the merge queue (holder, its process, its agent, attempts, why it failed),
@@ -12,7 +12,7 @@
       set or clear the boss's queue pause flag (sessions are told by the boss)
   scan.py summary [--repo <dir>] [--notes <text>]
       scan, then write the round's summary (queue, landings, worktrees, findings, the
-      boss's actions and notes) to <main>/plans/owner/<day>/<HHMM>.md and
+      boss's actions and notes) to <main>/plans/farmer/<day>/<HHMM>.md and
       latest.md; the folder ignores itself (.gitignore `*`), so it is never committed
   scan.py priority <slot>... [--note <why>] | priority --clear
       the slots the user wants landed first (findings name them first)
@@ -23,7 +23,7 @@
       the priority, the pause flag, the last scan, the actions of the last 6 h
 
 Reads hal2 (hal2-cli-git worktree queue, hal2-cli-hooks landings, hal2-cli-agents
-list) and git; writes only ~/skills/owner/<repo>/ and <main>/plans/owner/. Exit 0 on success,
+list) and git; writes only ~/skills/farmer/<repo>/ and <main>/plans/farmer/. Exit 0 on success,
 2 when a tool is missing.
 """
 
@@ -38,7 +38,7 @@ import sys
 import time
 from pathlib import Path
 
-DATA = Path(os.environ.get("OWNER_DIR", Path.home() / "skills/owner"))
+DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
 TOOLS = ("hal2-cli-git", "hal2-cli-hooks", "hal2-cli-agents", "git")
 
 MINUTE = 60
@@ -256,7 +256,7 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
     wts = []
     for w in worktrees(main):
         path, slot = w["path"], Path(w["path"]).name
-        if slot.startswith(".") or path == own:  # hal2's own checkouts (.deliver, .bench), the owner's slot
+        if slot.startswith(".") or path == own:  # hal2's own checkouts (.deliver, .bench), the farmer's slot
             continue
         a = by_checkout.get(path, {})
         plan_file = Path(path) / "plans/CURRENT_PLAN"
@@ -287,7 +287,7 @@ def queue_dir(main: str) -> Path:
     return Path.home() / ".hal/git/worktree" / Path(main).name / ".merge-queue"
 
 
-def front(main: str, slots: list[str], by: str = "the owner's merge-to-main boss") -> list[str]:
+def front(main: str, slots: list[str], by: str = "the farmer's merge-to-main boss") -> list[str]:
     """hal2-git's `queue::reorder` with `slots` first: the waiting tickets get the sorted
     seqs of all waiting tickets as ranks, in the new order. Returns the waiting slots in order."""
     import fcntl
@@ -330,7 +330,7 @@ def log(main: str, entry: dict) -> None:
 
 
 def summary_dir(main: str) -> Path:
-    d = Path(main) / "plans" / "owner"
+    d = Path(main) / "plans" / "farmer"
     d.mkdir(parents=True, exist_ok=True)
     ignore = d / ".gitignore"
     if not ignore.exists():
@@ -353,7 +353,7 @@ def actions_since(main: str, since: float) -> list[dict]:
 def render_summary(snap: dict, actions: list[dict], landings: list[dict], notes: str, lead: str = "") -> str:
     at = dt.datetime.fromtimestamp(snap["now"]).strftime("%Y-%m-%d %H:%M")
     head = snap["queue"][0] if snap["queue"] else None
-    lines = [f"# owner {at}", ""]
+    lines = [f"# farmer {at}", ""]
     lines.append(f"Load {snap['load']['load1']:.1f} on {snap['load']['cores']} cores. "
                  + (f"Queue head: {head['slot']} {head['state']}." if head else "Queue empty.")
                  + (f" Paused: {snap['paused'].get('note', '')}." if snap.get("paused") else ""))

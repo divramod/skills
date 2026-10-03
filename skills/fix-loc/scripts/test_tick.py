@@ -9,8 +9,8 @@ NOW = 100 * tick.DAY
 PROJECT = "/r/hal2"
 
 
-def state(**worker):
-    return {"worker": {"unit": "code/rust/libs/a", "slot": "01", "plan": None, "spawned_ms": NOW - 60 * tick.MINUTE, **worker}}
+def state(**servant):
+    return {"servant": {"unit": "code/rust/libs/a", "slot": "01", "plan": None, "spawned_ms": NOW - 60 * tick.MINUTE, **servant}}
 
 
 def agent(agent_state, minutes_ago=1, slot="01"):
@@ -22,7 +22,7 @@ def decide(st, agents=(), queue=(), landed=False, current_plan=None):
 
 
 class Decide(unittest.TestCase):
-    def test_a_working_worker_is_waited_for(self):
+    def test_a_working_servant_is_waited_for(self):
         self.assertEqual(decide(state(), [agent("working")])["action"], "wait")
 
     def test_the_plan_comes_from_current_plan_once_it_is_a_plan_slug(self):
@@ -41,7 +41,7 @@ class Decide(unittest.TestCase):
     def test_a_waiting_ticket_does_not_pause(self):
         self.assertEqual(decide(state(), [agent("working")], [{"slot": "01", "state": "waiting"}])["action"], "wait")
 
-    def test_a_gone_worker_is_blocked_unless_it_is_starting(self):
+    def test_a_gone_servant_is_blocked_unless_it_is_starting(self):
         self.assertEqual(decide(state())["action"], "blocked")
         self.assertEqual(decide(state(spawned_ms=NOW - tick.MINUTE))["action"], "wait")
         self.assertEqual(decide(state(), [agent("working", slot="02")])["action"], "blocked")

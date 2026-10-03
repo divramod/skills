@@ -125,7 +125,7 @@ class Prompt(unittest.TestCase):
         a = tick.act("mtm", "pause", "send", "08", pane="%8", text="pause", key="pause:L1:08")
         with mock.patch.object(deliver, "send", return_value="agent is working"), \
                 mock.patch.object(mtm_scan, "log") as log:
-            tick.execute(a, "/x/owner", "/x/hal2", out)
+            tick.execute(a, "/x/farmer", "/x/hal2", out)
         self.assertEqual([r["kind"] for r in out["relay"]], ["pause"])
         self.assertEqual(log.call_args.args[1]["do"], "relay")
         self.assertIn("agent is working", log.call_args.args[1]["note"])

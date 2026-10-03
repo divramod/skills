@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Which agent sessions of a repository need help, for the owner skill's development lead.
+"""Which agent sessions of a repository need help, for the farmer skill's development lead.
 
   lead_scan.py scan [--repo <dir>] [--json] [--all]
-      every agent session of the repository (worktree slots and main, the owner's own
+      every agent session of the repository (worktree slots and main, the farmer's own
       session excluded) that waits for someone: a question to the user, a dialog or
       permission prompt, a failed turn, a session idle inside an unfinished plan, a
       context near its limit, a slot working without plans/CURRENT_PLAN; with the last thing it said. Stops already handled are
@@ -11,7 +11,7 @@
       mark that stop handled (the next scans skip it until the session moves on)
 
 Reads hal2-cli-agents list --json and Claude Code's transcripts; writes only
-~/skills/owner/<repo>/lead.jsonl. Exit 0 on success, 2 when a tool is missing.
+~/skills/farmer/<repo>/lead.jsonl. Exit 0 on success, 2 when a tool is missing.
 """
 
 import argparse
@@ -25,7 +25,7 @@ import sys
 import time
 from pathlib import Path
 
-DATA = Path(os.environ.get("OWNER_DIR", Path.home() / "skills/owner"))
+DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
 PROJECTS = Path(os.environ.get("CLAUDE_PROJECTS_DIR", Path.home() / ".claude/projects"))
 MINUTE = 60
 BLOCKED_AFTER = 5 * MINUTE

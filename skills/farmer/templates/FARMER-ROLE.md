@@ -1,5 +1,5 @@
 ---
-# The owner skill's settings for this repository: the user's word, and only the user changes it.
+# The farmer skill's settings for this repository: the user's word, and only the user changes it.
 # Nothing is implicit. Only the duties listed here run, each on its own cron
 # (5-field cron: minute hour day-of-month month day-of-week, local time).
 duties:
@@ -8,13 +8,13 @@ duties:
   ci: "*/30 * * * *"          # GitHub Actions green
   watch: "*/15 * * * *"       # sanity-watch: resume abnormal stops
   autoclear: "0 * * * *"      # fix-autoclear: autoclear failures
-worker_limit: 5               # owner-started workers at once (required)
+servant_limit: 5               # farmer-started servants at once (required)
 notify: every-round           # every-round | hourly | daily | never (required)
 ---
 
-# <repo>'s owner role
+# <repo>'s farmer role
 
-The owner gets <repo> running and keeps it running, autonomously wherever possible.
+The farmer gets <repo> running and keeps it running, autonomously wherever possible.
 
 ## Priorities
 
@@ -22,7 +22,7 @@ The owner gets <repo> running and keeps it running, autonomously wherever possib
 
 ## Rules
 
-- <what the owner may decide here, what it must leave to the user>
+- <what the farmer may decide here, what it must leave to the user>
 
 ## Tasks
 
@@ -30,5 +30,5 @@ The owner gets <repo> running and keeps it running, autonomously wherever possib
 
 - **Cron**: `*/15 * * * *`
 - **Check**: <what to look at, a command>
-- **Act**: <what the owner does: delegate a fix, notify, or a right this task grants, such as a redeploy>
+- **Act**: <what the farmer does: delegate a fix, notify, or a right this task grants, such as a redeploy>
 - **Done when**: <the check that says it is fine>

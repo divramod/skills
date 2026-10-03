@@ -42,7 +42,7 @@ class Delegation(unittest.TestCase):
         self.assertEqual([c for c in self.calls if c[:2] == delegation.CREATE], [])
         self.assertFalse((self.tmp / "hal2" / "delegations.jsonl").exists())
 
-    def test_a_delegation_writes_the_brief_starts_a_worker_and_is_in_hand_after(self):
+    def test_a_delegation_writes_the_brief_starts_a_servant_and_is_in_hand_after(self):
         r = delegation.delegate(flaky(), MAIN, 5, False, NOW)
         self.assertEqual((r["state"], r["slot"], r["how"]), ("running", "18", "new"))
         brief = Path(r["brief"]).read_text()
@@ -52,7 +52,7 @@ class Delegation(unittest.TestCase):
         log = [json.loads(x) for x in (self.tmp / "hal2" / "log.jsonl").read_text().splitlines()]
         self.assertEqual([(e["kind"], e["slot"]) for e in log], [("delegate", "18")])
 
-    def test_at_the_limit_it_waits_and_starts_once_a_worker_has_landed(self):
+    def test_at_the_limit_it_waits_and_starts_once_a_servant_has_landed(self):
         delegation.delegate(flaky(), MAIN, 1, False, NOW)
         second = dict(flaky(), key="flaky:u", text="disable u")
         self.assertEqual(delegation.delegate(second, MAIN, 1, False, NOW)["state"], "waiting")
@@ -63,7 +63,7 @@ class Delegation(unittest.TestCase):
         self.assertIn(delegation.STOP + ["18", "--repo", MAIN], self.calls)
         self.assertEqual(delegation.ledger(MAIN)["flaky:u"]["state"], "running")
 
-    def test_a_running_worker_with_its_plan_is_left_alone(self):
+    def test_a_running_servant_with_its_plan_is_left_alone(self):
         delegation.delegate(flaky(), MAIN, 5, False, NOW)
         busy = {"18": {"plan": "0120-fix-t", "ahead": 2}}
         self.assertEqual(delegation.follow_up(MAIN, busy, 5, False, NOW + dt.timedelta(hours=2)), [])

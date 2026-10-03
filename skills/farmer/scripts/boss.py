@@ -4,7 +4,7 @@
 messages are templates, and what needs judgment (a merge train, what an idle slot waits for, an unclear flaky test,
 a long landing) becomes a `wake` item with the finding as evidence. Keys and windows go to tick.fresh, which drops
 what an earlier round did and what concerns a slot waiting for the user. Every action carries a `key`; a key already in
-the owner's log within its window is not done again, so a quiet queue gives a quiet round.
+the farmer's log within its window is not done again, so a quiet queue gives a quiet round.
 """
 
 import datetime as dt
@@ -16,7 +16,7 @@ import mtm_scan
 from tick import act
 
 HERE = Path(__file__).resolve().parent
-BOSS = "owner (merge-to-main boss)"
+BOSS = "farmer (merge-to-main boss)"
 SECOND_LOOK = dt.timedelta(minutes=10)  # a wake gets this long before the queue is released
 REWAKE = dt.timedelta(hours=1)  # the same judgment item wakes the model at most hourly
 ORPHAN = dt.timedelta(hours=3)
@@ -73,7 +73,7 @@ class Planner:
             self.add("priority-done", "run", slot, argv=[sys.executable, str(HERE / "mtm_scan.py"), "priority",
                                                           "--clear", "--repo", self.ctx["main"]],
                      text=f"priority {slot} landed: cleared")
-            self.add("priority-done", "notify", slot, text=f"owner: your priority slot {slot} has landed",
+            self.add("priority-done", "notify", slot, text=f"farmer: your priority slot {slot} has landed",
                      key=f"priority-done:{slot}", window=dt.timedelta(hours=1))
             return
         waiting = [t["slot"] for t in self.queue if t["state"] == "waiting"]
@@ -174,7 +174,7 @@ def plan(snap: dict, ctx: dict) -> list[dict]:
 
 
 def handler(item: dict, ctx: dict) -> list[dict]:
-    """duty:mtm: scan (no fetch in a dry run), keep the scan for /owner status, plan."""
+    """duty:mtm: scan (no fetch in a dry run), keep the scan for /farmer status, plan."""
     snap = mtm_scan.snapshot(ctx["top"], 24, fetch=not ctx["dry"])
     if not ctx["dry"]:
         (mtm_scan.state_dir(ctx["main"]) / "last-scan.json").write_text(json.dumps(snap, indent=1))

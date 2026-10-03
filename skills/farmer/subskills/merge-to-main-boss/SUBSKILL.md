@@ -1,10 +1,10 @@
-# owner › merge-to-main-boss
+# farmer › merge-to-main-boss
 
-The duty `mtm` of the [owner](../../SKILL.md): every worktree's finished work lands on the default branch soon, in
+The duty `mtm` of the [farmer](../../SKILL.md): every worktree's finished work lands on the default branch soon, in
 any order (the user, 2026-10-03). Throughput beats order and retries: a test that fails only under load is disabled
-and the work lands. Its rule-based part runs as code in the owner's tick (`boss.py` over `mtm_scan.py`: wake failed
+and the work lands. Its rule-based part runs as code in the farmer's tick (`boss.py` over `mtm_scan.py`: wake failed
 landings and release held queues, priority first, pause heavy work under load and send go after it, waiter-gone,
-orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs judgment wakes the owner session with
+orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs judgment wakes the farmer session with
 [instructions/mtm.md](../../instructions/mtm.md), which links the procedures below. Why landings fail:
 [reasons.md](reasons.md).
 
@@ -12,15 +12,15 @@ orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs ju
 
 1. Pick where to change it:
    - in the holder's branch, by telling its session to do it, when only that landing is blocked;
-   - through [a worker](#a-fix-several-landings-need) when several slots hit it.
+   - through [a servant](#a-fix-several-landings-need) when several slots hit it.
 2. Mark it:
-   - Swift Testing: `.disabled("flaky under landing load <date>, owner merge-to-main boss")`;
+   - Swift Testing: `.disabled("flaky under landing load <date>, farmer merge-to-main boss")`;
    - XCTest: `throw XCTSkip(...)`;
    - Rust: `#[ignore = "..."]`;
    - TS: `it.skip`.
 
    Keep the test code itself.
-3. Add a line to `~/skills/owner/<repo>/flaky.md`: date, test, file, slot, what the failure looked
+3. Add a line to `~/skills/farmer/<repo>/flaky.md`: date, test, file, slot, what the failure looked
    like, where it was disabled.
 4. File one shot to bring it back load-proof (budget scaled by load, or out of the landing's gate):
    `hal2-cli-shooter shots create` in the repository's shotfile for tests, or the `create-shot` skill.
@@ -28,15 +28,15 @@ orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs ju
 ## A fix several landings need
 
 A failure that blocks several landings (a flaky test in R2, a broken gate script, a missing gitignore, a lint rule
-all slots trip on) gets a worker: [Delegate a fix](../../reference.md#delegate-a-fix), marked urgent in its brief.
+all slots trip on) gets a servant: [Delegate a fix](../../reference.md#delegate-a-fix), marked urgent in its brief.
 
 1. **Faster:** when the queue head's session can make the fix in its own landing, it rides along. Tell that session
    the change, or hand it a patch from `pending/`. No extra gate run is needed.
-2. Otherwise start a worker, and once its `reserve` waits, put it first with `$B front <slot>`.
+2. Otherwise start a servant, and once its `reserve` waits, put it first with `$B front <slot>`.
 3. When nothing should land before the fix (several landings fail on it), pause: `$B pause --note "<why>"`. Tell the
    waiters to hold their reruns until the fix has landed, then `$B resume` and tell everyone "go: /mfm before your
    next landing attempt".
-4. The owner never edits a file itself: not in its slot, and not in the main checkout, where landings merge.
+4. The farmer never edits a file itself: not in its slot, and not in the main checkout, where landings merge.
 
 ## Merge trains
 

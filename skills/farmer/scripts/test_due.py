@@ -7,7 +7,7 @@ ROLE = """---
 duties:
   mtm: "*/15 * * * *"
   ci: "0 * * * *"
-worker_limit: 5
+servant_limit: 5
 notify: every-round
 ---
 
@@ -63,12 +63,12 @@ class Role(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(items, {"duty:mtm": "*/15 * * * *", "duty:ci": "0 * * * *",
                                  "task:n8n stays up": "*/15 * * * *", "task:Disabled tests come back": "7 9 * * *"})
-        self.assertEqual(settings, {"worker_limit": 5, "notify": "every-round"})
+        self.assertEqual(settings, {"servant_limit": 5, "notify": "every-round"})
 
     def test_nothing_implicit_missing_settings_and_crons_are_problems(self):
         _, _, problems = due.schedule("---\nduties:\n  boss: \"x\"\n---\n\n## Tasks\n\n### t\n\n- **Check**: a\n")
         text = "\n".join(problems)
-        for part in ("unknown duty 'boss'", "task 't' has no", "worker_limit", "notify", "duty:boss"):
+        for part in ("unknown duty 'boss'", "task 't' has no", "servant_limit", "notify", "duty:boss"):
             self.assertIn(part, text)
         self.assertEqual(due.schedule("")[0], {})
 

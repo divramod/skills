@@ -109,7 +109,7 @@ class Summary(unittest.TestCase):
         acts = [{"at": "2026-10-03T07:40:00", "kind": "wake", "slot": "12", "what": "told to rerun", "note": ""}]
         land = [{"slot": "01", "outcome": "landed", "task": "", "tests": []}]
         text = scan.render_summary(snap(queue=q, findings=f, worktrees=w), acts, land, "Unblocked 12.", "Answered 05.")
-        for part in ("# owner ", "## Development lead", "Answered 05.", "Queue head: 12 held", "Unblocked 12.", "- 01 landed", "0. 12 held (failed, attempt 7)",
+        for part in ("# farmer ", "## Development lead", "Answered 05.", "Queue head: 12 held", "Unblocked 12.", "- 01 landed", "0. 12 held (failed, attempt 7)",
                      "- held-idle 12: nobody reruns", "- 07:40 wake 12: told to rerun", "| 12 | 2 | sleeping |"):
             self.assertIn(part, text)
         self.assertNotIn("| 03 |", text)
@@ -119,7 +119,7 @@ class Summary(unittest.TestCase):
         from pathlib import Path
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual((scan.summary_dir(d) / ".gitignore").read_text(), "*\n")
-            self.assertTrue((Path(d) / "plans/owner").is_dir())
+            self.assertTrue((Path(d) / "plans/farmer").is_dir())
 
 
 class Front(unittest.TestCase):

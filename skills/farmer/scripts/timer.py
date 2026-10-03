@@ -1,9 +1,9 @@
-"""The owner's external timer (plan 0007 step 7): `owner.py tick` at the loop's cron, no Claude cron job.
+"""The farmer's external timer (plan 0007 step 7): `farmer.py tick` at the loop's cron, no Claude cron job.
 
-macOS: a launchd agent `local.owner.<repo>` (~/Library/LaunchAgents), one StartCalendarInterval entry per minute of
+macOS: a launchd agent `local.farmer.<repo>` (~/Library/LaunchAgents), one StartCalendarInterval entry per minute of
 the loop's cron. Linux: a systemd user timer + service of the same name. Installing writes the mode `timer`,
 removing it `claude`, so a tick and the Claude loop never both run. `timer.json` in the state folder keeps the
-installed cron; a tick reinstalls when OWNER-ROLE.md changed the loop's cron.
+installed cron; a tick reinstalls when FARMER-ROLE.md changed the loop's cron.
 
 The tick's output goes to `tick.log` in the state folder (rotated at 1 MB to `tick.log.1`).
 """
@@ -17,12 +17,12 @@ from pathlib import Path
 
 import due
 
-OWNER = Path(__file__).resolve().parent / "owner.py"
+FARMER = Path(__file__).resolve().parent / "farmer.py"
 LOG_MAX = 1 << 20
 
 
 def label(repo_name: str) -> str:
-    return f"local.owner.{repo_name}"
+    return f"local.farmer.{repo_name}"
 
 
 def minutes(cron: str) -> list[int]:
@@ -34,12 +34,12 @@ def minutes(cron: str) -> list[int]:
 
 
 def argv(top: str) -> list[str]:
-    return [sys.executable, str(OWNER), "tick", "--repo", top]
+    return [sys.executable, str(FARMER), "tick", "--repo", top]
 
 
 def env() -> dict[str, str]:
-    """What the tick needs from this shell: PATH (hal2's CLIs), OWNER_DIR when set."""
-    return {k: os.environ[k] for k in ("PATH", "OWNER_DIR") if k in os.environ}
+    """What the tick needs from this shell: PATH (hal2's CLIs), FARMER_DIR when set."""
+    return {k: os.environ[k] for k in ("PATH", "FARMER_DIR") if k in os.environ}
 
 
 def plist(name: str, top: str, state: Path, cron: str) -> str:
@@ -59,10 +59,10 @@ def plist(name: str, top: str, state: Path, cron: str) -> str:
 
 def systemd(name: str, top: str, state: Path, cron: str) -> tuple[str, str]:
     mins = ",".join(f"{m:02d}" for m in minutes(cron))
-    service = (f"[Unit]\nDescription=owner tick for {name}\n\n[Service]\nType=oneshot\nWorkingDirectory={top}\n"
+    service = (f"[Unit]\nDescription=farmer tick for {name}\n\n[Service]\nType=oneshot\nWorkingDirectory={top}\n"
                + "".join(f"Environment={k}={v}\n" for k, v in env().items()) + f"ExecStart={' '.join(argv(top))}\n"
                f"StandardOutput=append:{state / 'tick.log'}\nStandardError=append:{state / 'tick.log'}\n")
-    timer = (f"[Unit]\nDescription=owner tick for {name}\n\n[Timer]\nOnCalendar=*-*-* *:{mins}:00\n"
+    timer = (f"[Unit]\nDescription=farmer tick for {name}\n\n[Timer]\nOnCalendar=*-*-* *:{mins}:00\n"
              "Persistent=false\n\n[Install]\nWantedBy=timers.target\n")
     return service, timer
 

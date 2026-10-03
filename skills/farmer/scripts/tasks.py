@@ -1,4 +1,4 @@
-"""OWNER-ROLE.md tasks the tick runs itself (plan 0007 step 5).
+"""FARMER-ROLE.md tasks the tick runs itself (plan 0007 step 5).
 
 A task is **machine-run** when its lines are in the strict form:
 
@@ -6,10 +6,10 @@ A task is **machine-run** when its lines are in the strict form:
   - **Act**: `<command>`, ..., notify, delegate        run in order, then the Check again
   - **Still failing**: notify, delegate                after the Act's recheck (default: notify)
 
-Commands run with `sh -c` in the main checkout; `owner <args>` runs this skill's owner.py. Act's keywords are
-`notify` (tell the user, batched), `delegate` (a worker fixes it, the failing check's output as evidence) and `wake`
-(the owner's model decides). Anything else on those lines, any prose, makes the task the model's: it wakes the
-owner with the task's text. So a task written before this form never runs a command by accident.
+Commands run with `sh -c` in the main checkout; `farmer <args>` runs this skill's farmer.py. Act's keywords are
+`notify` (tell the user, batched), `delegate` (a servant fixes it, the failing check's output as evidence) and `wake`
+(the farmer's model decides). Anything else on those lines, any prose, makes the task the model's: it wakes the
+farmer with the task's text. So a task written before this form never runs a command by accident.
 """
 
 import re
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from tick import act
 
-OWNER = [sys.executable, str(Path(__file__).resolve().parent / "owner.py")]
+FARMER = [sys.executable, str(Path(__file__).resolve().parent / "farmer.py")]
 CMD = r"`([^`]+)`"
 CHECK = re.compile(rf"^{CMD}(?:\s*(?:,|and|&&)\s*{CMD})*\.?$")
 KEYWORDS = ("notify", "delegate", "wake")
@@ -62,7 +62,7 @@ def parse(role_text: str) -> dict[str, dict]:
 
 
 def argv(cmd: str, top: str) -> list[str]:
-    return OWNER + cmd.split()[1:] + ["--repo", top] if cmd.split()[0] == "owner" else ["sh", "-c", cmd]
+    return FARMER + cmd.split()[1:] + ["--repo", top] if cmd.split()[0] == "farmer" else ["sh", "-c", cmd]
 
 
 def run_check(cmds: list[str], top: str, main: str) -> tuple[bool, str]:
@@ -81,13 +81,13 @@ def outcome(kind: str, name: str, why: str) -> dict:
         return act("task", name, "delegate", key=f"task:{name}", window=86400, text=f"task {name}: {why.splitlines()[0]}",
                    brief={"task": name, "check": why})
     if kind == "notify":
-        return act("task", name, "notify", key=f"task-notify:{name}", window=3600, text=f"owner task {name}: {why[:300]}")
+        return act("task", name, "notify", key=f"task-notify:{name}", window=3600, text=f"farmer task {name}: {why[:300]}")
     return act("task", name, "wake", key=f"task-wake:{name}", window=3600, text=f"task {name}: {why[:300]}")
 
 
 def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check) -> list[dict]:
     name = item["name"].split(":", 1)[1]
-    spec = (specs if specs is not None else parse((Path(ctx["top"]) / "OWNER-ROLE.md").read_text())).get(name)
+    spec = (specs if specs is not None else parse((Path(ctx["top"]) / "FARMER-ROLE.md").read_text())).get(name)
     if not spec or not spec["machine"]:
         return [act("task", name, "wake", key=f"task-wake:{name}", window=3600,
                     text=f"task {name}: not in the machine form, run it as written", evidence=spec and spec["text"])]
@@ -103,14 +103,14 @@ def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check)
         else:
             out.append(outcome(kind, name, why))
     if recheck:
-        out.append(act("task", name, "run", argv=OWNER + ["check", "task", name, "--repo", ctx["top"]], cwd=ctx["main"],
+        out.append(act("task", name, "run", argv=FARMER + ["check", "task", name, "--repo", ctx["top"]], cwd=ctx["main"],
                        text=f"task {name}: check again",
                        on_fail=[outcome(k, name, "still failing after the act") for k, _ in spec["still"]]))
     return out
 
 
 def flaky_open(main: str, slots: dict[str, dict]) -> list[str]:
-    """Ledger entries not back yet whose worker slot runs no plan any more."""
+    """Ledger entries not back yet whose servant slot runs no plan any more."""
     import mtm_scan
     f = mtm_scan.DATA / Path(main).name / "flaky.md"
     out = []
@@ -135,7 +135,7 @@ def orphans(top: str) -> list[dict]:
 
 
 def builtin(what: str, top: str) -> tuple[int, str]:
-    """`owner check task <name>|flaky|orphans`: exit 0 when fine, 1 with what is wrong."""
+    """`farmer check task <name>|flaky|orphans`: exit 0 when fine, 1 with what is wrong."""
     import mtm_scan
     import tick
     main = mtm_scan.main_checkout(top)
@@ -144,7 +144,7 @@ def builtin(what: str, top: str) -> tuple[int, str]:
     elif what == "orphans":
         bad = [f"{f['slot']}: {f['why']}" for f in orphans(top)]
     else:
-        spec = parse((Path(top) / "OWNER-ROLE.md").read_text()).get(what)
+        spec = parse((Path(top) / "FARMER-ROLE.md").read_text()).get(what)
         if not spec or not spec["check"]:
             return 2, f"no machine-run task {what!r}"
         ok, why = run_check(spec["check"], top, main)

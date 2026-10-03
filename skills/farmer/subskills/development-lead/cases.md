@@ -11,5 +11,5 @@ is `none`, `shot <shotfile>/<n>`, `plan <NNNN>` or `landed <plan> <date>`.
   "unlock the Mac" for the user.
 - **Occurrences**:
   - 2026-10-03 hal2 wt 04, 05, 06, 14.
-- **Lasting fix**: none. The idea is a scheduled UI-test window (the owner runs every waiting slot's UI tests one
+- **Lasting fix**: none. The idea is a scheduled UI-test window (the farmer runs every waiting slot's UI tests one
   after the other while the user is away and the Mac is unlocked).

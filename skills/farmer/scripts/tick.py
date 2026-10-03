@@ -1,4 +1,4 @@
-"""The owner's round frame as code: what `owner.py tick` plans and does each round.
+"""The farmer's round frame as code: what `farmer.py tick` plans and does each round.
 
 A round is planned as actions (plain dicts), then carried out by `execute`, so a dry run plans the same
 round and does nothing. An action:
@@ -12,16 +12,16 @@ with `do` one of
   send    pane, text: a templated message typed into an idle session's empty prompt (deliver.py); refused
           (busy, a draft, a dialog) it becomes a `relay`
   relay   text: a templated message the woken session sends verbatim with SendMessage (busy sessions)
-  delegate text, brief: a fix for a worker (delegation.py starts it; a failed start wakes the model)
+  delegate text, brief: a fix for a servant (delegation.py starts it; a failed start wakes the model)
   wake    text: an item that needs the model (wake.py hands these to the woken session)
   notify  text: a notice for the user (the woken session pushes them, batched)
 
 An action may carry a `key` (the log keeps it) and a `window` in seconds (default a week): `fresh` drops an action
 whose key was logged within its window, and an action `after` a dropped key with it. Messages and wakes for a slot
 that waits for the user (an `ask` in the log with no `answered` after it) are dropped too, and so are
-messages and wakes about the owner's own slot (its session is the one woken).
+messages and wakes about the farmer's own slot (its session is the one woken).
 
-Every executed action except `ran` goes into the owner's log with `"by": "tick"`.
+Every executed action except `ran` goes into the farmer's log with `"by": "tick"`.
 """
 
 import datetime as dt
@@ -35,8 +35,8 @@ import due
 import mtm_scan
 import wake
 
-OWNER_SLOT = "owner"
-ROLE = "OWNER-ROLE.md"
+FARMER_SLOT = "farmer"
+ROLE = "FARMER-ROLE.md"
 MFM = ["hal2-cli-git", "worktree", "merge-from-main", "--json"]
 
 
@@ -62,14 +62,14 @@ def default_ref(repo: str) -> str:
 
 
 def slot_problem(repo: str) -> str | None:
-    """None when `repo` is the owner slot holding nothing but OWNER-ROLE.md changes, else why not."""
+    """None when `repo` is the farmer slot holding nothing but FARMER-ROLE.md changes, else why not."""
     top = git(repo, "rev-parse", "--show-toplevel")
-    if not top or Path(top).name != OWNER_SLOT:
-        return f"not the owner slot ({top or repo}): start me with `hal2-cli-git worktree run owner --agent claude`"
+    if not top or Path(top).name != FARMER_SLOT:
+        return f"not the farmer slot ({top or repo}): start me with `hal2-cli-git worktree run farmer --agent claude`"
     changed = set(git(top, "diff", "--name-only", f"{default_ref(top)}...HEAD").split())
     changed |= {line[3:].strip() for line in git(top, "status", "--porcelain").splitlines()}
     other = sorted(changed - {ROLE, ""})
-    return f"the owner slot holds more than {ROLE}: {', '.join(other)}" if other else None
+    return f"the farmer slot holds more than {ROLE}: {', '.join(other)}" if other else None
 
 
 def act(duty: str, kind: str, do: str, slot: str = "-", **fields) -> dict:
@@ -77,22 +77,22 @@ def act(duty: str, kind: str, do: str, slot: str = "-", **fields) -> dict:
 
 
 def role_edit(top: str) -> tuple[list[dict], bool]:
-    """The user's uncommitted OWNER-ROLE.md edit: commit it when valid. Returns (actions, round may go on)."""
+    """The user's uncommitted FARMER-ROLE.md edit: commit it when valid. Returns (actions, round may go on)."""
     if not git(top, "status", "--porcelain", "--", ROLE):
         return [], True
     path = Path(top) / ROLE
     if not path.exists():
-        return [act("frame", "role-gone", "notify", text=f"{ROLE} was deleted in the owner slot: nothing runs")], False
+        return [act("frame", "role-gone", "notify", text=f"{ROLE} was deleted in the farmer slot: nothing runs")], False
     problems = due.schedule(path.read_text())[2]
     if problems:
         return [act("frame", "role-invalid", "notify",
                     text=f"{ROLE} edit not committed, nothing runs: " + "; ".join(problems))], False
-    return [act("frame", "role-commit", "run", argv=["git", "commit", "-q", "-m", "owner-role: the user's change",
+    return [act("frame", "role-commit", "run", argv=["git", "commit", "-q", "-m", "farmer-role: the user's change",
                                                     "--", ROLE], text=f"committed the user's {ROLE} edit")], True
 
 
 def due_items(top: str, now: dt.datetime | None = None) -> tuple[list[dict], dict, list[str]]:
-    """(the due duties and tasks, the settings, problems) from the slot's OWNER-ROLE.md."""
+    """(the due duties and tasks, the settings, problems) from the slot's FARMER-ROLE.md."""
     path = Path(top) / ROLE
     if not path.exists():
         return [], {}, [f"no {ROLE}: nothing is opted in"]
@@ -107,7 +107,7 @@ def due_items(top: str, now: dt.datetime | None = None) -> tuple[list[dict], dic
 
 def item_actions(item: dict, handlers: dict, ctx: dict) -> list[dict]:
     """The planned actions of one due duty or task, ending with its run record. A handler gets the item and
-    `ctx` (top, main, now, dry, log: the owner's log entries) and returns planned actions."""
+    `ctx` (top, main, now, dry, log: the farmer's log entries) and returns planned actions."""
     kind, _, name = item["name"].partition(":")
     handler = handlers.get(item["name"]) or handlers.get(f"{kind}:*")
     planned = handler(item, ctx) if handler else [
@@ -146,7 +146,7 @@ def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
         key = a.get("key")
         old = key and key in seen and (now - seen[key]).total_seconds() < a.get("window", WEEK)
         talk = a["do"] in ("send", "relay", "wake")
-        held = (a["slot"] in asked and (talk or a["kind"] == "orphan")) or (a["slot"] == OWNER_SLOT and talk)
+        held = (a["slot"] in asked and (talk or a["kind"] == "orphan")) or (a["slot"] == FARMER_SLOT and talk)
         if old or held or a.get("after") in dropped:
             dropped.add(key)
             continue
@@ -236,15 +236,15 @@ def execute(a: dict, top: str, main: str, out: dict) -> None:
 
 
 def stay_current(top: str, main: str, out: dict) -> None:
-    """Merge the default branch into the owner slot the way /mfm does; a failure needs the model."""
-    a = act("frame", "stay-current", "run", argv=MFM, text="merge-from-main in the owner slot")
+    """Merge the default branch into the farmer slot the way /mfm does; a failure needs the model."""
+    a = act("frame", "stay-current", "run", argv=MFM, text="merge-from-main in the farmer slot")
     execute(a, top, main, out)
     if a["exit"]:
         try:
             status = json.loads(a["output"].splitlines()[-1]).get("status", "error")
         except (ValueError, IndexError, AttributeError):
             status = "error"
-        execute(act("frame", "mfm-failed", "wake", text=f"merge-from-main in the owner slot: {status}",
+        execute(act("frame", "mfm-failed", "wake", text=f"merge-from-main in the farmer slot: {status}",
                     evidence=a["output"]), top, main, out)
 
 
@@ -259,8 +259,8 @@ def slot_state(main: str) -> dict[str, dict]:
 
 
 def delegate_all(main: str, out: dict, dry: bool, now: dt.datetime) -> None:
-    """Place this round's delegations (planned ones in a dry run), then follow up on the running workers."""
-    limit = int((out.get("settings") or {}).get("worker_limit") or 1)
+    """Place this round's delegations (planned ones in a dry run), then follow up on the running servants."""
+    limit = int((out.get("settings") or {}).get("servant_limit") or 1)
     todo = [a for a in out["planned"] if a["do"] == "delegate"] if dry else out.get("delegate", [])
     out["delegations"] = [delegation.delegate(a, main, limit, dry, now) for a in todo]
     out["delegations"] += delegation.follow_up(main, slot_state(main), limit, dry, now)
@@ -288,7 +288,7 @@ def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None) ->
         return out
     top = git(repo, "rev-parse", "--show-toplevel")
     main = mtm_scan.main_checkout(top)
-    out["planned"].append(act("frame", "stay-current", "run", argv=MFM, text="merge-from-main in the owner slot"))
+    out["planned"].append(act("frame", "stay-current", "run", argv=MFM, text="merge-from-main in the farmer slot"))
     if not dry:
         stay_current(top, main, out)
         out["done"].append(out["planned"][0])

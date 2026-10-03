@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""fix-loc's loop: one tick watches the running worker and, once its plan landed, spawns the next unit's.
+"""fix-loc's loop: one tick watches the running servant and, once its plan landed, spawns the next unit's.
 
   loop.py tick   --repo R [--model M] [--dry-run] [--json]   one tick (what the cron job's /fix-loc runs)
-  loop.py claim  --repo W --plan <NNNN-slug> [--json]       the worker in checkout W names its plan
+  loop.py claim  --repo W --plan <NNNN-slug> [--json]       the servant in checkout W names its plan
   loop.py record --repo R --started|--stopped [--json]      the loop (re)started (cron re-armed) or stopped
-  loop.py status --repo R [--json]                          the worker, blocked units, history
+  loop.py status --repo R [--json]                          the servant, blocked units, history
 
 The state is `<state root>/state.json` (scan.state_root; tick.py documents its fields). `tick --dry-run`
 decides and prints the next spawn without spawning or writing the state. Exit 2: a missing tool.
@@ -26,7 +26,7 @@ import scan  # noqa: E402
 import tick  # noqa: E402
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
-PROMPT = Path(__file__).resolve().parent.parent / "worker-prompt.md"
+PROMPT = Path(__file__).resolve().parent.parent / "servant-prompt.md"
 FINISHED = re.compile(r"^Finished:", re.MULTILINE)
 
 
@@ -41,7 +41,9 @@ def state_path(repo):
 def load(repo):
     path = state_path(repo)
     state = json.loads(path.read_text()) if path.exists() else {}
-    for key, empty in (("worker", None), ("history", []), ("blocked", {}), ("attempts", {})):
+    if "worker" in state:  # a state file from before plan 0128 named the servant "worker"
+        state.setdefault("servant", state.pop("worker"))
+    for key, empty in (("servant", None), ("history", []), ("blocked", {}), ("attempts", {})):
         state.setdefault(key, empty)
     return state
 
@@ -80,14 +82,14 @@ def current_plan(worktree):
     return path.read_text().strip() if worktree and path.exists() else None
 
 
-def observe(repo, project, worker):
-    """What `tick.decide` needs about the running worker, read from hal2 and git."""
+def observe(repo, project, servant):
+    """What `tick.decide` needs about the running servant, read from hal2 and git."""
     ref = layout.default_branch(repo)
     queue = run_json(["hal2-cli-git", "worktree", "queue", "--json"], cwd=project).get("queue", [])
-    plan = worker.get("plan") or current_plan(worker.get("worktree"))
+    plan = servant.get("plan") or current_plan(servant.get("worktree"))
     return {
         "agents": run_json(["hal2-cli-agents", "list", "--json"]),
-        "queue": [t for t in queue if not worker.get("worktree") or t.get("worktree") == worker["worktree"]],
+        "queue": [t for t in queue if not servant.get("worktree") or t.get("worktree") == servant["worktree"]],
         "landed": plan_landed(repo, ref, plan if plan and tick.PLAN_SLUG.match(plan) else None),
         "current_plan": plan,
     }
@@ -104,43 +106,43 @@ def fill_prompt(unit, limit):
 
 
 def finish(repo, state, now, result):
-    """The worker's plan landed: count the unit again, record it, stop the worker's terminal host."""
-    worker = state["worker"]
-    after = scan.unit_files(repo, worker["unit"], worktree=False)
+    """The servant's plan landed: count the unit again, record it, stop the servant's terminal host."""
+    servant = state["servant"]
+    after = scan.unit_files(repo, servant["unit"], worktree=False)
     over = [f for f in after["files"] if f["code"] > after["limit"]]
     state["history"].append({
-        "unit": worker["unit"], "plan": result.get("plan"), "model": worker.get("model"),
-        "started_ms": worker["spawned_ms"], "landed_ms": now, "before": worker.get("before", {}),
-        "after": {f["path"]: f["code"] for f in after["files"] if f["path"] in worker.get("before", {})},
+        "unit": servant["unit"], "plan": result.get("plan"), "model": servant.get("model"),
+        "started_ms": servant["spawned_ms"], "landed_ms": now, "before": servant.get("before", {}),
+        "after": {f["path"]: f["code"] for f in after["files"] if f["path"] in servant.get("before", {})},
         "still_over": [f["path"] for f in over],
     })
-    note = tick.after_landing(state, worker["unit"], bool(over), now)
+    note = tick.after_landing(state, servant["unit"], bool(over), now)
     if note:
         result["notify"].append(note)
-    if str(worker.get("pane", "")).startswith("t:"):
-        subprocess.run(["hal2-cli-agents", "terminal", "kill", worker["pane"][2:]], capture_output=True)
-    state["worker"] = None
+    if str(servant.get("pane", "")).startswith("t:"):
+        subprocess.run(["hal2-cli-agents", "terminal", "kill", servant["pane"][2:]], capture_output=True)
+    state["servant"] = None
 
 
 def watch(repo, state, now, result):
-    """Decide about the running worker; True when a next unit may start."""
-    worker = state["worker"]
-    seen = observe(repo, state["project"], worker)
+    """Decide about the running servant; True when a next unit may start."""
+    servant = state["servant"]
+    seen = observe(repo, state["project"], servant)
     decision = tick.decide(state, now, project=state["project"], **seen)
     result.update(decision)
-    result["unit"] = worker["unit"]
-    if decision.get("plan") and not worker.get("plan"):
-        worker["plan"] = decision["plan"]
+    result["unit"] = servant["unit"]
+    if decision.get("plan") and not servant.get("plan"):
+        servant["plan"] = decision["plan"]
     if decision["action"] == "landed":
         finish(repo, state, now, result)
         return True
     if decision["action"] == "blocked":
-        state["blocked"][worker["unit"]] = now + tick.BLOCK_FOR
-        result["notify"].append(f"fix-loc: {worker['unit']} blocked ({decision['reason']}), skipped 7 days")
-        state["worker"] = None
+        state["blocked"][servant["unit"]] = now + tick.BLOCK_FOR
+        result["notify"].append(f"fix-loc: {servant['unit']} blocked ({decision['reason']}), skipped 7 days")
+        state["servant"] = None
         return True
-    if decision["action"] == "paused" and not worker.get("paused_notified"):
-        worker["paused_notified"] = True
+    if decision["action"] == "paused" and not servant.get("paused_notified"):
+        servant["paused_notified"] = True
         result["notify"].append(f"fix-loc: paused, {decision['reason']}")
     return False
 
@@ -159,7 +161,7 @@ def spawn_next(repo, state, now, model, dry_run, result):
         result["dry_run"] = True
         return
     spawned = run_json(command)
-    state["worker"] = {
+    state["servant"] = {
         "unit": unit["unit"], "files": result["files"], "slot": spawned["slot"], "pane": spawned["pane"],
         "worktree": spawned.get("worktree"), "plan": None, "model": model, "spawned_ms": now,
         "before": {f["path"]: f["code"] for f in unit["files"]},
@@ -174,7 +176,7 @@ def run_tick(repo, model=DEFAULT_MODEL, dry_run=False, now=None):
     state.setdefault("started_ms", now)
     result = {"action": "wait", "reason": "", "notify": [], "rearm": tick.needs_rearm(state, now)}
     subprocess.run(["git", "-C", str(repo), "fetch", "-q", "origin"], capture_output=True)
-    if state["worker"] is None or watch(repo, state, now, result):
+    if state["servant"] is None or watch(repo, state, now, result):
         spawn_next(repo, state, now, model, dry_run, result)
     if not dry_run:
         save(repo, state)
@@ -183,12 +185,12 @@ def run_tick(repo, model=DEFAULT_MODEL, dry_run=False, now=None):
 
 def claim(repo, plan):
     state, top = load(repo), layout.git(repo, "rev-parse", "--show-toplevel").strip()
-    worker = state["worker"]
-    if not worker or Path(worker.get("worktree") or "").resolve() != Path(top).resolve():
-        raise SystemExit(f"fix-loc: no fix-loc worker runs in {top}")
-    worker["plan"] = plan
+    servant = state["servant"]
+    if not servant or Path(servant.get("worktree") or "").resolve() != Path(top).resolve():
+        raise SystemExit(f"fix-loc: no fix-loc servant runs in {top}")
+    servant["plan"] = plan
     save(repo, state)
-    return {"unit": worker["unit"], "plan": plan}
+    return {"unit": servant["unit"], "plan": plan}
 
 
 def record(repo, started, stopped):
@@ -204,7 +206,7 @@ def record(repo, started, stopped):
 def status(repo):
     state, now = load(repo), now_ms()
     blocked = {unit: until for unit, until in state["blocked"].items() if until > now}
-    return {"worker": state["worker"], "blocked": blocked, "history": state["history"][-10:],
+    return {"servant": state["servant"], "blocked": blocked, "history": state["history"][-10:],
             "landed": len(state["history"]), "started_ms": state.get("started_ms")}
 
 

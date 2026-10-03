@@ -8,7 +8,7 @@ NOW = dt.datetime(2026, 10, 3, 10, 0)
 
 
 def ctx(**kw):
-    return {"top": "/x/owner", "main": "/x/hal2", "now": NOW, "log": [], "duties": {"mtm", "lead"},
+    return {"top": "/x/farmer", "main": "/x/hal2", "now": NOW, "log": [], "duties": {"mtm", "lead"},
             "panes": {"04": "%4", "05": "%5"}, "agents_by_pane": {}, "landing": set(), **kw}
 
 
@@ -34,8 +34,8 @@ class Lead(unittest.TestCase):
         waiting = helper("idle-in-plan", "Next I'll continue once the queue returns.")
         self.assertEqual(kinds(self.plan(waiting)), [("wake", "idle-in-plan", "04")])
 
-    def test_the_owners_own_session_is_never_told_or_woken_about(self):
-        self.assertEqual(kinds(self.plan(helper("asks", slot="owner"), helper("no-plan", slot="owner"))),
+    def test_the_farmers_own_session_is_never_told_or_woken_about(self):
+        self.assertEqual(kinds(self.plan(helper("asks", slot="farmer"), helper("no-plan", slot="farmer"))),
                          [])
 
     def test_questions_and_blocks_wake_failed_goes_to_watch_when_on(self):

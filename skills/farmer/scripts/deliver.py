@@ -2,7 +2,7 @@
 
 `send(pane, text)` types only when hal2 lists the agent in a resting state and its prompt box holds no draft
 (no text typed by a person; the dim suggestion Claude Code shows there is no draft). Otherwise it refuses and the
-tick hands the message to the woken owner session as a relay (Claude Code's SendMessage queues for busy sessions).
+tick hands the message to the woken farmer session as a relay (Claude Code's SendMessage queues for busy sessions).
 The prompt check follows hal2-agents' `scrape::claude_input`.
 """
 

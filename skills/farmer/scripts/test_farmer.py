@@ -11,13 +11,13 @@ from unittest import mock
 
 import due
 import mtm_scan
-import owner
+import farmer
 import tick
 
 ROLE = """---
 duties:
   mtm: "*/15 * * * *"
-worker_limit: 2
+servant_limit: 2
 notify: every-round
 ---
 
@@ -37,7 +37,7 @@ def git(cwd, *args):
 
 
 class Repo(unittest.TestCase):
-    """A main checkout `hal2` with an origin and an owner slot (a worktree named `owner`)."""
+    """A main checkout `hal2` with an origin and a farmer slot (a worktree named `farmer`)."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -51,8 +51,8 @@ class Repo(unittest.TestCase):
         git(self.main, "commit", "-qm", "init")
         git(self.main, "push", "-q", "origin", "main")
         git(self.main, "remote", "set-head", "origin", "main")
-        self.slot = self.tmp / "wt" / "owner"
-        git(self.main, "worktree", "add", "-q", "-b", "owner", str(self.slot))
+        self.slot = self.tmp / "wt" / "farmer"
+        git(self.main, "worktree", "add", "-q", "-b", "farmer", str(self.slot))
         self.data = self.tmp / "state"
         patches = [mock.patch.object(m, "DATA", self.data) for m in (due, mtm_scan)]
         patches += [mock.patch.object(tick.deliver, "cli", return_value=(0, "[]")),
@@ -67,8 +67,8 @@ class Repo(unittest.TestCase):
 
 
 class Slot(Repo):
-    def test_only_the_owner_slot_with_nothing_but_its_role(self):
-        self.assertIn("not the owner slot", tick.slot_problem(str(self.main)))
+    def test_only_the_farmer_slot_with_nothing_but_its_role(self):
+        self.assertIn("not the farmer slot", tick.slot_problem(str(self.main)))
         self.assertIsNone(tick.slot_problem(str(self.slot)))
         (self.slot / tick.ROLE).write_text(ROLE + "\nedited\n")
         self.assertIsNone(tick.slot_problem(str(self.slot)))
@@ -77,7 +77,7 @@ class Slot(Repo):
 
     def test_a_valid_edit_is_committed_an_invalid_one_stops_the_round(self):
         self.assertEqual(tick.role_edit(str(self.slot)), ([], True))
-        (self.slot / tick.ROLE).write_text(ROLE.replace("worker_limit: 2", "worker_limit: 3"))
+        (self.slot / tick.ROLE).write_text(ROLE.replace("servant_limit: 2", "servant_limit: 3"))
         actions, go_on = tick.role_edit(str(self.slot))
         self.assertTrue(go_on)
         self.assertEqual([a["kind"] for a in actions], ["role-commit"])
@@ -97,7 +97,7 @@ class Round(Repo):
                          [("front", "record"), ("ran", "ran"), ("no-handler", "wake"), ("ran", "ran")])
 
     def test_a_dry_run_plans_and_touches_nothing(self):
-        (self.slot / tick.ROLE).write_text(ROLE.replace("worker_limit: 2", "worker_limit: 3"))
+        (self.slot / tick.ROLE).write_text(ROLE.replace("servant_limit: 2", "servant_limit: 3"))
         with mock.patch.object(tick, "sh", wraps=tick.sh) as sh:
             r = tick.run(str(self.slot), True, {}, NOW)
         self.assertFalse(any(c.args[0][0] != "git" for c in sh.call_args_list))
@@ -119,10 +119,10 @@ class Round(Repo):
             return tick.run(str(self.slot), False, {}, NOW)
 
     def test_a_round_commits_the_edit_records_runs_logs_and_collects_wakes(self):
-        (self.slot / tick.ROLE).write_text(ROLE.replace("worker_limit: 2", "worker_limit: 3"))
+        (self.slot / tick.ROLE).write_text(ROLE.replace("servant_limit: 2", "servant_limit: 3"))
         r = self.run_round()
         last = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=self.slot, capture_output=True, text=True)
-        self.assertEqual(last.stdout.strip(), "owner-role: the user's change")
+        self.assertEqual(last.stdout.strip(), "farmer-role: the user's change")
         self.assertEqual(set(due.last_runs(str(self.slot))), {"duty:mtm", "task:probe"})
         self.assertEqual([a["kind"] for a in r["wake"]], ["no-handler", "no-handler"])
         self.assertTrue(all(e["by"] == "tick" for e in self.log()))
@@ -141,11 +141,11 @@ class Round(Repo):
         with mock.patch.object(mtm_scan, "snapshot", return_value=snap):
             quiet = {"done": [tick.act("mtm", "ran", "ran", name="duty:mtm")]}
             tick.summarize(str(self.main), str(self.slot), quiet)
-            self.assertTrue(quiet["summary"].endswith("plans/owner/latest.md"))
+            self.assertTrue(quiet["summary"].endswith("plans/farmer/latest.md"))
             self.assertIn("quiet", Path(quiet["summary"]).read_text())
             busy = {"done": [tick.act("frame", "role-commit", "run", text="committed")]}
             tick.summarize(str(self.main), str(self.slot), busy)
-            self.assertIn("/plans/owner/2026-10-03/", busy["summary"])
+            self.assertIn("/plans/farmer/2026-10-03/", busy["summary"])
 
 
 class Waiting(unittest.TestCase):
@@ -166,8 +166,8 @@ class Cli(Repo):
     def call(self, *argv):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()), \
-                mock.patch.object(owner.shutil, "which", return_value="/bin/x"):
-            code = owner.main([*argv, "--repo", str(self.slot)])
+                mock.patch.object(farmer.shutil, "which", return_value="/bin/x"):
+            code = farmer.main([*argv, "--repo", str(self.slot)])
         return code, buf.getvalue()
 
     def test_start_check_and_the_mode_gate(self):
@@ -180,7 +180,7 @@ class Cli(Repo):
 
     def test_a_second_tick_while_one_runs_is_busy(self):
         self.call("mode", "timer")
-        with (owner.state(str(self.slot)) / "tick.lock").open("w") as held:
+        with (farmer.state(str(self.slot)) / "tick.lock").open("w") as held:
             fcntl.flock(held, fcntl.LOCK_EX)
             self.assertEqual(self.call("tick"), (0, "busy: another tick runs\n"))
 

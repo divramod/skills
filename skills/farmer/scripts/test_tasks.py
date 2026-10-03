@@ -18,7 +18,7 @@ TODAY = """
 - **Check**: `curl -fsS https://n8n.hal9k.app/healthz` and `hal2-cli-n8n instances check hal9k --json` (ready).
 - **Act**: down or not ready: redeploy n8n's services from main (`code/python/scripts/hal9k` `deploy app`).
 """
-CTX = {"top": "/x/owner", "main": "/x/hal2"}
+CTX = {"top": "/x/farmer", "main": "/x/hal2"}
 
 
 def item(name):
@@ -34,7 +34,7 @@ class Parse(unittest.TestCase):
         self.assertEqual(specs["n8n.hal9k.app stays up"]["act"][1], ("notify", ""))
         self.assertEqual(specs["n8n.hal9k.app stays up"]["still"], [("delegate", ""), ("notify", "")])
         self.assertFalse(tasks.parse(TODAY)["n8n.hal9k.app stays up"]["machine"])
-        self.assertEqual(tasks.argv("owner check flaky", "/x/owner")[-4:], ["check", "flaky", "--repo", "/x/owner"])
+        self.assertEqual(tasks.argv("farmer check flaky", "/x/farmer")[-4:], ["check", "flaky", "--repo", "/x/farmer"])
 
 
 class Plan(unittest.TestCase):
@@ -52,7 +52,7 @@ class Plan(unittest.TestCase):
         plan = self.plan("n8n.hal9k.app stays up", False)
         self.assertEqual([a["do"] for a in plan], ["run", "notify", "run"])
         self.assertEqual(plan[0]["argv"][-1], "python3 code/python/scripts/hal9k/main.py deploy app --service n8n n8n-runners")
-        self.assertEqual(plan[2]["argv"][-5:], ["check", "task", "n8n.hal9k.app stays up", "--repo", "/x/owner"])
+        self.assertEqual(plan[2]["argv"][-5:], ["check", "task", "n8n.hal9k.app stays up", "--repo", "/x/farmer"])
         self.assertEqual([f["do"] for f in plan[2]["on_fail"]], ["delegate", "notify"])
         self.assertEqual([a["do"] for a in self.plan("Disabled tests come back", False)], ["delegate"])
 
@@ -64,7 +64,7 @@ class Plan(unittest.TestCase):
         for code, follows in ((0, 0), (1, 2)):
             out = {"wake": [], "notify": []}
             with mock.patch.object(tick, "sh", return_value=(code, "")), mock.patch.object(mtm_scan, "log"):
-                tick.execute(dict(recheck), "/x/owner", "/x/hal2", out)
+                tick.execute(dict(recheck), "/x/farmer", "/x/hal2", out)
             self.assertEqual(len(out.get("delegate", [])) + len(out["notify"]), follows)
 
 

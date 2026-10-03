@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
-"""The owner's deterministic side: what runs without a model (.adr/deterministic-first.md, plan 0007).
+"""The farmer's deterministic side: what runs without a model (.adr/deterministic-first.md, plan 0007).
 
-  owner.py start-check [--repo <dir>] [--json]
-      may the owner start here? The owner slot, holding nothing but OWNER-ROLE.md changes, the
-      tools, a valid OWNER-ROLE.md; prints the loop's cron
-  owner.py tick [--repo <dir>] [--dry-run] [--json]
-      one round as code: stay current (merge-from-main), the user's OWNER-ROLE.md edit, what is due,
+  farmer.py start-check [--repo <dir>] [--json]
+      may the farmer start here? The farmer slot, holding nothing but FARMER-ROLE.md changes, the
+      tools, a valid FARMER-ROLE.md; prints the loop's cron
+  farmer.py tick [--repo <dir>] [--dry-run] [--json]
+      one round as code: stay current (merge-from-main), the user's FARMER-ROLE.md edit, what is due,
       each due item's actions, the log, the summary. Items that need judgment are collected as
       `wake`, notices for the user as `notify`. --dry-run plans the round and touches nothing.
-  owner.py delegate --brief <file> --title <title> [--repo <dir>] [--dry-run] [--json]
-      hand a brief the woken owner wrote to a worker (the same limit, slot choice, prompt and ledger as the tick's
+  farmer.py delegate --brief <file> --title <title> [--repo <dir>] [--dry-run] [--json]
+      hand a brief the woken farmer wrote to a servant (the same limit, slot choice, prompt and ledger as the tick's
       delegations); --dry-run prints the calls it would make
-  owner.py check task <name> | flaky | orphans [--repo <dir>]
-      a task's Check (machine form, see tasks.py), or a built-in check for OWNER-ROLE.md tasks: flaky ledger
-      entries whose worker runs no plan, slots with work and no session; exit 0 fine, 1 with what is wrong
-  owner.py wake [--done <seq>] [--repo <dir>] [--json]
-      what the tick handed to the owner session (wake.json: items that need judgment, relays, notices, failed
+  farmer.py check task <name> | flaky | orphans [--repo <dir>]
+      a task's Check (machine form, see tasks.py), or a built-in check for FARMER-ROLE.md tasks: flaky ledger
+      entries whose servant runs no plan, slots with work and no session; exit 0 fine, 1 with what is wrong
+  farmer.py wake [--done <seq>] [--repo <dir>] [--json]
+      what the tick handed to the farmer session (wake.json: items that need judgment, relays, notices, failed
       delegations, each with the file to read for it); --done drops the items up to <seq> once handled
-  owner.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]
+  farmer.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]
       the external timer that runs `tick` at the loop's cron (launchd on macOS, a systemd user timer on Linux;
       timer.py); install switches the mode to `timer`, remove back to `claude`
-  owner.py mode [claude|timer] [--repo <dir>]
-      who runs the rounds: the owner's Claude session (`claude`, the default) or the external
+  farmer.py mode [claude|timer] [--repo <dir>]
+      who runs the rounds: the farmer's Claude session (`claude`, the default) or the external
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
 
-State: ~/skills/owner/<repo>/ (OWNER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl, wake.json,
+State: ~/skills/farmer/<repo>/ (FARMER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl, wake.json,
 timer.json, tick.log.
-Exit 0 ok (also: another tick holds the lock, `busy`), 1 OWNER-ROLE.md invalid, 2 a tool missing,
-3 no OWNER-ROLE.md, 4 not the owner slot, a slot holding other work, or not in timer mode.
+Exit 0 ok (also: another tick holds the lock, `busy`), 1 FARMER-ROLE.md invalid, 2 a tool missing,
+3 no FARMER-ROLE.md, 4 not the farmer slot, a slot holding other work, or not in timer mode.
 """
 
 import argparse
@@ -83,7 +83,7 @@ def start_check(repo: str) -> tuple[int, dict]:
     top = tick.git(repo, "rev-parse", "--show-toplevel")
     role = Path(top) / tick.ROLE
     if not role.exists():
-        return 3, {"ok": False, "problems": [f"no {role}: nothing is opted in (template: templates/OWNER-ROLE.md)"]}
+        return 3, {"ok": False, "problems": [f"no {role}: nothing is opted in (template: templates/FARMER-ROLE.md)"]}
     items, settings, problems = due.schedule(role.read_text())
     if problems:
         return 1, {"ok": False, "problems": problems}
@@ -94,9 +94,9 @@ def start_check(repo: str) -> tuple[int, dict]:
 def print_round(r: dict) -> None:
     head = "dry run" if r["dry"] else "round"
     if r.get("problem"):
-        print(f"owner tick ({head}): {r['problem']}")
+        print(f"farmer tick ({head}): {r['problem']}")
         return
-    print(f"owner tick ({head}): {len(r.get('due', []))} due"
+    print(f"farmer tick ({head}): {len(r.get('due', []))} due"
           + (f": {', '.join(i['name'] for i in r['due'])}" if r.get("due") else ""))
     for a in r["planned"]:
         what = a.get("text") or " ".join(a.get("argv", [])) or a.get("name", "")
@@ -106,7 +106,7 @@ def print_round(r: dict) -> None:
             print(f"{key}: " + "; ".join(a.get("text", "") for a in r[key]))
     if r.get("woke"):
         w = r["woke"]
-        print(f"wake: {w['pending']} pending" + (", owner woken" if w["woken"] else f" ({w['why']})" if w.get("why")
+        print(f"wake: {w['pending']} pending" + (", farmer woken" if w["woken"] else f" ({w['why']})" if w.get("why")
                                                  else ""))
     if r.get("summary"):
         print(f"summary: {r['summary']}")
@@ -115,11 +115,11 @@ def print_round(r: dict) -> None:
 def run_tick(repo: str, dry: bool, as_json: bool) -> int:
     missing = [t for t in TOOLS if not shutil.which(t)]
     if missing:
-        print(f"owner.py: missing {', '.join(missing)}; run {HERE}/install-prerequisites.sh", file=sys.stderr)
+        print(f"farmer.py: missing {', '.join(missing)}; run {HERE}/install-prerequisites.sh", file=sys.stderr)
         return 2
     if not dry and mode(repo) != "timer":
-        print("owner.py: mode is `claude` (the owner's Claude loop runs the rounds); a tick runs only in timer mode "
-              "(`owner.py mode timer`), or use --dry-run", file=sys.stderr)
+        print("farmer.py: mode is `claude` (the farmer's Claude loop runs the rounds); a tick runs only in timer mode "
+              "(`farmer.py mode timer`), or use --dry-run", file=sys.stderr)
         return 4
     with (state(repo) / "tick.lock").open("w") as lock:
         try:
@@ -138,7 +138,7 @@ def run_tick(repo: str, dry: bool, as_json: bool) -> int:
 
 
 def follow_cron(repo: str) -> None:
-    """Reinstall the timer when OWNER-ROLE.md changed the loop's cron."""
+    """Reinstall the timer when FARMER-ROLE.md changed the loop's cron."""
     code, check = start_check(repo)
     st = state(repo)
     if code == 0 and timer.installed(st).get("cron") not in (None, check["loop_cron"]):
@@ -164,7 +164,7 @@ def run_timer(args) -> int:
         try:
             cmds = timer.install(name, top, st, check["loop_cron"], args.dry_run)
         except (RuntimeError, ValueError) as e:
-            print(f"owner.py: {e}", file=sys.stderr)
+            print(f"farmer.py: {e}", file=sys.stderr)
             return 2
     print("\n".join(" ".join(c) for c in cmds) if args.dry_run else f"{args.action}: mode {mode(args.repo)}")
     return 0
@@ -190,9 +190,9 @@ def run_delegate(args) -> int:
     main_dir = tick.mtm_scan.main_checkout(args.repo)
     settings = due.schedule((Path(tick.git(args.repo, "rev-parse", "--show-toplevel") or args.repo)
                              / tick.ROLE).read_text())[1] if (Path(args.repo) / tick.ROLE).exists() else {}
-    a = tick.act("owner", "brief", "delegate", key=f"brief:{delegation.slug(args.title)}", text=args.title,
+    a = tick.act("farmer", "brief", "delegate", key=f"brief:{delegation.slug(args.title)}", text=args.title,
                  brief={"brief_file": str(Path(args.brief).resolve())})
-    result = delegation.delegate(a, main_dir, int(settings.get("worker_limit") or 1), args.dry_run,
+    result = delegation.delegate(a, main_dir, int(settings.get("servant_limit") or 1), args.dry_run,
                                  datetime.datetime.now())
     print(json.dumps(result, indent=1) if args.json else
           f"{result['state']}: {result.get('slot') or '-'}" + "".join(f"\n  {' '.join(map(str, c))}"

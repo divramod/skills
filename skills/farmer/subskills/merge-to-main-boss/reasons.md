@@ -16,11 +16,11 @@ before, while 5 landings were ready and waiting.
   ran before the task, so the landing does not notice until the task's timeout (15m).
 - **Occurrences**:
   - 2026-10-03 11:09 · wt 15 (train B) · libs.hal2-n8n.test-e2e, n8n-postgres "Starting" since 10:59
-  - 2026-10-03 11:24 · wt 15 rerun · n8n-n8n "Starting" since 11:14 (the gate's probe had passed); owner ran `doctor --repair` → ready
+  - 2026-10-03 11:24 · wt 15 rerun · n8n-n8n "Starting" since 11:14 (the gate's probe had passed); farmer ran `doctor --repair` → ready
 - **Remedy**: tell the holder it is the engine, not its code; let the task time out (or stop it), then rerun at
   once: the gates' `doctor --repair` restarts the engine. Never disable the test for it.
 - **Lasting fix**: shot plugin-docker-compose/4 (a test-e2e probes the engine when no container starts and repairs
-  once or fails fast). Waits for a free worker slot.
+  once or fails fast). Waits for a free servant slot.
 
 ## R1 · A failed landing holds the queue while its agent sleeps
 

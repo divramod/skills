@@ -1,14 +1,14 @@
-"""The owner's wake (plan 0007 step 6): what a tick hands to the owner's Claude session, and the waking itself.
+"""The farmer's wake (plan 0007 step 6): what a tick hands to the farmer's Claude session, and the waking itself.
 
 A round's items that need the model, `wake` (judgment), `relay` (a templated message for a busy session, sent
 verbatim with SendMessage), `notify` (a notice for the user, pushed batched) and the delegations that could not be
-placed (`delegate-failed`), go into `~/skills/owner/<repo>/wake.json`:
+placed (`delegate-failed`), go into `~/skills/farmer/<repo>/wake.json`:
 
   {"woken_at": <iso or null>, "items": [{"seq": n, "duty", "kind", "slot", "do", "text", "evidence"?, "brief"?,
                                          "instructions": <the file to read for this kind>}, ...]}
 
-Items accumulate until the session handles them (`owner.py wake --done <seq>` drops every item up to `seq`). The
-session is woken by typing `/owner act` into its empty prompt (deliver.py) once per batch: a tick with nothing new
+Items accumulate until the session handles them (`farmer.py wake --done <seq>` drops every item up to `seq`). The
+session is woken by typing `/farmer act` into its empty prompt (deliver.py) once per batch: a tick with nothing new
 adds no turn, a refused wake (the session busy, a draft) is retried by the next tick, and a wake the
 session has not acted on within an hour is repeated.
 """
@@ -25,7 +25,7 @@ SKILL = Path(__file__).resolve().parents[1]
 KINDS = ("wake", "relay", "notify")
 SUBSKILLS = {"mtm": "merge-to-main-boss", "lead": "development-lead", "ci": "ci", "watch": "sanity-watch",
              "autoclear": "fix-autoclear"}
-ACT = "/owner act"
+ACT = "/farmer act"
 CLEAR_AT = 10  # context percent above which a wake starts with /clear: a call re-reads the whole context
 CLEARED = 60  # seconds to wait for the cleared session
 REWAKE = dt.timedelta(hours=1)  # a wake the session never acted on is repeated
@@ -48,7 +48,7 @@ def instructions(duty: str, kind: str) -> str:
 def items(out: dict) -> list[dict]:
     """The round's items for the model: wake, relay and notify actions, and delegations that failed."""
     found = [a for k in KINDS for a in out.get(k, [])]
-    found += [{"duty": "owner", "kind": "delegate-failed", "slot": d.get("slot") or "-", "do": "wake",
+    found += [{"duty": "farmer", "kind": "delegate-failed", "slot": d.get("slot") or "-", "do": "wake",
                "text": f"delegation failed: {d.get('title') or d.get('key')}", "evidence": d}
               for d in out.get("delegations", []) if d.get("state") == "error"]
     keep = ("duty", "kind", "slot", "do", "text", "evidence", "brief", "why", "key")
@@ -73,8 +73,8 @@ def write(main: str, data: dict) -> None:
     tmp.replace(f)
 
 
-def owner_pane(top: str) -> str | None:
-    """The pane of the agent whose checkout is the owner slot."""
+def farmer_pane(top: str) -> str | None:
+    """The pane of the agent whose checkout is the farmer slot."""
     code, text = deliver.cli("list", "--json")
     try:
         data = json.loads(text) if code == 0 else []
@@ -87,7 +87,7 @@ def owner_pane(top: str) -> str | None:
 
 
 def small_context(pane: str, sleep=time.sleep) -> str | None:
-    """Clear the owner session first when its context is large (all its state lives in files; Act records open
+    """Clear the farmer session first when its context is large (all its state lives in files; Act records open
     threads in the log). None when it is ready for the wake, else why not."""
     a = deliver.agent(pane) or {}
     if (a.get("context_percent") or 0) < CLEAR_AT:
@@ -104,7 +104,7 @@ def small_context(pane: str, sleep=time.sleep) -> str | None:
 
 
 def hand_over(top: str, main: str, out: dict, now: dt.datetime) -> dict:
-    """Add the round's items to wake.json and wake the owner session when it holds a batch it was not woken for.
+    """Add the round's items to wake.json and wake the farmer session when it holds a batch it was not woken for.
     Returns {"items": n new, "pending": n in the file, "woken": bool, "why": refusal}."""
     data, new = read(main), items(out)
     seq = max((i["seq"] for i in data["items"]), default=0)
@@ -116,13 +116,13 @@ def hand_over(top: str, main: str, out: dict, now: dt.datetime) -> dict:
     result = {"items": len(new), "pending": len(data["items"]), "woken": False}
     stale = data.get("woken_at") and now - dt.datetime.fromisoformat(data["woken_at"]) > REWAKE
     if data["items"] and (not data.get("woken_at") or stale):
-        pane = owner_pane(top)
-        why = (small_context(pane) or deliver.send(pane, ACT)) if pane else "no owner session"
+        pane = farmer_pane(top)
+        why = (small_context(pane) or deliver.send(pane, ACT)) if pane else "no farmer session"
         if why:
             result["why"] = why
         else:
             data["woken_at"], result["woken"] = now.isoformat(timespec="seconds"), True
-            mtm_scan.log(main, {"kind": "wake", "slot": "owner", "what": f"{ACT}: {len(data['items'])} items",
+            mtm_scan.log(main, {"kind": "wake", "slot": "farmer", "what": f"{ACT}: {len(data['items'])} items",
                                 "note": "", "by": "tick", "do": "wake"})
     write(main, data)
     return result

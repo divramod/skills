@@ -12,7 +12,7 @@ in any order; throughput beats order and retries. Check each finding is still tr
 | `work-not-queued` | Ask the session in one line what it waits for. Finished and waiting only for a non-product reason (UI tests need the Mac): okay it to land now, the tests after the landing. A product decision: notify the user |
 | `long-queue` | Try a merge train: [merge-to-main-boss › Merge trains](../subskills/merge-to-main-boss/SUBSKILL.md#merge-trains) |
 | `paused` | Lift the pause when its reason is fixed (`python3 $S/mtm_scan.py resume`), tell the waiters "go" |
-| `flaky` | Flaky or real? Load-sensitive (the [reasons](../subskills/merge-to-main-boss/reasons.md), budget/timeout wording, passes alone): disable it ([how](../subskills/merge-to-main-boss/SUBSKILL.md#disable-a-flaky-test), through a worker: `python3 $S/owner.py delegate --brief <file> --title <title>`). A real assertion failure: leave it to the slot |
+| `flaky` | Flaky or real? Load-sensitive (the [reasons](../subskills/merge-to-main-boss/reasons.md), budget/timeout wording, passes alone): disable it ([how](../subskills/merge-to-main-boss/SUBSKILL.md#disable-a-flaky-test), through a servant: `python3 $S/farmer.py delegate --brief <file> --title <title>`). A real assertion failure: leave it to the slot |
 | `orphan` | Work without a session and no HANDOFF.md. Plan steps left: `hal2-cli-git worktree run <NN> --agent claude --detach --prompt "/handoff c"`; the plan looks done: `--prompt "/mtm"`; unclear: notify the user |
 
 A slot the boss paused (a `pause` entry in `log.jsonl` with no `go` after it) waits for that go, which the tick

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The state of a repository's GitHub Actions, for the owner skill's ci duty.
+"""The state of a repository's GitHub Actions, for the farmer skill's ci duty.
 
   ci_scan.py scan [--repo <dir>] [--json] [--all]
       the latest run of every workflow (dynamic ones such as Dependabot's included) on the default branch and on each slot branch,
@@ -7,9 +7,9 @@
       a slot's branch, a run queued too long (a runner offline?) or running too long.
       Runs already handled are left out (--all: shown too). No workflows: nothing to do
   ci_scan.py record <run-id> <what> [--note <text>] [--repo <dir>]
-      mark a run handled (log: ~/skills/owner/<repo>/ci.jsonl)
+      mark a run handled (log: ~/skills/farmer/<repo>/ci.jsonl)
 
-Reads gh (gh run list, gh run view) and git; writes only ~/skills/owner/<repo>/.
+Reads gh (gh run list, gh run view) and git; writes only ~/skills/farmer/<repo>/.
 Exit 0 on success, 2 when a tool is missing.
 """
 
@@ -24,7 +24,7 @@ import sys
 import time
 from pathlib import Path
 
-DATA = Path(os.environ.get("OWNER_DIR", Path.home() / "skills/owner"))
+DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
 MINUTE = 60
 QUEUED_TOO_LONG = 20 * MINUTE
 RUNNING_TOO_LONG = 90 * MINUTE
