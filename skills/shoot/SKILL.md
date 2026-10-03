@@ -1,14 +1,14 @@
 ---
 name: shoot
-description: shoot — list the open shots of the repo's shotfiles (`shotfiles/*.md` of the main checkout, also from a worktree; the prompts written with hal2-nvim's shooter) as a table of id, shotfile, shot number and title, then shoot the ones the user picks by id (`3`, `1,2,4`, `1-4`) into this session, as `<space>00` does from Neovim — the shots are marked sent (`## x shot ...`) in their shotfiles and carried out here. `/shoot` shows the 10 most important open shots, `/shoot g` the global shotfiles' shots (ids `g1`, `g2`, ...), `/shoot -a` all of both, `/shoot <shotfile>` the open shots of one shotfile, `/shoot <ids>` shoots shots directly. Use when the user says /shoot, asks which shots are open, or wants to pick the next shot to work on. `/shoot h` shows help.
+description: shoot — list the open shots of the repo's shotfiles (`shotfiles/*.md` of the main checkout, also from a worktree; the prompts written with hal2-nvim's shooter) as a table of id, shotfile, shot number and title, then shoot the ones the user picks by id (`3`, `1,2,4`, `1-4`), as `<space>00` does from Neovim — the shots are marked sent (`## x shot ...`) in their shotfiles and carried out; in the repository's main checkout it first asks where: a new worktree session per shot (recommended), a free worktree session (running, idle, no plan, nothing unmerged) or here in main; in a worktree slot it carries them out in this session. `/shoot` shows the 10 most important open shots, `/shoot g` the global shotfiles' shots (ids `g1`, `g2`, ...), `/shoot -a` all of both, `/shoot <shotfile>` the open shots of one shotfile, `/shoot <ids>` shoots shots directly. Use when the user says /shoot, asks which shots are open, or wants to pick the next shot to work on. `/shoot h` shows help.
 ---
 
 # shoot
 
 `hal2-cli-shooter` reads and marks the shotfiles; this skill ranks the shots, shows the table, lets the user pick
-shots by id and then does them. `S=<skill-dir>/scripts`. The pick is the one question asked as plain text, not
-with the question tool: its 4 options would hide the table and most ids. Ask any other question with the
-question tool, recommended option first.
+shots by id and then does them, here or (from main) in worktree sessions. `S=<skill-dir>/scripts`. The pick and
+the [where](#where-main-checkout-only) question are asked as plain text, not with the question tool: the dialog
+would hide the table and most ids. Ask any other question by the global question rule, recommended option first.
 
 | Call | Does |
 |---|---|
@@ -16,7 +16,7 @@ question tool, recommended option first.
 | `/shoot g`, `/shoot global` | table of every open shot of the global shotfiles (ids `g1`, `g2`, ...), then ask |
 | `/shoot -a`, `/shoot --all` | table of every open shot, the repo's and the global ones, then ask |
 | `/shoot <shotfile>` | table of the open shots of `<shotfile>` (`skills` or `skills.md`; `global:<name>` for a global one), then ask |
-| `/shoot <ids>` | shoot the shots with these ids (from a table: `3`, `1,2,4`, `1-4`, `1-3,7`, `g2`, `g1-g3`) without asking |
+| `/shoot <ids>` | shoot the shots with these ids (from a table: `3`, `1,2,4`, `1-4`, `1-3,7`, `g2`, `g1-g3`) without asking which (in main still asking where) |
 | `/shoot h`, `/shoot help` | print this table and stop |
 
 ## List
@@ -69,6 +69,36 @@ for the top pick. Then end the message with the plain-text question, never the q
 and wait for the answer. The answer is a list of ids and ranges (`1,2,4`, `1-4`, `1-3,7`, spaces allowed); any
 id of the repo's or the global full list counts (`g` ids and ranges `g1-g3`), also one not shown in the table. `none` (or an empty answer): stop. An id
 that is not an open shot: say which and ask again.
+
+## Where (main checkout only)
+
+In a worktree slot (`git rev-parse --show-toplevel` is not the first path of `git worktree list`) the shots run in
+this session: go on with [Shoot](#shoot). In the repository's main checkout ask first, also for `/shoot <ids>`,
+after naming the picked shots (one line each: id, shotfile, shot, title), as one plain-text question:
+
+```
+Where should <this shot | these <n> shots> run?
+1. New worktree session (recommended): each shot in its own new session, in the first slot without a session and without work
+2. Free session <slot>[, <slot>...]: typed into a running idle session whose worktree holds no work
+3. Here, in main
+```
+
+A shot only ever goes to a worktree without work: no plan in `plans/CURRENT_PLAN`, no uncommitted changes, no
+commits not merged into main, no landing queued (behind main is fine: the shot's first step is `/mfm`). Offer 2
+only when `python3 <skill-dir>/../list-free-worktrees/scripts/free.py --repo <main>` lists free slots (it applies
+that rule);
+with more shots than free slots, say that the rest get new sessions. Read the answer leniently (`1`, `new`, `free`,
+`here`, a slot number for 2).
+
+For 1 and 2, with `I=<skill-dir>/../digest-todolist-picture/scripts/implement.py`, per shot in the order picked:
+`python3 $I send --repo <main> --shotfile <file> --number <number> [--global] [--pane <pane>]` (`--pane` with the
+next free slot's pane for 2; without it a new session starts through create-worktree-session's `create.py`, which
+skips slots holding work). It sends hal2-nvim's shot template (run `/mfm`, make the
+shot a plan, then carry it out), starts or types into the session and only then marks the shot sent with that
+slot, so skip step 1 below. Exit 2 names a missing hal2 CLI: run that skill's `install-prerequisites.sh` once and
+retry; exit 1: report that shot and go on with the next. Report one line per shot, `<file> shot <n> → <repo> wt
+<slot> (<pane>, new | existing session)`, copy `hal2-cli-agents attach <repo>/<slot>` of the first into both
+clipboards (`pbcopy`, `tmux set-buffer`), and stop: nothing is carried out here. For 3 go on with Shoot.
 
 ## Shoot
 
