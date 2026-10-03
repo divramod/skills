@@ -9,9 +9,10 @@ Lands this worktree on the default branch. `hal2-cli-git` does the git work (see
 `.adr/merge-hooks.md` in hal2): landings run one after another, so it first waits its turn in the repo's merge
 queue (FIFO, no timeout), then holds the merge lock while it merges the default branch in, runs the gates in the
 worktree (gates whose inputs passed before end `cached`), merges, bumps versions, commits and pushes (rerunning
-the gates when the default branch moved meanwhile), resets the worktree, deletes the side branches the default branch now contains and runs the deliveries (install, deploy)
-in the delivery worktree `~/.hal/git/worktree/<repo>/.deliver`. The queue is released only when all of that went
-through: a failed, killed or interrupted landing keeps **holding** it, and every other worktree waits, until this
+the gates when the default branch moved meanwhile), resets the worktree and deletes the side branches the default branch now contains. Then it releases the queue (or,
+`--keep-reserved`, keeps it reserved) and runs the deliveries (install, deploy) outside the queue in the delivery
+worktree `~/.hal/git/worktree/<repo>/.deliver`, one delivery at a time (hal2 plan 0124). A landing that fails, is killed
+or interrupted before the release keeps **holding** the queue, and every other worktree waits, until this
 worktree's next merge-to-main takes the hold over and lands (or the human stops or releases it). This skill
 reserves the worktree's turn in the queue first (`worktree reserve`), then commits and pushes the work and merges
 the default branch in while nothing else can land, so conflicts are fixed once, and lands with
@@ -126,7 +127,7 @@ The default branch cannot move now, so what you merge in here is what the landin
    5). It takes this worktree's reservation over at once (`took over
    the merge queue this worktree reserved`); without one (an old hal2-cli-git) it waits as long as other landings
    are ahead of it in the merge queue (`hal2-cli-git worktree queue` lists the holder, active or held and why, and the waiters;
-   hal2-macos shows every repo's queue), then for its deliveries; never kill a waiting landing for taking long.
+   hal2-macos shows every repo's queue), then for its deliveries (the queue is already released or reserved then); never kill a waiting landing for taking long.
    While it waits the user may reorder the queue in hal2-macos: a line `moved to #n in the merge queue by <who>`
    is reported, not acted on. Run it like the reserve: in the background with your shell tool's maximum timeout
    (Claude Code: `timeout` 7200000) and wait for it; its gates may take long, and there is no limit on that. When
@@ -142,7 +143,7 @@ The default branch cannot move now, so what you merge in here is what the landin
 |---|---|---|
 | 0 | `ok` | landed, the queue stays reserved for this worktree (`reserved: true`): go straight to [finish the plan](#5-finish-the-plan-and-land-it). Allowed failures (`allowed_failure: true` in `tasks`, listed in `warnings`) landed: report them as warnings; never fix-and-rerun for them, never ask to release the queue for them |
 | 3 | `conflict` | rare after step 3 (a push to the default branch from outside the queue); merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
-| 4 | `task_failed`, `hook_failed`, `delivery_failed` | the queue stays held by this worktree (`held` in the JSON; say so when you report progress). Fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. After `task_failed` and `hook_failed` the default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the verb: the task is the script `hal2-cli-hooks list` shows for that row and verb, its own `<row>/.hal/hooks/<verb>.sh` or an inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`; `hal2-cli-hooks run <row> <verb>` reruns it alone; tasks it cancelled or skipped need no fix of their own), `hook_failed` the `script`, `delivery_failed` the `failures` (the landing is on the default branch and pushed; fix the install/deploy in this worktree, commit, and the rerun delivers again) |
+| 4 | `task_failed`, `hook_failed`, `delivery_failed` | the queue stays held by this worktree (`held` in the JSON; say so when you report progress). Fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. After `task_failed` and `hook_failed` the default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the verb: the task is the script `hal2-cli-hooks list` shows for that row and verb, its own `<row>/.hal/hooks/<verb>.sh` or an inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`; `hal2-cli-hooks run <row> <verb>` reruns it alone; tasks it cancelled or skipped need no fix of their own), `hook_failed` the `script`, `delivery_failed` the `failures` (the landing is on the default branch and pushed; with `released: true` the queue is not held for it (only the deliveries failed): an environmental failure is retried with `hal2-cli-git worktree deliver`, a code fix goes through a new commit and its own landing, which delivers again; with `released: false` the main checkout's setup failed and the queue stays held: fix, commit, and the rerun delivers again) |
 | 5 | `stopped`, `cancelled`, `interrupted` | the user ended the landing: stopped (Stop button, `worktree stop`, SIGTERM), cancelled while waiting (`by` says who and where, e.g. `the user in hal2-macos`), or interrupted (its shell went away). The default branch is unchanged. Report it and stop: never rerun on your own |
 | 1 | `error` | uncommitted changes: back to [step 2](#2-commit-and-push-everything). Anything else (main checkout dirty or not on the default branch, default branch diverged from origin): the queue may be held (`held`); never touch the main checkout yourself, ask the user as below |
 

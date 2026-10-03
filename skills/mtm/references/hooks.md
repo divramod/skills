@@ -73,11 +73,13 @@ never bumps or redelivers. A repo adds verbs (or overrides a built-in's `needs`/
 
 - A landing takes a ticket in the repo's **merge queue** at its start (`~/.hal/git/worktree/<repo>/.merge-queue/`,
   first come first served, no timeout; `hal2-cli-git worktree queue`) and waits for the merge lock; under it:
-  merge the default branch in, setup and gates in the worktree, merge, version, commit, push, then the
-  deliveries in the **delivery worktree** `<base>/.deliver` (detached, warm build caches, its own lock) on the
-  newest default branch commit; builds there are named as main's (`HAL2_BUILD_AS_MAIN=1`). Only then is the
-  queue released. `hal2-cli-git worktree deliver` runs the deliveries alone.
-- A failed (exit 3/4/1) or killed landing **holds** the queue (`held`: reason, step, `attempts` of identical
+  merge the default branch in, setup and gates in the worktree, merge, version, commit, push, the main checkout's
+  setup, the worktree reset; then the queue is **released** (step `release-queue`; `--keep-reserved` reserves it)
+  and the deliveries run outside it in the **delivery worktree** `<base>/.deliver` (detached, warm build caches,
+  its own lock: one delivery at a time) on the newest default branch commit; a newer main already delivered is
+  skipped; builds there are named as main's (`HAL2_BUILD_AS_MAIN=1`). `hal2-cli-git worktree deliver` runs the
+  deliveries alone (always).
+- A failed (exit 3/4/1) or killed landing **holds** the queue (a failed delivery does not: it comes after the release) (`held`: reason, step, `attempts` of identical
   failures against `[landing] attempts`, default 10); the same worktree's next merge-to-main takes it over at its
   place. `worktree stop` (or the app's Stop) ends a landing and releases the queue, `worktree release` frees a
   held one; the app also reorders and cancels waiting tickets (the waiter prints `moved to #n ...`, a cancel ends
@@ -94,7 +96,8 @@ never bumps or redelivers. A repo adds verbs (or overrides a built-in's `needs`/
   `kind` (the verb), `exit_code`, `output`): the phase's running tasks end `cancelled`, the unstarted ones
   `skipped`; main stays untouched, a failed version task aborts the merge. A failing install or deploy skips the
   tasks that need it, the other deliveries still run; the landing stays on the default branch but ends
-  `delivery_failed` (exit 4) holding the queue, and its rerun delivers again.
+  `delivery_failed` (exit 4, `released: true`) with the queue free; `worktree deliver` or the fix's landing delivers
+  again (a failed main-checkout setup, `released: false`, holds the queue and its rerun delivers again).
 - A setup or gate phase in a worktree that changes `git status` fails every task that passed in it
   (`left_changes`): gates must not write tracked or unignored files (gitignore build output).
 - **Gate result cache**: a gate that counts as changed but passed before with identical inputs (script,
@@ -210,7 +213,7 @@ Scenarios worth one landing each: a change to one app only (only its tasks run),
 dependent row's tasks run, version bump, delivery), a test-only change (gates run, no bump, no delivery; one new
 test per app also proves each gate runs that app's tests), a failing gate (exit 4, main unchanged; the phase's
 other running tasks `cancelled`, the rest `skipped`), a failing
-version task (merge aborted, main clean) and a failing install (landed, pushed, `delivery_failed` holding the queue; a throwaway row does
+version task (merge aborted, main clean) and a failing install (landed, pushed, `delivery_failed` with the queue released; a throwaway row does
 both; its deploy ends `skipped`), rows with `needs` (a lib's failing build skips the apps that need it) and two
 tasks sharing a `lock` (they never overlap in the prefixed output). Also `/mfm` after a lockfile change (setup reruns) and the first landing after seeding stamps (unchanged
 rows deliver nothing). Deliveries from the sandbox are real (installs, restarts): ask first, or point the tasks at
