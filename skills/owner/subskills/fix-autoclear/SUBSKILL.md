@@ -1,8 +1,8 @@
 # owner › fix-autoclear
 
 hal2's autoclear (the context guard, the clear-and-continue job and the sweep) as one of the owner's duties. It
-catches failures nobody reported, gets the stuck session going again and has the cause fixed. The owner runs it every
-round, or alone with `/owner autoclear`. It applies only in a repository where hal2's agents run. Without
+catches failures nobody reported, gets the stuck session going again and has the cause fixed. The owner runs it on its cron when
+OWNER-ROLE.md opts in to `autoclear`, or now with `/owner autoclear`. It applies only in a repository where hal2's agents run. Without
 `hal2-cli-agents` the duty does nothing.
 
 - `E="python3 <skills>/fix-autoclear/scripts/evidence.py"`, where `<skills>` is this skill's skills folder.

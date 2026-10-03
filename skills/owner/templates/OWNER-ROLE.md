@@ -1,14 +1,15 @@
 ---
-# The owner skill's settings for this repository (the user's word; only the user changes this file).
-duties: [mtm, lead, ci, watch, autoclear]   # drop what this repository does not need
-rhythm:                                     # each duty's own rhythm: round | 15m | 1h | daily HH:MM
-  mtm: 15m
-  lead: 15m
-  ci: 30m
-  watch: 15m
-  autoclear: 1h
-worker_limit: 5
-notify: every-round                         # every-round | hourly | daily | never
+# The owner skill's settings for this repository: the user's word, and only the user changes it.
+# Nothing is implicit. Only the duties listed here run, each on its own cron
+# (5-field cron: minute hour day-of-month month day-of-week, local time).
+duties:
+  mtm: "*/15 * * * *"         # merge-to-main-boss: finished work onto main
+  lead: "*/15 * * * *"        # development-lead: unstick sessions
+  ci: "*/30 * * * *"          # GitHub Actions green
+  watch: "*/15 * * * *"       # sanity-watch: resume abnormal stops
+  autoclear: "0 * * * *"      # fix-autoclear: autoclear failures
+worker_limit: 5               # owner-started workers at once (required)
+notify: every-round           # every-round | hourly | daily | never (required)
 ---
 
 # <repo>'s owner role
@@ -18,7 +19,6 @@ The owner gets <repo> running and keeps it running, autonomously wherever possib
 ## Priorities
 
 1. <what must never be down or red>
-2. Finished work lands.
 
 ## Rules
 
@@ -28,7 +28,7 @@ The owner gets <repo> running and keeps it running, autonomously wherever possib
 
 ### <task name>
 
-- **Every**: 15m | 1h | daily 09:07 | round   (its own rhythm; 15m for important ones)
+- **Cron**: `*/15 * * * *`
 - **Check**: <what to look at, a command>
-- **Act**: <what the owner does: delegate a fix, notify, or a right this task grants (e.g. a redeploy)>
+- **Act**: <what the owner does: delegate a fix, notify, or a right this task grants, such as a redeploy>
 - **Done when**: <the check that says it is fine>

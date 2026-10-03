@@ -1,8 +1,8 @@
 # owner › ci
 
 Keeps the repository's GitHub Actions green. It applies only when the repository has workflow runs, including
-dynamic ones such as Dependabot's. Without runs, this duty does nothing. The [owner](../../SKILL.md) runs it every
-round, or alone with `/owner ci`.
+dynamic ones such as Dependabot's. Without runs, this duty does nothing. The [owner](../../SKILL.md) runs it on its cron when
+OWNER-ROLE.md opts in to `ci`, or now with `/owner ci`.
 
 - `C="python3 <owner skill dir>/scripts/ci_scan.py"`.
 - Handled runs are logged in `~/skills/owner/<repo>/ci.jsonl`.

@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""What the owner runs this round: every duty and OWNER-ROLE.md task that is due by its rhythm.
+"""What the owner runs this round: the duties and tasks OWNER-ROLE.md opts in to, due by their cron.
 
   due.py due [--repo <dir>] [--json]
-      the due duties and tasks (each with its rhythm and when it last ran) and the loop's
-      tick: the shortest rhythm, at least 5 minutes
+      the due duties and tasks (each with its cron and last run) and the owner loop's cron
   due.py ran <name> [--repo <dir>]
-      record that a duty or task ran now (runs.jsonl)
-  due.py rhythms [--repo <dir>] [--json]
-      every duty and task with its rhythm and last run
+      record that a duty (`duty:<name>`) or task (`task:<name>`) ran now (runs.jsonl)
+  due.py check [--repo <dir>] [--json]
+      validate OWNER-ROLE.md: every duty and task with a valid cron, the required settings
+  due.py list [--repo <dir>] [--json]
+      every opted-in duty and task with its cron, last run and whether it is due
 
-A rhythm is `round` (every round), `<n>m`, `<n>h`, `hourly`, `daily HH:MM` (also `day, HH:MM`).
-Duties take theirs from OWNER-ROLE.md's front matter `rhythm:` (default: every duty `15m`, ci
-`30m`, autoclear `1h`), and tasks from their `- **Every**:` line. Reads <repo>/OWNER-ROLE.md (of the
-current checkout); writes only ~/skills/owner/<repo>/runs.jsonl.
+Nothing is implicit: only the duties under the front matter's `duties:` (name → cron) and the
+tasks under `## Tasks` (each `### <name>` with its `- **Cron**: <cron>` line) run, and the
+settings `worker_limit` and `notify` are required. No OWNER-ROLE.md: nothing runs (exit 3).
+A cron is standard 5-field notation in local time: minute hour day-of-month month day-of-week
+(`*/15 * * * *`, `0 * * * *`, `7 9 * * *`, `0 8 * * 1-5`). An item is due when one of its fire
+times passed since it last ran. Writes only ~/skills/owner/<repo>/runs.jsonl.
+Exit 0 ok, 1 invalid OWNER-ROLE.md, 3 no OWNER-ROLE.md.
 """
 
 import argparse
@@ -26,38 +30,75 @@ from pathlib import Path
 
 DATA = Path(os.environ.get("OWNER_DIR", Path.home() / "skills/owner"))
 DUTIES = ("mtm", "lead", "ci", "watch", "autoclear")
-DEFAULT_RHYTHM = {"mtm": "15m", "lead": "15m", "ci": "30m", "watch": "15m", "autoclear": "1h"}
+NOTIFY = ("every-round", "hourly", "daily", "never")
 MIN_TICK = 5
+LOOKBACK = dt.timedelta(days=8)
+RANGES = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))
 
 
-def parse_rhythm(text: str) -> tuple[str, int | tuple[int, int]]:
-    """('round', 0) | ('every', minutes) | ('daily', (hour, minute)); ValueError for anything else."""
-    t = text.strip().lower()
-    if t in ("round", "every round"):
-        return "round", 0
-    if t in ("hourly", "hour", "1 hour"):
-        return "every", 60
-    m = re.fullmatch(r"(\d+)\s*(m|min|minutes?|h|hours?)", t)
-    if m:
-        n = int(m.group(1))
-        return "every", n * 60 if m.group(2).startswith("h") else n
-    m = re.fullmatch(r"(?:daily|day,?|once a day,?)\s*(?:at\s*)?(\d{1,2}):(\d\d)", t)
-    if m:
-        return "daily", (int(m.group(1)), int(m.group(2)))
-    if t in ("daily", "day", "once a day"):
-        return "daily", (9, 7)
-    raise ValueError(f"unknown rhythm {text!r}: use round, 15m, 1h, hourly or daily HH:MM")
+def parse_field(text: str, lo: int, hi: int) -> set[int]:
+    out: set[int] = set()
+    for part in text.split(","):
+        m = re.fullmatch(r"(\*|\d+(?:-\d+)?)(?:/(\d+))?", part)
+        if not m:
+            raise ValueError(f"bad cron field {text!r}")
+        rng, step = m.group(1), int(m.group(2) or 1)
+        if rng == "*":
+            a, b = lo, hi
+        elif "-" in rng:
+            a, b = map(int, rng.split("-"))
+        else:
+            a = b = int(rng)
+            if m.group(2):
+                b = hi
+        if not (lo <= a <= hi and lo <= b <= hi and a <= b and step > 0):
+            raise ValueError(f"cron field {text!r} out of range {lo}-{hi}")
+        out.update(range(a, b + 1, step))
+    return out
 
 
-def is_due(rhythm: str, last: dt.datetime | None, now: dt.datetime) -> bool:
-    kind, value = parse_rhythm(rhythm)
-    if kind == "round":
-        return True
-    if isinstance(value, int):
-        return last is None or now - last >= dt.timedelta(minutes=value) - dt.timedelta(seconds=90)
-    hour, minute = value
-    slot = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    return now >= slot and (last is None or last < slot)
+def parse_cron(text: str) -> tuple:
+    fields = text.strip().strip("`").split()
+    if len(fields) != 5:
+        raise ValueError(f"cron {text!r} needs 5 fields: minute hour day-of-month month day-of-week")
+    minute, hour, dom, month, dow = (parse_field(f, lo, hi) for f, (lo, hi) in zip(fields, RANGES))
+    if 7 in dow:
+        dow = (dow - {7}) | {0}
+    return minute, hour, dom, month, dow, (fields[2] != "*", fields[4] != "*")
+
+
+def fires_at(cron: tuple, t: dt.datetime) -> bool:
+    minute, hour, dom, month, dow, (dom_set, dow_set) = cron
+    if t.minute not in minute or t.hour not in hour or t.month not in month:
+        return False
+    on_dom, on_dow = t.day in dom, (t.weekday() + 1) % 7 in dow
+    return (on_dom or on_dow) if dom_set and dow_set else (on_dom and on_dow)
+
+
+def last_fire(cron_text: str, now: dt.datetime) -> dt.datetime | None:
+    """The most recent fire time at or before `now` (within LOOKBACK)."""
+    cron = parse_cron(cron_text)
+    t = now.replace(second=0, microsecond=0)
+    end = t - LOOKBACK
+    while t > end:
+        if fires_at(cron, t):
+            return t
+        t -= dt.timedelta(minutes=1)
+    return None
+
+
+def interval_minutes(cron_text: str) -> int:
+    """The shortest gap between two fire times over the next day (a weekly one: a day)."""
+    cron, t = parse_cron(cron_text), dt.datetime(2026, 1, 5)
+    fires = [t + dt.timedelta(minutes=i) for i in range(24 * 60) if fires_at(cron, t + dt.timedelta(minutes=i))]
+    if len(fires) < 2:
+        return 24 * 60
+    return min(int((b - a).total_seconds() // 60) for a, b in zip(fires, fires[1:]))
+
+
+def is_due(cron_text: str, last: dt.datetime | None, now: dt.datetime) -> bool:
+    fire = last_fire(cron_text, now)
+    return fire is not None and (last is None or last < fire)
 
 
 def front_matter(text: str) -> dict:
@@ -67,25 +108,26 @@ def front_matter(text: str) -> dict:
     try:
         import yaml
         return yaml.safe_load(m.group(1)) or {}
-    except ImportError:  # a flat `key: value` and one level of `rhythm:` mapping
+    except ImportError:  # flat `key: value` plus one level of mapping
         out, current = {}, None
         for line in m.group(1).splitlines():
-            line = line.split(" #")[0].rstrip()
+            line = re.sub(r"\s+#.*$", "", line).rstrip()
             if not line.strip() or line.lstrip().startswith("#"):
                 continue
             key, _, value = line.strip().partition(":")
+            value = value.strip().strip("\"'")
             if line.startswith((" ", "\t")) and current is not None:
-                out[current][key] = value.strip()
-            elif value.strip():
-                out[key] = value.strip()
+                out[current][key] = value
+            elif value:
+                out[key] = value
             else:
                 current = key
                 out[key] = {}
         return out
 
 
-def tasks(text: str) -> dict[str, str]:
-    """`### <name>` under `## Tasks`, each with its `**Every**` line (default: hourly)."""
+def tasks(text: str) -> dict[str, str | None]:
+    """`### <name>` under `## Tasks` → its `**Cron**` (None when the line is missing)."""
     body = text.split("\n## Tasks", 1)
     if len(body) < 2:
         return {}
@@ -93,36 +135,57 @@ def tasks(text: str) -> dict[str, str]:
     out = {}
     for block in re.split(r"\n### ", "\n" + section)[1:]:
         name = block.splitlines()[0].strip()
-        every = re.search(r"\*\*Every\*\*:\s*(.+)", block)
-        out[name] = (every.group(1).strip().rstrip(".") if every else "hourly")
+        cron = re.search(r"\*\*Cron\*\*:\s*`?([^`\n]+?)`?\s*$", block, re.M)
+        out[name] = cron.group(1).strip() if cron else None
     return out
 
 
-def schedule(role_text: str) -> dict[str, str]:
-    """name → rhythm for the enabled duties (`duty:<name>`) and the tasks (`task:<name>`)."""
-    fm = front_matter(role_text)
-    duties = fm.get("duties") or list(DUTIES)
-    if isinstance(duties, str):
-        duties = [d.strip() for d in duties.strip("[]").split(",") if d.strip()]
-    rhythms = {**DEFAULT_RHYTHM, **(fm.get("rhythm") or {})}
-    out = {f"duty:{d}": str(rhythms.get(d, "15m")) for d in duties}
-    out.update({f"task:{name}": every for name, every in tasks(role_text).items()})
-    return out
+def schedule(role_text: str) -> tuple[dict[str, str], dict, list[str]]:
+    """(name → cron of every opted-in duty and task, settings, problems)."""
+    fm, problems = front_matter(role_text), []
+    duties = fm.get("duties") or {}
+    if not isinstance(duties, dict):
+        problems.append("`duties:` must map each duty to its cron, e.g. `mtm: \"*/15 * * * *\"`")
+        duties = {}
+    items = {}
+    for name, cron in duties.items():
+        if name not in DUTIES:
+            problems.append(f"unknown duty {name!r} (known: {', '.join(DUTIES)})")
+        items[f"duty:{name}"] = str(cron)
+    for name, cron in tasks(role_text).items():
+        if cron is None:
+            problems.append(f"task {name!r} has no `- **Cron**:` line")
+        else:
+            items[f"task:{name}"] = cron
+    for name, cron in items.items():
+        try:
+            parse_cron(cron)
+        except ValueError as e:
+            problems.append(f"{name}: {e}")
+    settings = {k: fm.get(k) for k in ("worker_limit", "notify")}
+    if not isinstance(settings["worker_limit"], int) and not str(settings["worker_limit"]).isdigit():
+        problems.append("`worker_limit:` (a number) is required")
+    if settings["notify"] not in NOTIFY:
+        problems.append(f"`notify:` is required: one of {', '.join(NOTIFY)}")
+    return items, settings, problems
 
 
-def tick(rhythms: dict[str, str]) -> int:
-    minutes = [v for kind, v in (parse_rhythm(r) for r in rhythms.values()) if kind == "every" and isinstance(v, int)]
-    return max(MIN_TICK, min(minutes or [15]))
+def loop_cron(items: dict[str, str]) -> str:
+    """The owner loop's cron: every <shortest interval> minutes (at least 5), off the :00 mark."""
+    minutes = max(MIN_TICK, min([interval_minutes(c) for c in items.values()] or [15]))
+    if minutes >= 60:
+        return "4 * * * *"
+    if 60 % minutes:
+        minutes = next(m for m in (5, 6, 10, 12, 15, 20, 30) if m >= minutes)
+    return f"{minutes // 2 or 1}-59/{minutes} * * * *"
 
 
-def toplevel(repo: str) -> Path:
-    out = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=repo, capture_output=True, text=True).stdout
-    return Path(out.strip() or repo)
+def git_out(args: list[str], repo: str) -> str:
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True).stdout.strip()
 
 
 def repo_name(repo: str) -> str:
-    common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=repo,
-                            capture_output=True, text=True).stdout.strip()
+    common = git_out(["rev-parse", "--path-format=absolute", "--git-common-dir"], repo)
     return Path(common).parent.name if common else Path(repo).name
 
 
@@ -138,7 +201,7 @@ def last_runs(repo: str) -> dict[str, dt.datetime]:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name in ("due", "rhythms"):
+    for name in ("due", "check", "list"):
         x = sub.add_parser(name)
         x.add_argument("--repo", default=os.getcwd())
         x.add_argument("--json", action="store_true")
@@ -153,26 +216,29 @@ def main(argv: list[str]) -> int:
         with (d / "runs.jsonl").open("a") as f:
             f.write(json.dumps({"at": dt.datetime.now().isoformat(timespec="seconds"), "name": args.name}) + "\n")
         return 0
-    role = toplevel(args.repo) / "OWNER-ROLE.md"
-    try:
-        rhythms = schedule(role.read_text() if role.exists() else "")
-        for r in rhythms.values():
-            parse_rhythm(r)
-    except ValueError as e:
-        print(f"due.py: OWNER-ROLE.md: {e}", file=sys.stderr)
+    role = Path(git_out(["rev-parse", "--show-toplevel"], args.repo) or args.repo) / "OWNER-ROLE.md"
+    if not role.exists():
+        print(f"due.py: no {role}: nothing is opted in, the owner does nothing (template: templates/OWNER-ROLE.md)",
+              file=sys.stderr)
+        return 3
+    items, settings, problems = schedule(role.read_text())
+    if problems:
+        print(json.dumps({"ok": False, "problems": problems}, indent=1) if args.json else
+              "OWNER-ROLE.md problems:\n" + "\n".join(f"- {x}" for x in problems), file=None if args.json else sys.stderr)
         return 1
     now, last = dt.datetime.now(), last_runs(args.repo)
-    rows = [{"name": n, "rhythm": r, "last": last[n].isoformat() if n in last else None,
-             "due": is_due(r, last.get(n), now)} for n, r in rhythms.items()]
+    rows = [{"name": n, "cron": c, "last": last[n].isoformat() if n in last else None,
+             "due": is_due(c, last.get(n), now)} for n, c in items.items()]
     if args.cmd == "due":
         rows = [x for x in rows if x["due"]]
-    result = {"role_file": role.exists(), "tick_minutes": tick(rhythms), "items": rows}
+    result = {"ok": True, "loop_cron": loop_cron(items), "settings": settings,
+              "items": [] if args.cmd == "check" else rows}
     if args.json:
         print(json.dumps(result, indent=1))
     else:
-        print(f"tick {result['tick_minutes']} min" + ("" if role.exists() else " (no OWNER-ROLE.md: defaults)"))
-        for x in rows:
-            print(f"- {x['name']:40} {x['rhythm']:14} last {x['last'] or 'never'}" + ("  DUE" if x["due"] else ""))
+        print(f"OWNER-ROLE.md ok; owner loop cron `{result['loop_cron']}`; {settings}")
+        for x in result["items"]:
+            print(f"- {x['name']:40} {x['cron']:16} last {x['last'] or 'never'}" + ("  DUE" if x["due"] else ""))
     return 0
 
 

@@ -2,7 +2,7 @@
 
 The [sanity-watch](../../../sanity-watch/SKILL.md) skill as one of the owner's duties. It resumes sessions that stopped
 abnormally (API errors, network, sleep, limits, hangs, lost processes) and gets recurring causes fixed. The owner
-runs it every round, or alone with `/owner watch`. It replaces sanity-watch's own 30-minute loop: never run both.
+runs it on its cron when OWNER-ROLE.md opts in to `watch`, or now with `/owner watch`. It replaces sanity-watch's own 30-minute loop: never run both.
 
 1. Follow sanity-watch's SKILL.md sections 1–4 (scan, act on each incident, learn, spawn the fix agent) with its own
    scripts, state (`~/skills/sanity-watch/`) and case library. Its rules hold, including "never touch a landing"

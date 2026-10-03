@@ -2,7 +2,7 @@
 
 The development lead looks after every agent session of the repository, the way a lead looks after a team. Its
 goal is that no session is stuck: questions get answered, blocks get removed, and work gets reviewed before it
-waits for the queue. The [owner](../../SKILL.md) runs it every round, or alone with `/owner lead`.
+waits for the queue. The [owner](../../SKILL.md) runs it on its cron when OWNER-ROLE.md opts in to `lead`, or now with `/owner lead`.
 
 - `L="python3 <owner skill dir>/scripts/lead_scan.py"`.
 - Its log is `~/skills/owner/<repo>/lead.jsonl`.

@@ -18,7 +18,7 @@ Setup:
   folder ignores itself.
 - Why landings fail: [reasons.md](reasons.md), next to this file.
 
-The [owner](../../SKILL.md) runs this duty every round (its loop, `/owner mtm` for this duty alone), from its own
+The [owner](../../SKILL.md) runs this duty on its cron when OWNER-ROLE.md opts in to `mtm` (`/owner mtm` runs it now), from its own
 worktree slot. `/owner first <slot>... [why]` sets the user's priority (`$B priority`).
 
 **The owner never changes files.** Everything this duty fixes, it fixes by telling the session concerned or by

@@ -1,6 +1,6 @@
 ---
 name: owner
-description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. The user's stand-in over every agent session of a repository, from a dedicated Claude session in its own worktree slot `owner` that wakes at the shortest rhythm of its duties and tasks (default 15 minutes, each with its own rhythm), runs what is due (each duty a subskill, plus the repo's own tasks from OWNER-ROLE.md) and keeps a log of everything it does. It never changes anything in its own branch. Fixes go to worker sessions it starts itself (create-worktree-session, list-free-worktrees, delete-worktree-session), each writing a plan with the plan skill, autogrilling it and running it to its landing, without asking the user. The duties: merge-to-main-boss gets every worktree's finished work onto main fast (wakes failed landings, tells sessions to land now, disables load-flaky tests, pauses heavy work or the queue, forms merge trains). development-lead helps stuck sessions (answers what the repo's decisions answer, reviews, batches product questions for the user). ci watches GitHub Actions and starts fixes for red or stuck workflows. sanity-watch resumes abnormally stopped sessions. fix-autoclear catches autoclear failures. It talks to the sessions over Claude Code's cross-session socket (ListAgents + SendMessage), and each round writes a gitignored summary to plans/owner/. Use when the user says /owner, "owner", "merge boss", "development lead", "watch CI", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/owner start` starts the loop, `/owner h` shows help.
+description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. The user's stand-in over every agent session of a repository, from a dedicated Claude session in its own worktree slot `owner` that runs only what the repo's OWNER-ROLE.md opts in to, each duty (a subskill) and repo task on its own cron and keeps a log of everything it does. It never changes anything in its own branch. Fixes go to worker sessions it starts itself (create-worktree-session, list-free-worktrees, delete-worktree-session), each writing a plan with the plan skill, autogrilling it and running it to its landing, without asking the user. The duties: merge-to-main-boss gets every worktree's finished work onto main fast (wakes failed landings, tells sessions to land now, disables load-flaky tests, pauses heavy work or the queue, forms merge trains). development-lead helps stuck sessions (answers what the repo's decisions answer, reviews, batches product questions for the user). ci watches GitHub Actions and starts fixes for red or stuck workflows. sanity-watch resumes abnormally stopped sessions. fix-autoclear catches autoclear failures. It talks to the sessions over Claude Code's cross-session socket (ListAgents + SendMessage), and each round writes a gitignored summary to plans/owner/. Use when the user says /owner, "owner", "merge boss", "development lead", "watch CI", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/owner start` starts the loop, `/owner h` shows help.
 ---
 
 # owner
@@ -25,7 +25,9 @@ the numbered slots are the user's workers.
 a fix, a disabled test or a rule, is made by a worker session it starts with a plan ([Delegate](#delegate-a-fix)), or
 by the session whose work it concerns. Its slot stays exactly origin/main, merged from main every round.
 
-It wakes every 15 minutes and runs its **duties**, one subskill each, in this order:
+**Nothing is implicit.** The owner runs only what the repository's [OWNER-ROLE.md](#owner-rolemd) opts in to:
+the duties it lists and the tasks it defines, each on its own cron. Without the file it runs nothing. The skill
+offers these **duties**, one subskill each, in this order:
 
 | Duty | Subskill | Goal |
 |---|---|---|
@@ -54,9 +56,10 @@ share the round, the state folder, the log, the delegation rules and the summary
 | Call | Does |
 |---|---|
 | `/owner` | one round now, every duty |
-| `/owner start [<minutes>]` | [start the loop](#the-loop) (default every 15 minutes), then one round |
+| `/owner start` | [start the loop](#the-loop) on the cron `due.py` derives from OWNER-ROLE.md, then one round |
 | `/owner stop` | delete this session's owner cron job; a queue pause the boss set is lifted |
-| `/owner mtm`, `/owner lead`, `/owner ci`, `/owner watch`, `/owner autoclear` | one round of that duty only |
+| `/owner mtm`, `/owner lead`, `/owner ci`, `/owner watch`, `/owner autoclear` | one round of that duty now, when OWNER-ROLE.md opts in to it |
+| `/owner check` | `python3 $S/due.py list`: OWNER-ROLE.md valid? Every opted-in duty and task with its cron, last run, due |
 | `/owner first <slot>... [why]` | the user's priority: these slots land first (`python3 $S/mtm_scan.py priority ...`; `first clear` ends it) |
 | `/owner log [<hours>]` | the owner's log of the last hours (default 24): `python3 $S/mtm_scan.py status` and `log.jsonl` |
 | `/owner status` | the log's last 6 h, the running delegations, `cat <main>/plans/owner/latest.md` |
@@ -67,22 +70,26 @@ share the round, the state folder, the log, the delegation rules and the summary
 Each repository's own owner settings and tasks live in `OWNER-ROLE.md` in its root (committed;
 [template](templates/OWNER-ROLE.md)). The owner reads it at the start of every round.
 
-- **Front matter: settings.** `duties` (which subskills run), `rhythm` (each duty's own rhythm), `worker_limit`,
-  `notify` (`every-round` | `hourly` | `daily` | `never`). Anything missing takes the skill's default: all duties;
-  mtm, lead and watch every `15m`, ci `30m`, autoclear `1h`; 5 workers; `every-round`.
-- **Rhythms.** Every duty and every task has its own rhythm: `round`, `<n>m` (`15m` for important ones), `<n>h` or
-  `hourly`, or `daily HH:MM`. `python3 $S/due.py due` lists what is due now. The loop's tick is the shortest rhythm
-  (at least 5 minutes), so a `5m` task makes the owner wake every 5 minutes.
+- **Front matter: settings, all required.**
+  - `duties`: maps each duty it opts in to to its cron (`mtm: "*/15 * * * *"`). A duty left out does not run.
+  - `worker_limit`: how many owner-started workers may run at once.
+  - `notify`: one of `every-round`, `hourly`, `daily`, `never`.
+
+  `python3 $S/due.py check` names anything missing or invalid. Then the owner runs nothing and tells the user.
+- **Cron.** Every duty and every task has its own cron in standard 5-field notation, local time (minute, hour,
+  day of month, month, day of week): `*/15 * * * *` for important things, `0 * * * *` hourly, `7 9 * * *` daily,
+  `0 8 * * 1-5` on weekdays. `python3 $S/due.py due` lists what is due: an item whose fire time passed since it
+  last ran. The owner's own loop runs at the shortest interval among them (at least 5 minutes; `due.py`'s
+  `loop_cron`).
 - **Prose:** the repository's priorities and rules for the owner.
-- **`## Tasks`**: one `### <name>` per task, each with **Every** (`round`, `hour`, `day, HH:MM`), **Check**, **Act**
-  and **Done when**; **Every** is the task's rhythm (default `hourly`). Tasks run after the generic duties.
+- **`## Tasks`**: one `### <name>` per task, each with **Cron** (required), **Check**, **Act** and **Done when**.
+  Tasks run after the duties.
 - **It is the user's word.** A task may widen the owner's authority for that task only, for example a production
   redeploy, or narrow it. The owner logs every use of a widened right.
 - **Only the user changes it.** The owner writes what it learned and the rules it wants as **proposals** in its
   round summary. A worker applies one only after the user says yes.
-- **Missing:** the owner runs its defaults and, once, delegates a worker to draft one from the template, filled with
-  what the owner has seen in the repository. That worker's plan is `Landing: manual`, and the owner asks the user to
-  approve the draft.
+- **Missing or invalid:** the owner runs nothing: no duty, no task, no loop. It tells the user what is missing,
+  offers the [template](templates/OWNER-ROLE.md), and ends. It never writes or drafts the file unasked.
 
 ## Authority
 
@@ -129,7 +136,7 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 
 1. **Already in hand?** Read the log's `delegate` entries and the slots' `plans/CURRENT_PLAN`. If a worker already
    has it, or the session whose work it concerns can do it in its own plan, send that session a message instead.
-2. **Limit.** At most `worker_limit` owner-started workers at a time (default 5). These are the log's `delegate` entries whose slot still has
+2. **Limit.** At most `worker_limit` owner-started workers at a time. These are the log's `delegate` entries whose slot still has
    their plan in `CURRENT_PLAN`. When the limit is reached, the brief waits in `briefs/` for the next round.
 3. **Brief.** Write `~/skills/owner/<repo>/briefs/<date>-<slug>.md`. It holds:
    - what is wrong, with the evidence quoted as data;
@@ -168,10 +175,11 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
    in `pending/` (`git format-patch origin/<default>..HEAD -o ~/skills/owner/<repo>/pending/`), reset with
    `git reset --hard origin/<default>`, log it, and delegate the patches.
 3. `bash $S/check-prerequisites.sh`. On exit 1, run `bash $S/install-prerequisites.sh` once.
+   Then `python3 $S/due.py check --json`. Exit 3 (no OWNER-ROLE.md) or 1 (invalid): tell the user what is missing,
+   point to the template, and stop. **No loop starts.**
 4. Check with `CronList` that this session has no owner job yet. Then call `CronCreate` with:
-   - `cron`: every `tick_minutes` from `python3 $S/due.py due --json` (default 15: `4,19,34,49 * * * *`, off the
-     :00 and :30 marks; spread other ticks the same way, e.g. 5 → `2-57/5 * * * *`). `/owner start <minutes>`
-     overrides it. When `OWNER-ROLE.md`'s rhythms change the tick, recreate the job;
+   - `cron`: `loop_cron` from `python3 $S/due.py check --json` (for example `7-59/15 * * * *`). When a round finds
+     that `loop_cron` has changed because OWNER-ROLE.md changed, delete the job and create it again;
    - `prompt`: `/owner`;
    - `recurring`: true.
 
@@ -182,13 +190,13 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 
 ## The round
 
-0. **Role and rhythm**: read `OWNER-ROLE.md` from the slot, as merged from main, for the settings and tasks.
-   `python3 $S/due.py due --json` names the duties (`duty:<name>`) and tasks (`task:<name>`) that are due. **Run only
-   those** in the steps below, and after each one run `python3 $S/due.py ran <name>`. `/owner <duty>` runs that duty
-   regardless.
-   **Stay current**: `git fetch -q origin && git merge --ff-only origin/<default>` in the owner slot. It has no
+0. **Stay current**: `git fetch -q origin && git merge --ff-only origin/<default>` in the owner slot. It has no
    commits of its own, so this always fast-forwards. Then the setup tasks if main changed, the way `/mfm` runs
    them.
+   **What is due**: `python3 $S/due.py due --json`, which reads OWNER-ROLE.md as merged from main. Invalid, or
+   gone: notify the user, run nothing, end the round. Otherwise **run only the due items** in the steps below
+   (`duty:<name>`, `task:<name>`; a step whose duty is not due is skipped), and after each run
+   `python3 $S/due.py ran <name>`. `/owner <duty>` runs that duty now, if it is opted in.
 1. **Peers**: call `ListAgents` for the session names (a slot `NN` is the session named `NN-xx`) and read what peers
    and workers sent since the last round.
 2. **mtm**: follow [merge-to-main-boss](subskills/merge-to-main-boss/SUBSKILL.md) steps 1–3.
@@ -201,7 +209,7 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
    ([Delegate](#delegate-a-fix) steps 2–7).
 8. **Repo tasks**: each due task from `OWNER-ROLE.md`: run its **Check**, then its **Act**. Log it with `record
    task <name> ...`, then `due.py ran "task:<name>"`.
-9. **Ask the user** once per round that has open items (setting `notify`, default `every-round`). Batch every open product decision from all duties into one
+9. **Ask the user** as `notify` says (`every-round`: once in every round that has open items). Batch every open product decision from all duties into one
    `PushNotification` (`owner: 3 wait for you: 00 GitHub access, 07 research decision, 14 unlock the Mac`). When
    the user is here in this session, end with a plain-text question with numbered options instead.
 10. **Summary**: run `python3 $S/mtm_scan.py summary --notes "<mtm, ci, watch, autoclear, delegations: 2-6 lines>" --lead "<the lead's 2-5 lines>"`.
@@ -225,12 +233,13 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
   helper, started only by the user.
 - One owner per repository, in its `owner` slot. It never changes its own branch, and every fix goes to a worker
   with a plan.
-- Workers: at most 5 at a time; idle sessions first (the user's too), else new ones. They run the same model as the
+- Workers: at most `worker_limit` at a time (hal2: 5); idle sessions first (the user's too), else new ones. They run the same model as the
   user's workers (create-worktree-session's default).
 - Notification: every round that has open items, batched into one push.
-- Every duty and task has its own rhythm (`15m` for important ones, `1h`, `daily HH:MM`). The loop ticks at the
-  shortest one, and a round runs only what is due (`due.py`).
+- **Nothing implicit**: every duty and task is an opt-in in OWNER-ROLE.md, each with its own cron (5-field
+  notation). The settings are required, and without the file the owner runs nothing. The loop runs at the
+  shortest interval, and a round runs only what is due (`due.py`).
 - `OWNER-ROLE.md`: settings plus the repository's tasks, in the root (allowlisted). It is the user's word and may
-  widen authority per task. Only the user edits it. Without one, the owner drafts one for approval.
+  widen authority per task. Only the user edits it.
 - sanity-watch and fix-autoclear run as the owner's duties, replacing their own loops.
 - A busy session without `plans/CURRENT_PLAN` is told to fill it in (development-lead).
