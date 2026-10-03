@@ -107,7 +107,7 @@ def item_actions(item: dict, handlers: dict, ctx: dict) -> list[dict]:
     """The planned actions of one due duty or task, ending with its run record. A handler gets the item and
     `ctx` (top, main, now, dry, log: the owner's log entries) and returns planned actions."""
     kind, _, name = item["name"].partition(":")
-    handler = handlers.get(item["name"])
+    handler = handlers.get(item["name"]) or handlers.get(f"{kind}:*")
     planned = handler(item, ctx) if handler else [
         act(name if kind == "duty" else "task", "no-handler", "wake",
             text=f"{item['name']} has no tick handler yet: run it as the skill says")]
@@ -193,8 +193,10 @@ def execute(a: dict, top: str, main: str, out: dict) -> None:
         due.record_run(top, a["name"], out.get("now"))
         return
     if a["do"] == "run":
-        code, text = sh(a["argv"], top)
+        code, text = sh(a["argv"], a.get("cwd") or top)
         a["exit"], a["output"] = code, text[-2000:]
+        for follow in a.get("on_fail", []) if code else []:
+            execute(follow, top, main, out)
     if a["do"] == "send":
         states = set(a.get("states", ())) | deliver.READY
         refused = deliver.send(a["pane"], a["text"], states) if a.get("pane") else "no session"

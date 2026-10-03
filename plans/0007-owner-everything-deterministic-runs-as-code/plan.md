@@ -33,8 +33,8 @@ starting "after the landing: ...".
 | 2 | The D/T actions of merge-to-main-boss in `tick` (priority front, wake → release rule, waiter-gone, load-high pause/go, flaky ledger, work-without-agent with HANDOFF), messages through `hal2-cli-agents send` to idle sessions only | tests per action on fixtures; a dry run on the live queue names the right actions | done |
 | 3 | The D/T actions of development-lead, ci (transient-rerun regex, runners, hung runs, slot-red), watch (sanity-watch `scan.py resume`), autoclear (known continuations) | tests per action; dry runs on live data | done |
 | 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; a live dry run names them (the first live delegation: step 9) | done |
-| 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted (in the owner branch) | `due.py check` validates the new form; tick runs hal2's tasks with no wake | next |
-| 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | |
+| 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted as a proposal for the user ([owner-role-hal2-tasks.md](owner-role-hal2-tasks.md)) | `due.py check` names each task's mode; tick runs hal2's proposed tasks with no wake (live checks) | done |
+| 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | next |
 | 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | |
 | 8 | Skill text split: SKILL.md down to start/stop/act/authority, `instructions/<kind>.md` per J kind, subskills only for the woken parts; README and description updated | SKILL.md under 8 KB; every J kind has its instruction file; check-plugins passes | |
 | 9 | Measure: one hour of ticks on hal2, model tokens of the owner session before vs after | the owner's transcript shows ≤ 1 wake per real J item; noted in the plan | |
@@ -88,6 +88,13 @@ starting "after the landing: ...".
 - 2026-10-03 (step 4): delegations keep their own ledger `~/skills/owner/<repo>/delegations.jsonl` (running, waiting
   at the limit, landed, error); a worker counts as landed when its slot has no CURRENT_PLAN and nothing off main 30
   min after its start, and stop.py ends its session only when it is idle (stop.py refuses busy ones).
+- 2026-10-03 (step 5): a task is machine-run only in the strict form (Check: backticked commands only; Act:
+  commands and `notify|delegate|wake` only; optional **Still failing**); anything else is prose and wakes the model,
+  so a task written before the form never runs a command by accident (hal2's live n8n Check names an uninstalled
+  `hal2-cli-n8n` and would have fired the production redeploy).
+- 2026-10-03 (step 5): hal2's OWNER-ROLE.md is the user's file (the handoff's rule): the converted tasks are a
+  proposal, [owner-role-hal2-tasks.md](owner-role-hal2-tasks.md) (also in `~/skills/owner/hal2/pending/`), applied
+  by the user; until then the tick wakes the model for them as today.
 
 ## Notes
 - Step 1 (2026-10-03): `owner.py start-check|tick [--dry-run]|mode`, `tick.py` (the frame: planned actions as data,
@@ -112,3 +119,7 @@ starting "after the landing: ...".
   ledger, `follow_up`: landed workers recorded and stopped, waiting briefs started when there is room), the tick
   places its `delegate` actions after the duties and follows up every round, `owner.py delegate --brief --title`
   for a brief the woken model writes.
+- Step 5 (2026-10-03): `tasks.py` (parse, plan_task: check → record, else the Act's commands, `notify`, `delegate`,
+  `wake`, then `owner check task <name>` again with `on_fail` = the Still-failing outcomes; built-in `owner check
+  flaky|orphans`), the executor's `cwd` and `on_fail`, `task:*` handlers, `due.py check` prints each task's mode.
+  Trap: hal2's `code/python/scripts/hal9k/main.py` is not executable, the proposal runs it with `python3`.

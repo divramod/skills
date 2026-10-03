@@ -235,12 +235,16 @@ def main(argv: list[str]) -> int:
              "due": is_due(c, last.get(n), now)} for n, c in items.items()]
     if args.cmd == "due":
         rows = [x for x in rows if x["due"]]
-    result = {"ok": True, "loop_cron": loop_cron(items), "settings": settings,
+    import tasks  # here: tasks imports tick, which imports this module
+    modes = {n: "machine" if s["machine"] else "model" for n, s in tasks.parse(role.read_text()).items()}
+    result = {"ok": True, "loop_cron": loop_cron(items), "settings": settings, "tasks": modes,
               "items": [] if args.cmd == "check" else rows}
     if args.json:
         print(json.dumps(result, indent=1))
     else:
         print(f"OWNER-ROLE.md ok; owner loop cron `{result['loop_cron']}`; {settings}")
+        for name, mode in modes.items():
+            print(f"- task {name}: {'run by the tick' if mode == 'machine' else 'prose: the woken model runs it'}")
         for x in result["items"]:
             print(f"- {x['name']:40} {x['cron']:16} last {x['last'] or 'never'}" + ("  DUE" if x["due"] else ""))
     return 0

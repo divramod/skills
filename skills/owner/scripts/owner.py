@@ -11,6 +11,9 @@
   owner.py delegate --brief <file> --title <title> [--repo <dir>] [--dry-run] [--json]
       hand a brief the woken owner wrote to a worker (the same limit, slot choice, prompt and ledger as the tick's
       delegations); --dry-run prints the calls it would make
+  owner.py check task <name> | flaky | orphans [--repo <dir>]
+      a task's Check (machine form, see tasks.py), or a built-in check for OWNER-ROLE.md tasks: flaky ledger
+      entries whose worker runs no plan, slots with work and no session; exit 0 fine, 1 with what is wrong
   owner.py mode [claude|timer] [--repo <dir>]
       who runs the rounds: the owner's Claude session (`claude`, the default) or the external
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
@@ -33,6 +36,7 @@ import boss
 import delegation
 import due
 import duties
+import tasks
 import tick
 
 HERE = Path(__file__).resolve().parent
@@ -44,6 +48,7 @@ HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned 
     "duty:ci": duties.plan_ci,
     "duty:watch": duties.plan_watch,
     "duty:autoclear": duties.plan_autoclear,
+    "task:*": tasks.plan_task,
 }
 
 
@@ -145,6 +150,9 @@ def main(argv: list[str]) -> int:
     dg.add_argument("--repo", default=os.getcwd())
     dg.add_argument("--dry-run", action="store_true")
     dg.add_argument("--json", action="store_true")
+    ck = sub.add_parser("check")
+    ck.add_argument("what", nargs="+")
+    ck.add_argument("--repo", default=os.getcwd())
     m = sub.add_parser("mode")
     m.add_argument("set", nargs="?", choices=MODES)
     m.add_argument("--repo", default=os.getcwd())
@@ -161,6 +169,11 @@ def main(argv: list[str]) -> int:
             (state(args.repo) / "mode").write_text(args.set + "\n")
         print(mode(args.repo))
         return 0
+    if args.cmd == "check":
+        what = args.what[1] if args.what[0] == "task" and len(args.what) > 1 else args.what[0]
+        code, text = tasks.builtin(" ".join(args.what[1:]) if args.what[0] == "task" else what, args.repo)
+        print(text or "ok")
+        return code
     if args.cmd == "delegate":
         return run_delegate(args)
     return run_tick(args.repo, args.dry_run, args.json)
