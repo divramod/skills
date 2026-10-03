@@ -34,6 +34,10 @@ class Lead(unittest.TestCase):
         waiting = helper("idle-in-plan", "Next I'll continue once the queue returns.")
         self.assertEqual(kinds(self.plan(waiting)), [("wake", "idle-in-plan", "04")])
 
+    def test_the_owners_own_session_is_never_told_or_woken_about(self):
+        self.assertEqual(kinds(self.plan(helper("asks", slot="owner"), helper("no-plan", slot="owner"))),
+                         [])
+
     def test_questions_and_blocks_wake_failed_goes_to_watch_when_on(self):
         self.assertEqual(kinds(self.plan(helper("asks"), helper("blocked"))),
                          [("wake", "asks", "04"), ("wake", "blocked", "04")])

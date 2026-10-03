@@ -18,7 +18,8 @@ with `do` one of
 
 An action may carry a `key` (the log keeps it) and a `window` in seconds (default a week): `fresh` drops an action
 whose key was logged within its window, and an action `after` a dropped key with it. Messages and wakes for a slot
-that waits for the user (an `ask` in the log with no `answered` after it) are dropped too.
+that waits for the user (an `ask` in the log with no `answered` after it) are dropped too, and so are
+messages and wakes about the owner's own slot (its session is the one woken).
 
 Every executed action except `ran` goes into the owner's log with `"by": "tick"`.
 """
@@ -144,7 +145,8 @@ def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
     for a in actions:
         key = a.get("key")
         old = key and key in seen and (now - seen[key]).total_seconds() < a.get("window", WEEK)
-        held = a["slot"] in asked and (a["do"] in ("send", "relay", "wake") or a["kind"] == "orphan")
+        talk = a["do"] in ("send", "relay", "wake")
+        held = (a["slot"] in asked and (talk or a["kind"] == "orphan")) or (a["slot"] == OWNER_SLOT and talk)
         if old or held or a.get("after") in dropped:
             dropped.add(key)
             continue
