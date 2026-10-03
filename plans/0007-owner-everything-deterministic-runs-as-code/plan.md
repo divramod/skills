@@ -32,8 +32,8 @@ starting "after the landing: ...".
 | 1 | `owner.py` skeleton: `start-check` and `tick` running the round frame (stay current, the OWNER-ROLE.md edit, due, a log line per action, the summary from the log), plus `--dry-run` | `python3 skills/owner/scripts/owner.py tick --dry-run` in the owner slot prints the due items and the planned actions; unit tests pass | done |
 | 2 | The D/T actions of merge-to-main-boss in `tick` (priority front, wake → release rule, waiter-gone, load-high pause/go, flaky ledger, work-without-agent with HANDOFF), messages through `hal2-cli-agents send` to idle sessions only | tests per action on fixtures; a dry run on the live queue names the right actions | done |
 | 3 | The D/T actions of development-lead, ci (transient-rerun regex, runners, hung runs, slot-red), watch (sanity-watch `scan.py resume`), autoclear (known continuations) | tests per action; dry runs on live data | done |
-| 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; one live delegation in hal2 logged | next |
-| 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted (in the owner branch) | `due.py check` validates the new form; tick runs hal2's tasks with no wake | |
+| 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; a live dry run names them (the first live delegation: step 9) | done |
+| 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted (in the owner branch) | `due.py check` validates the new form; tick runs hal2's tasks with no wake | next |
 | 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | |
 | 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | |
 | 8 | Skill text split: SKILL.md down to start/stop/act/authority, `instructions/<kind>.md` per J kind, subskills only for the woken parts; README and description updated | SKILL.md under 8 KB; every J kind has its instruction file; check-plugins passes | |
@@ -82,6 +82,12 @@ starting "after the landing: ...".
   `window`, companions `after` a key); planners only plan. Kinds that stay J for now, being rare and needing a look
   at a host or a log: ci `queued-long`/`running-long`, watch `restore` (F8 orphans can be days old) and `judge`, the
   boss's `active-long`.
+- 2026-10-03 (step 4): step 4's live delegation moves to step 9: the owner's Claude loop still runs (mode `claude`)
+  and delegates the same findings, so a delegation from outside it now would double a worker. Step 9 switches hal2's
+  owner to timer mode and checks the first real delegation there.
+- 2026-10-03 (step 4): delegations keep their own ledger `~/skills/owner/<repo>/delegations.jsonl` (running, waiting
+  at the limit, landed, error); a worker counts as landed when its slot has no CURRENT_PLAN and nothing off main 30
+  min after its start, and stop.py ends its session only when it is idle (stop.py refuses busy ones).
 
 ## Notes
 - Step 1 (2026-10-03): `owner.py start-check|tick [--dry-run]|mode`, `tick.py` (the frame: planned actions as data,
@@ -101,3 +107,8 @@ starting "after the landing: ...".
   `evidence.py doctor --json`/`doctor_items`, the same resting session continued with clear-and-continue, one
   delegation per reason), `tick.context` (agents, panes, landings once per round). The live dry run planned only
   wakes for real questions and waits.
+- Step 4 (2026-10-03): `delegation.py` (brief template with the evidence as data, the limit from `worker_limit`,
+  free.py's idle session first (prompt typed by deliver.py), else create.py, the worker prompt of SKILL.md, the
+  ledger, `follow_up`: landed workers recorded and stopped, waiting briefs started when there is room), the tick
+  places its `delegate` actions after the duties and follows up every round, `owner.py delegate --brief --title`
+  for a brief the woken model writes.

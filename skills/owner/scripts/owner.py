@@ -8,6 +8,9 @@
       one round as code: stay current (merge-from-main), the user's OWNER-ROLE.md edit, what is due,
       each due item's actions, the log, the summary. Items that need judgment are collected as
       `wake`, notices for the user as `notify`. --dry-run plans the round and touches nothing.
+  owner.py delegate --brief <file> --title <title> [--repo <dir>] [--dry-run] [--json]
+      hand a brief the woken owner wrote to a worker (the same limit, slot choice, prompt and ledger as the tick's
+      delegations); --dry-run prints the calls it would make
   owner.py mode [claude|timer] [--repo <dir>]
       who runs the rounds: the owner's Claude session (`claude`, the default) or the external
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
@@ -18,6 +21,7 @@ Exit 0 ok (also: another tick holds the lock, `busy`), 1 OWNER-ROLE.md invalid, 
 """
 
 import argparse
+import datetime
 import fcntl
 import json
 import os
@@ -26,6 +30,7 @@ import sys
 from pathlib import Path
 
 import boss
+import delegation
 import due
 import duties
 import tick
@@ -111,6 +116,20 @@ def run_tick(repo: str, dry: bool, as_json: bool) -> int:
     return 4 if r.get("problem") else 0
 
 
+def run_delegate(args) -> int:
+    main_dir = tick.mtm_scan.main_checkout(args.repo)
+    settings = due.schedule((Path(tick.git(args.repo, "rev-parse", "--show-toplevel") or args.repo)
+                             / tick.ROLE).read_text())[1] if (Path(args.repo) / tick.ROLE).exists() else {}
+    a = tick.act("owner", "brief", "delegate", key=f"brief:{delegation.slug(args.title)}", text=args.title,
+                 brief={"brief_file": str(Path(args.brief).resolve())})
+    result = delegation.delegate(a, main_dir, int(settings.get("worker_limit") or 1), args.dry_run,
+                                 datetime.datetime.now())
+    print(json.dumps(result, indent=1) if args.json else
+          f"{result['state']}: {result.get('slot') or '-'}" + "".join(f"\n  {' '.join(map(str, c))}"
+                                                                     for c in result.get("calls", [])))
+    return 1 if result["state"] == "error" else 0
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -120,6 +139,12 @@ def main(argv: list[str]) -> int:
     for x in (sc, t):
         x.add_argument("--repo", default=os.getcwd())
         x.add_argument("--json", action="store_true")
+    dg = sub.add_parser("delegate")
+    dg.add_argument("--brief", required=True)
+    dg.add_argument("--title", required=True)
+    dg.add_argument("--repo", default=os.getcwd())
+    dg.add_argument("--dry-run", action="store_true")
+    dg.add_argument("--json", action="store_true")
     m = sub.add_parser("mode")
     m.add_argument("set", nargs="?", choices=MODES)
     m.add_argument("--repo", default=os.getcwd())
@@ -136,6 +161,8 @@ def main(argv: list[str]) -> int:
             (state(args.repo) / "mode").write_text(args.set + "\n")
         print(mode(args.repo))
         return 0
+    if args.cmd == "delegate":
+        return run_delegate(args)
     return run_tick(args.repo, args.dry_run, args.json)
 
 

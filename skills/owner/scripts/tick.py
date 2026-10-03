@@ -28,6 +28,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import delegation
 import deliver
 import due
 import mtm_scan
@@ -199,7 +200,10 @@ def execute(a: dict, top: str, main: str, out: dict) -> None:
         refused = deliver.send(a["pane"], a["text"], states) if a.get("pane") else "no session"
         if refused:
             a.update(do="relay", why=f"{a.get('why', '')} not typed: {refused}".strip())
-    if a["do"] in ("wake", "notify", "relay", "delegate"):
+    if a["do"] == "delegate":  # delegation.delegate logs it once it is placed
+        out.setdefault("delegate", []).append(a)
+        return
+    if a["do"] in ("wake", "notify", "relay"):
         out.setdefault(a["do"], []).append(a)
     note = a.get("why", "") + (f" (exit {a['exit']})" if a.get("exit") else "")
     mtm_scan.log(main, {"kind": a["kind"], "slot": a["slot"], "what": a.get("text") or " ".join(a.get("argv", [])),
@@ -217,6 +221,24 @@ def stay_current(top: str, main: str, out: dict) -> None:
             status = "error"
         execute(act("frame", "mfm-failed", "wake", text=f"merge-from-main in the owner slot: {status}",
                     evidence=a["output"]), top, main, out)
+
+
+def slot_state(main: str) -> dict[str, dict]:
+    """Each worktree slot's CURRENT_PLAN and commits not on main (what the delegation follow-up reads)."""
+    out = {}
+    for w in mtm_scan.worktrees(main):
+        plan = Path(w["path"]) / "plans/CURRENT_PLAN"
+        out[Path(w["path"]).name] = {"plan": plan.read_text().strip() if plan.exists() else "",
+                                     "ahead": mtm_scan.unmerged(w["path"], "main")}
+    return out
+
+
+def delegate_all(main: str, out: dict, dry: bool, now: dt.datetime) -> None:
+    """Place this round's delegations (planned ones in a dry run), then follow up on the running workers."""
+    limit = int((out.get("settings") or {}).get("worker_limit") or 1)
+    todo = [a for a in out["planned"] if a["do"] == "delegate"] if dry else out.get("delegate", [])
+    out["delegations"] = [delegation.delegate(a, main, limit, dry, now) for a in todo]
+    out["delegations"] += delegation.follow_up(main, slot_state(main), limit, dry, now)
 
 
 def summarize(main: str, top: str, out: dict) -> None:
@@ -254,5 +276,8 @@ def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None) ->
         for a in edit + rnd["actions"]:
             execute(a, top, main, out)
             out["done"].append(a)
+    if go_on:
+        delegate_all(main, out, dry, now or dt.datetime.now())
+    if not dry:
         summarize(main, top, out)
     return out
