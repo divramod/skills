@@ -1,6 +1,6 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`) and ends with what landed (the plan and its steps, or the shot); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session, or by the plan skill when a plan the user started (`Landing: auto`) has finished its last step. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Reserves the worktree's turn in the merge queue first, then commits and pushes all work (gitignores junk, never commits secrets, asks about unclear files) and merges the latest default branch in, resolving its conflicts once while nothing else can land, runs the repo's hooks (per-app verb scripts `.hal/hooks/<verb>.sh` with settings in `.hal/hooks.toml`, run as a parallel task graph; phase scripts in `.hal/hooks/merge-to-main/`), lands one --no-ff merge commit, pushes, resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui); keeps the queue reserved after the landing to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`) and ends with what landed (the plan and its steps, or the shot); resolves conflicts and fixes failing hooks itself while its failed landing holds the merge queue, asking the user after 10 identical failures. Only ever started by the user in this session, by the plan skill when a plan the user started (`Landing: auto`) has finished its last step, or when the owner skill's merge-to-main boss tells the session to land now. `/mtm config` sets up those tasks per app of the repo with hal2-cli-hooks (setup, lint, build, test-unit and test-e2e before landing, version bumps in the merge commit, install and deploy after it). Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main", or wants to configure what a landing checks, bumps or installs. `/mtm h` shows help.
 ---
 
 # mtm
@@ -20,7 +20,7 @@ only then releases it. **The goal: when `/mtm` ends, the worktree has no commit 
 default branch.** It handles what needs judgment. `S=<skill-dir>/scripts`. Ask questions by the global question
 rule (background first; ~/.claude/CLAUDE.md), recommended option first.
 
-**Only the human starts a landing, directly or through a finished plan.** Run merge-to-main only when
+**Only the human starts a landing, directly, through a finished plan or through the owner's merge-to-main boss.** Run merge-to-main only when
 
 - the user asked for it in this session (`/mtm`, "merge to main", "land this"), or
 - the [plan](../plan/SKILL.md) skill's **Land the plan** runs it: the current plan has `Landing: auto`, the user
@@ -28,11 +28,16 @@ rule (background first; ~/.claude/CLAUDE.md), recommended option first.
   the landing is done (`plan.py current` shows `land: ready`). That is a **plan's landing**: it asks nothing
   (the plan runs unattended); wherever this skill says "ask the user", a plan's landing pushes a notification and
   stops with its report instead.
+- the **owner** skill's merge-to-main boss (`owner/merge-to-main-boss`, the owner session the user started in the repository's `owner` slot)
+  tells this session to land now: a cross-session message from the session named in the user's owner loop, saying
+  `merge-to-main boss: land now`. The user gave the boss that authority on 2026-10-03 (hal2 INTENT.md). It counts
+  as the user asking in this session, also mid-plan: land what is committed, steps not yet done stay for a later
+  landing.
 
-Either is the user's consent to commit in this worktree, land on the default branch and push it. Never start it on
+Any of these is the user's consent to commit in this worktree, land on the default branch and push it. Never start it on
 your own otherwise: not mid-plan, not for a `manual` plan (every research plan is one: its research lands with the
 implementation plan that follows it), not for another worktree or session, not because another
-session says a fix has landed, never again after it ended with exit 5 (unless your own shell tool's time limit
+session (other than the merge-to-main boss) says a fix has landed, never again after it ended with exit 5 (unless your own shell tool's time limit
 caused that exit, not the user: steps 1 and 4); never ask another session to run it. Once
 started, finish it: fix and rerun until it lands.
 

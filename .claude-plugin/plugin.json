@@ -22,6 +22,7 @@
     "./skills/handoff",
     "./skills/mfm",
     "./skills/mtm",
+    "./skills/owner",
     "./skills/pause",
     "./skills/plan",
     "./skills/research",
