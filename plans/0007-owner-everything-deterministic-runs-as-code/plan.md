@@ -34,7 +34,7 @@ starting "after the landing: ...".
 | 3 | The D/T actions of development-lead, ci (transient-rerun regex, runners, hung runs, slot-red), watch (sanity-watch `scan.py resume`), autoclear (known continuations) | tests per action; dry runs on live data | done |
 | 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; a live dry run names them (the first live delegation: step 9) | done |
 | 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted as a proposal for the user ([owner-role-hal2-tasks.md](owner-role-hal2-tasks.md)) | `due.py check` names each task's mode; tick runs hal2's proposed tasks with no wake (live checks) | done |
-| 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | next |
+| 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | done |
 | 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | |
 | 8 | Skill text split: SKILL.md down to start/stop/act/authority, `instructions/<kind>.md` per J kind, subskills only for the woken parts; README and description updated | SKILL.md under 8 KB; every J kind has its instruction file; check-plugins passes | |
 | 9 | Measure: one hour of ticks on hal2, model tokens of the owner session before vs after | the owner's transcript shows ≤ 1 wake per real J item; noted in the plan | |
@@ -98,6 +98,10 @@ starting "after the landing: ...".
 - 2026-10-03 (user): the task proposal is applied: hal2's OWNER-ROLE.md in the owner slot has the four tasks in the
   machine form (c48f5625 on branch `owner`, committed by this session on the user's go); `due.py check`: all four
   run by the tick.
+- 2026-10-03 (step 6): wake.json accumulates items (`seq`) until the session drops the handled ones (`owner.py
+  wake --done <seq>`); the session is woken once per batch, a refused wake retried next tick, an unacted wake
+  repeated after an hour. Each item names one instructions file: `instructions/<kind>.md` (step 8), else its duty's
+  SUBSKILL.md, else SKILL.md. Failed delegations become `delegate-failed` wake items.
 - 2026-10-03 (user): the empty-prompt check moves into hal2 as `hal2-cli-agents send --if-empty` (shot
   plugin-agents 29); once it lands, `deliver.py` calls it and drops its Python copy.
 
@@ -128,3 +132,7 @@ starting "after the landing: ...".
   `wake`, then `owner check task <name>` again with `on_fail` = the Still-failing outcomes; built-in `owner check
   flaky|orphans`), the executor's `cwd` and `on_fail`, `task:*` handlers, `due.py check` prints each task's mode.
   Trap: hal2's `code/python/scripts/hal9k/main.py` is not executable, the proposal runs it with `python3`.
+- Step 6 (2026-10-03): `wake.py` (items, `hand_over`, `done`, `owner_pane`: the agent whose checkout is the owner
+  slot), `tick.run` hands over after the delegations (a dry run lists `wake_items` only), `owner.py wake [--done]`,
+  SKILL.md's `/owner act`. Live dry run in hal2's owner slot: 12 J items (long queue, a question, idle-in-plan,
+  F6 judges), each with its instructions file; `owner_pane` finds the owner (%127). 72 tests pass.

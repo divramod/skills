@@ -12,8 +12,8 @@ with `do` one of
   send    pane, text: a templated message typed into an idle session's empty prompt (deliver.py); refused
           (busy, a draft, a dialog) it becomes a `relay`
   relay   text: a templated message the woken session sends verbatim with SendMessage (busy sessions)
-  delegate text, brief: a fix for a worker (step 4 starts the worker; until then it wakes the model)
-  wake    text: an item that needs the model (step 6 hands these to the woken session)
+  delegate text, brief: a fix for a worker (delegation.py starts it; a failed start wakes the model)
+  wake    text: an item that needs the model (wake.py hands these to the woken session)
   notify  text: a notice for the user (the woken session pushes them, batched)
 
 An action may carry a `key` (the log keeps it) and a `window` in seconds (default a week): `fresh` drops an action
@@ -32,6 +32,7 @@ import delegation
 import deliver
 import due
 import mtm_scan
+import wake
 
 OWNER_SLOT = "owner"
 ROLE = "OWNER-ROLE.md"
@@ -280,6 +281,10 @@ def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None) ->
             out["done"].append(a)
     if go_on:
         delegate_all(main, out, dry, now or dt.datetime.now())
-    if not dry:
+    if dry:
+        out["wake_items"] = wake.items({k: [a for a in out["planned"] if a["do"] == k] for k in wake.KINDS}
+                                       | {"delegations": out.get("delegations", [])})
+    else:
+        out["woke"] = wake.hand_over(top, main, out, now or dt.datetime.now())
         summarize(main, top, out)
     return out

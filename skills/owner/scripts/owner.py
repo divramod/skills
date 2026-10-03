@@ -14,11 +14,14 @@
   owner.py check task <name> | flaky | orphans [--repo <dir>]
       a task's Check (machine form, see tasks.py), or a built-in check for OWNER-ROLE.md tasks: flaky ledger
       entries whose worker runs no plan, slots with work and no session; exit 0 fine, 1 with what is wrong
+  owner.py wake [--done <seq>] [--repo <dir>] [--json]
+      what the tick handed to the owner session (wake.json: items that need judgment, relays, notices, failed
+      delegations, each with the file to read for it); --done drops the items up to <seq> once handled
   owner.py mode [claude|timer] [--repo <dir>]
       who runs the rounds: the owner's Claude session (`claude`, the default) or the external
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
 
-State: ~/skills/owner/<repo>/ (OWNER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl.
+State: ~/skills/owner/<repo>/ (OWNER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl, wake.json.
 Exit 0 ok (also: another tick holds the lock, `busy`), 1 OWNER-ROLE.md invalid, 2 a tool missing,
 3 no OWNER-ROLE.md, 4 not the owner slot, a slot holding other work, or not in timer mode.
 """
@@ -38,6 +41,7 @@ import due
 import duties
 import tasks
 import tick
+import wake
 
 HERE = Path(__file__).resolve().parent
 TOOLS = ("git", "hal2-cli-git", "hal2-cli-hooks", "hal2-cli-agents")
@@ -95,6 +99,10 @@ def print_round(r: dict) -> None:
     for key in ("relay", "delegate", "wake", "notify"):
         if r.get(key):
             print(f"{key}: " + "; ".join(a.get("text", "") for a in r[key]))
+    if r.get("woke"):
+        w = r["woke"]
+        print(f"wake: {w['pending']} pending" + (", owner woken" if w["woken"] else f" ({w['why']})" if w.get("why")
+                                                 else ""))
     if r.get("summary"):
         print(f"summary: {r['summary']}")
 
@@ -119,6 +127,22 @@ def run_tick(repo: str, dry: bool, as_json: bool) -> int:
     if not as_json:
         print_round(r)
     return 4 if r.get("problem") else 0
+
+
+def run_wake(args) -> int:
+    main = tick.mtm_scan.main_checkout(args.repo)
+    if args.done is not None:
+        print(f"{wake.done(main, args.done)} items left")
+        return 0
+    data = wake.read(main)
+    if args.json:
+        print(json.dumps(data, indent=1))
+        return 0
+    for i in data["items"]:
+        print(f"{i['seq']:3} {i['do']:6} {i['duty']}/{i['kind']} {i['slot']}: {i.get('text', '')}\n"
+              f"    read {i['instructions']}")
+    print(f"{len(data['items'])} items" + (f", woken {data['woken_at']}" if data.get("woken_at") else ""))
+    return 0
 
 
 def run_delegate(args) -> int:
@@ -153,6 +177,10 @@ def main(argv: list[str]) -> int:
     ck = sub.add_parser("check")
     ck.add_argument("what", nargs="+")
     ck.add_argument("--repo", default=os.getcwd())
+    w = sub.add_parser("wake")
+    w.add_argument("--done", type=int)
+    w.add_argument("--repo", default=os.getcwd())
+    w.add_argument("--json", action="store_true")
     m = sub.add_parser("mode")
     m.add_argument("set", nargs="?", choices=MODES)
     m.add_argument("--repo", default=os.getcwd())
@@ -176,6 +204,8 @@ def main(argv: list[str]) -> int:
         return code
     if args.cmd == "delegate":
         return run_delegate(args)
+    if args.cmd == "wake":
+        return run_wake(args)
     return run_tick(args.repo, args.dry_run, args.json)
 
 
