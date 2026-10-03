@@ -18,6 +18,10 @@ Newest first. One case per root cause; a recurrence adds a line under its case. 
   request, so a retry still accepts it), or by hand when the sweep had given up.
 - **Would have caught it sooner**: the check's log line naming why a HANDOFF.md did not count (now: `not written since
   ... (<why>)`, `current (written ..., last work commit ...)`).
+- **Recurrence, other symptom (same day, the rerun by hand)**: a job started on the idle session hung in `waiting`, its
+  log ending `record: SubagentStop, state done, at ... (before the request)`: the job waited for a turn end after
+  the request. Fix: hal2 `5ca18359` (plan 0123 step 7), two idle screens with an empty box count as the end — tests
+  `incident_07_an_idle_session_*`.
 - **Same reason, other cause**: 2026-09-30 (hal2 wt 00), the guard split a commit message. Check the transcript for a
   denied hand-off tool before blaming the check.
 

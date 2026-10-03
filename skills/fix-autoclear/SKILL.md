@@ -110,7 +110,8 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
 2. **The job** (`autoclear.rs`, `hal2-cli-agents clear-and-continue`, one per pane, lock `<n>.lock`): record
    `<state>/agents/autoclear/<n>.json`, log `<n>.log` (pane `%<n>`, or `<id>` for a terminal host `t:<id>`).
    Phases: `interrupting` (sweep's `--interrupt`: Escape) → `waiting` (turn over: a `Stop` record, or the screen
-   reading `hook stopped continuation`/`Interrupted` twice; box empty; no landing) → `requesting` (with
+   reading `hook stopped continuation`/`Interrupted` twice; a session idle before the request: idle twice; box
+   empty; no landing) → `requesting` (with
    `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` written since the request, or current: written at most
    `CURRENT_WINDOW` (10 min) before it, not before the newest commit of real work, nothing uncommitted outside
    `HANDOFF_PATHS`; the log's `hand-off check:` line says which and why) → types the hand-off request, waits for that turn;
