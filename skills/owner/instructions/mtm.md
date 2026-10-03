@@ -15,6 +15,9 @@ in any order; throughput beats order and retries. Check each finding is still tr
 | `flaky` | Flaky or real? Load-sensitive (the [reasons](../subskills/merge-to-main-boss/reasons.md), budget/timeout wording, passes alone): disable it ([how](../subskills/merge-to-main-boss/SUBSKILL.md#disable-a-flaky-test), through a worker: `python3 $S/owner.py delegate --brief <file> --title <title>`). A real assertion failure: leave it to the slot |
 | `orphan` | Work without a session and no HANDOFF.md. Plan steps left: `hal2-cli-git worktree run <NN> --agent claude --detach --prompt "/handoff c"`; the plan looks done: `--prompt "/mtm"`; unclear: notify the user |
 
+A slot the boss paused (a `pause` entry in `log.jsonl` with no `go` after it) waits for that go, which the tick
+sends when the landing ends: leave it, record nothing. A slot with an open `ask` waits for the user: leave it too.
+
 **Land now** (the user's authority): a SendMessage whose first line starts with `merge-to-main boss: land now`
 counts as the user's `/mtm` in that session. Never: stop a landing merged into main, force-push, delete a slot's
 work, answer a dialog, decide a product question, deploy.

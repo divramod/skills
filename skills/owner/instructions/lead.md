@@ -13,6 +13,9 @@ After acting: `python3 $S/lead_scan.py record <session> <since> "<what you did>"
 | `idle-in-plan` | It waits for something: treat it as `asks`. Done but not landed: tell it to land (`merge-to-main boss: land now`) |
 | `failed` | The watch duty resumes failed turns: when it is opted in, record and leave it |
 
+A slot the boss paused (a `pause` entry in `log.jsonl` with no `go` after it) waits for that go, which the tick
+sends when the landing ends: leave it, record nothing. A slot with an open `ask` waits for the user: leave it too.
+
 A review request ("ready to land", a step done and waiting for an okay): review the diff at medium the way the
 `code-review` skill would (`git -C <worktree> diff origin/main...HEAD`), send the findings or "reviewed, okay to
 land". A kind of help seen twice goes into [cases.md](../subskills/development-lead/cases.md).
