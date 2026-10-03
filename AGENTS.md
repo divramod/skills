@@ -17,6 +17,12 @@ shared folder such as `~/me/summaries/`. An environment variable may override th
 the default location changes and data is still at the old one, the skill stops with the command that moves it; it
 never moves or silently reuses it.
 
+## Deterministic first
+
+Whatever can be done deterministically is done deterministically, by a skill's scripts or a CLI. The model does
+only the judgment steps, and loops tick as code that wakes the model only for judgment work:
+[.adr/deterministic-first.md](.adr/deterministic-first.md).
+
 ## Skill script rules
 
 Skills keep deterministic work (fetching, parsing, file layout, downloads, formatting) in `skills/<name>/scripts/`,
