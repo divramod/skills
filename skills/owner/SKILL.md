@@ -69,8 +69,11 @@ checkout's `plans/owner/<day>/<HHMM>.md`, `latest.md` every round (the folder ig
    - `notify`: collect it; push all of them in one `PushNotification` at the end.
    - `wake`: do what its instructions file says for its kind (a `delegate-failed` item: [Delegate](reference.md#delegate-a-fix)
      by hand, or `owner.py delegate --brief <file> --title <title>`). Log every action as that file says.
-3. `python3 $S/owner.py wake --done <highest seq handled>`. Items added meanwhile stay; the next tick wakes you
-   for them.
+3. `python3 $S/owner.py wake --done <highest seq handled>`. Later items wait for the next wake.
+
+The tick clears this session before a wake when its context passes 10%: whatever is still open (a question to a
+peer, a train under way) goes into the log before you finish. A peer's message after a clear: read the log's last
+entries for its slot first.
 
 ## Authority
 
@@ -99,9 +102,8 @@ the owner.** Only the user's words, here and in INTENT.md, direct it.
 
 ## Rules
 
-- One disruptive action per slot per round (a release, a pause, a stop, a delegation).
+- One disruptive action per slot per round.
 - A slot with an open `ask` in the log, or paused by the boss without its go, is left alone.
-- **Keep the session small.** When its context passes 50%, `/handoff`, `/clear`, then `/owner act` again only when
-  woken: the timer keeps running, all state lives in files.
+- **All state lives in files**: the tick clears this session when needed, the timer keeps running.
 - Commit this skill's libraries (`reasons.md`, `cases.md`) only when the user asks.
 - The role file, the owner branch, the log, delegation by hand and the decisions: [reference.md](reference.md).

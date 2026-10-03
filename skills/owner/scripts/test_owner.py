@@ -148,6 +148,20 @@ class Round(Repo):
             self.assertIn("/plans/owner/2026-10-03/", busy["summary"])
 
 
+class Waiting(unittest.TestCase):
+    def test_paused_slots_until_their_go(self):
+        at = NOW.isoformat()
+        log = [{"at": at, "key": "pause:L1:07"}, {"at": at, "key": "pause:L1:20"}, {"at": at, "key": "go:L1:20"},
+               {"at": (NOW - dt.timedelta(hours=13)).isoformat(), "key": "pause:L0:05"}]
+        self.assertEqual(tick.paused(log, NOW), {"07"})
+
+    def test_waiting_slots_do_not_wake_for_idling_but_do_for_questions(self):
+        acts = [tick.act("lead", "idle-in-plan", "wake", "07"), tick.act("watch", "judge", "wake", "07"),
+                tick.act("lead", "asks", "wake", "07"), tick.act("lead", "idle-in-plan", "wake", "09")]
+        self.assertEqual([(a["kind"], a["slot"]) for a in tick.waiting_noise(acts, {"07"})],
+                         [("asks", "07"), ("idle-in-plan", "09")])
+
+
 class Cli(Repo):
     def call(self, *argv):
         buf = io.StringIO()

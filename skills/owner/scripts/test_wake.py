@@ -79,6 +79,24 @@ class Wake(Repo):
         self.assertEqual(items[1]["instructions"], wake.instructions("owner", "delegate-failed"))
 
 
+class SmallContext(unittest.TestCase):
+    def run_with(self, rows, refuse=None):
+        sent, it = [], iter(rows)
+        with mock.patch.object(wake.deliver, "agent", lambda pane: next(it)), \
+                mock.patch.object(wake.deliver, "send", lambda p, t, s=None: refuse or sent.append(t)):
+            return wake.small_context("%9", sleep=lambda s: None), sent
+
+    def test_a_small_context_is_woken_as_it_is(self):
+        self.assertEqual(self.run_with([{"context_percent": 5}]), (None, []))
+
+    def test_a_large_one_is_cleared_first_and_waited_for(self):
+        old, new = {"context_percent": 55, "session_id": "a"}, {"session_id": "b", "state": "idle"}
+        self.assertEqual(self.run_with([old, {"session_id": "a", "state": "working"}, new]), (None, ["/clear"]))
+        why, _ = self.run_with([old] + [{"session_id": "a", "state": "idle"}] * 40)
+        self.assertIn("did not come back", why)
+        self.assertIn("agent is working", self.run_with([old], refuse="agent is working")[0])
+
+
 class Instructions(unittest.TestCase):
     def test_every_duty_has_its_instructions(self):
         for duty in ("mtm", "lead", "ci", "watch", "autoclear", "task", "frame", "owner"):

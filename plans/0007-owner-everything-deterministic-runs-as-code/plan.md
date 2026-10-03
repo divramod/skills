@@ -37,7 +37,10 @@ starting "after the landing: ...".
 | 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | done |
 | 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | done |
 | 8 | Skill text split: SKILL.md down to start/stop/act/authority, `instructions/<kind>.md` per J kind, subskills only for the woken parts; README and description updated | SKILL.md under 8 KB; every J kind has its instruction file; check-plugins passes | done |
-| 9 | Measure: one hour of ticks on hal2, model tokens of the owner session before vs after | the owner's transcript shows ≤ 1 wake per real J item; noted in the plan | |
+| 9 | Measure: one hour of ticks on hal2, model tokens of the owner session before vs after | the owner's transcript shows ≤ 1 wake per real J item; noted in the plan | done (goal missed, see 9a–9c) |
+| 9a | Noise: an idle-in-plan stop or an F6 judge in a slot that waits in the merge queue or is paused for a landing is no wake (`tick.waiting_noise`, `tick.paused`) | tests; a dry run plans no such wake | done |
+| 9b | Small context per wake: the tick types `/clear` before `/owner act` when the owner's context passes 10% (`wake.small_context`); Act records open threads in the log | tests with a fake session | done |
+| 9c | Measure again: one hour of ticks after 9a/9b against the 11:15–12:15 baseline | model input per hour well below the baseline (target ≤ 20%); ≤ 1 wake per real J item | next |
 | 10 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
 ## Decisions
@@ -112,6 +115,11 @@ starting "after the landing: ...".
   `instructions/<duty>.<kind>.md` for a kind that needs its own; wake.py looks them up in that order.
 - 2026-10-03 (step 8): hal2's owner switches to timer mode (step 9's switch) before step 8 trims the subskills: the
   Claude loop reads them until it is gone. Step 8 writes the instructions first, then the switch, then the trim.
+- 2026-10-03 (step 9): fewer rounds alone save little: a call re-reads the session's whole context (~430k tokens at
+  55%), so the owner session is cleared before a wake (9b) instead of handed off at 50%; its state is in files and
+  Act records open threads. hal2's clear-and-continue cannot do it (it needs a plan with steps left), so the tick
+  types `/clear` into the empty prompt itself and waits for the new session. Slots waiting in the queue or paused
+  are not judgment (9a): the owner answered "they wait" for each of them.
 - 2026-10-03 (user): the empty-prompt check moves into hal2 as `hal2-cli-agents send --if-empty` (shot
   plugin-agents 29); once it lands, `deliver.py` calls it and drops its Python copy.
 
@@ -158,3 +166,8 @@ starting "after the landing: ...".
   hand, decisions, moved verbatim), the subskills reduced to pointers, merge-to-main-boss's to the procedures the
   woken session links; README. First live tick 12:38: 14 items, one wake, the owner handled them in ~1 min; it found
   the owner's own slot planned as `lead/asks` (fixed: da473c5).
+- Step 9 (2026-10-03): 14:35–15:35 under the timer (after the user's offline gap 12:40–14:20): 10 turns (3 wakes, 6
+  peer messages, 1 other), 63 calls, 27.45M input, 35.3k output, against the Claude loop's 11:15–12:15: 9 turns, 82
+  calls, 26.06M input, 41.6k output. Wakes: one per tick with items (14:53 two, 15:13 eleven, 15:22 ten); 07's F6
+  judge came in two wakes (paused, not real J), and most lead items were queue waiters. The owner handled each wake in
+  1–3 min. Causes and fixes: 9a, 9b.

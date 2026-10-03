@@ -15,6 +15,7 @@ session has not acted on within an hour is repeated.
 
 import datetime as dt
 import json
+import time
 from pathlib import Path
 
 import deliver
@@ -25,6 +26,8 @@ KINDS = ("wake", "relay", "notify")
 SUBSKILLS = {"mtm": "merge-to-main-boss", "lead": "development-lead", "ci": "ci", "watch": "sanity-watch",
              "autoclear": "fix-autoclear"}
 ACT = "/owner act"
+CLEAR_AT = 10  # context percent above which a wake starts with /clear: a call re-reads the whole context
+CLEARED = 60  # seconds to wait for the cleared session
 REWAKE = dt.timedelta(hours=1)  # a wake the session never acted on is repeated
 
 
@@ -83,6 +86,23 @@ def owner_pane(top: str) -> str | None:
                  if a.get("checkout") and Path(a["checkout"]).resolve() == target), None)
 
 
+def small_context(pane: str, sleep=time.sleep) -> str | None:
+    """Clear the owner session first when its context is large (all its state lives in files; Act records open
+    threads in the log). None when it is ready for the wake, else why not."""
+    a = deliver.agent(pane) or {}
+    if (a.get("context_percent") or 0) < CLEAR_AT:
+        return None
+    why = deliver.send(pane, "/clear")
+    if why:
+        return f"/clear not typed: {why}"
+    for _ in range(CLEARED // 2):
+        sleep(2)
+        b = deliver.agent(pane) or {}
+        if b.get("session_id") != a.get("session_id") and b.get("state") in deliver.READY:
+            return None
+    return "the cleared session did not come back"
+
+
 def hand_over(top: str, main: str, out: dict, now: dt.datetime) -> dict:
     """Add the round's items to wake.json and wake the owner session when it holds a batch it was not woken for.
     Returns {"items": n new, "pending": n in the file, "woken": bool, "why": refusal}."""
@@ -97,7 +117,7 @@ def hand_over(top: str, main: str, out: dict, now: dt.datetime) -> dict:
     stale = data.get("woken_at") and now - dt.datetime.fromisoformat(data["woken_at"]) > REWAKE
     if data["items"] and (not data.get("woken_at") or stale):
         pane = owner_pane(top)
-        why = deliver.send(pane, ACT) if pane else "no owner session"
+        why = (small_context(pane) or deliver.send(pane, ACT)) if pane else "no owner session"
         if why:
             result["why"] = why
         else:

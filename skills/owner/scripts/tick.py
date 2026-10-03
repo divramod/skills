@@ -154,6 +154,25 @@ def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
     return out
 
 
+PAUSE_AGE = dt.timedelta(hours=12)
+WAITS = {("lead", "idle-in-plan"), ("watch", "judge")}  # a stop that only means "waits in the queue or a pause"
+
+
+def paused(log: list[dict], now: dt.datetime) -> set[str]:
+    """Slots the boss paused for a landing (a `pause:<landing>:<slot>` key in the last 12 h) with no go after it."""
+    out: dict[str, bool] = {}
+    for e in log:
+        kind, _, rest = e.get("key", "").partition(":")
+        if kind in ("pause", "go") and dt.datetime.fromisoformat(e["at"]) >= now - PAUSE_AGE:
+            out[rest.rsplit(":", 1)[-1]] = kind == "pause"
+    return {slot for slot, on in out.items() if on}
+
+
+def waiting_noise(actions: list[dict], waiting: set[str]) -> list[dict]:
+    """Drop the wakes that only say a slot waits: idle in its plan or ended early while it is queued or paused."""
+    return [a for a in actions if not (a["do"] == "wake" and (a["duty"], a["kind"]) in WAITS and a["slot"] in waiting)]
+
+
 def context(top: str, main: str, items: dict, now: dt.datetime, dry: bool) -> dict:
     """What every duty's planner reads: the log, the opted-in duties, the agents by pane, each slot's pane and the
     slots whose landing runs or holds the queue (never touched)."""
@@ -164,14 +183,15 @@ def context(top: str, main: str, items: dict, now: dt.datetime, dry: bool) -> di
         data = []
     rows = data.get("list", []) if isinstance(data, dict) else data
     queue = mtm_scan.run_json(["hal2-cli-git", "worktree", "queue", "--json"], main) or {}
-    landing = {t.get("slot") for t in queue.get("queue", []) if t.get("state") == "active"
+    tickets = queue.get("queue", [])
+    landing = {t.get("slot") for t in tickets if t.get("state") == "active"
                or (t.get("hold") or {}).get("reason") == "reserved"}
     return {"top": top, "main": main, "now": now, "dry": dry, "log": read_log(main),
             "duties": {n.split(":", 1)[1] for n in items if n.startswith("duty:")},
             "agents_by_pane": {a.get("pane_id"): a for a in rows},
             "panes": {a["slot"]: a.get("pane_id") for a in rows if a.get("slot") and a.get("checkout")
                       and Path(a["checkout"]).parent == Path.home() / ".hal/git/worktree" / Path(main).name},
-            "landing": landing}
+            "landing": landing, "waiting": {t.get("slot") for t in tickets} | paused(read_log(main), now)}
 
 
 def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bool = True) -> dict:
@@ -184,7 +204,7 @@ def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bo
     ctx = context(top, main, due.schedule((Path(top) / ROLE).read_text())[0], now or dt.datetime.now(), dry)
     actions = []
     for item in items:
-        planned = fresh(item_actions(item, handlers, ctx), ctx["log"], ctx["now"])
+        planned = waiting_noise(fresh(item_actions(item, handlers, ctx), ctx["log"], ctx["now"]), ctx["waiting"])
         ctx.setdefault("told", set()).update(a["slot"] for a in planned if a["do"] in ("send", "relay"))
         actions += planned
     return {"due": items, "settings": settings, "actions": actions, "stop": False}
