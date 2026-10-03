@@ -111,7 +111,9 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
    `<state>/agents/autoclear/<n>.json`, log `<n>.log` (pane `%<n>`, or `<id>` for a terminal host `t:<id>`).
    Phases: `interrupting` (sweep's `--interrupt`: Escape) → `waiting` (turn over: a `Stop` record, or the screen
    reading `hook stopped continuation`/`Interrupted` twice; box empty; no landing) → `requesting` (with
-   `--await-handoff`: no `HANDOFF.md` written since the request → types the hand-off request, waits for that turn;
+   `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` written since the request, or current: written at most
+   `CURRENT_WINDOW` (10 min) before it, not before the newest commit of real work, nothing uncommitted outside
+   `HANDOFF_PATHS`; the log's `hand-off check:` line says which and why) → types the hand-off request, waits for that turn;
    a second turn without a hand-off fails `ignored-soft-stop`) → `clearing` (`i` in vim mode, `/clear` typed and
    read back, Enter; confirmed by a `SessionStart` record, source `clear`) → `continuing` (`DEFAULT_PROMPT`
    `/handoff c` typed, read back, sent) → `continued`.
@@ -131,7 +133,7 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
 <!-- names -->
 states `waiting`, `requesting`, `interrupting`, `clearing`, `continuing`, `continued`, `failed`, `cancelled`;
 reasons `ignored-soft-stop` (the session did not hand off after the typed request: often the guard denied the
-hand-off's own tool), `typing-mismatch` (the box did not read back what was typed: screen scraping, vim mode),
+hand-off's own tool, or the model answered "already done" for a hand-off the check did not accept), `typing-mismatch` (the box did not read back what was typed: screen scraping, vim mode),
 `clear-unconfirmed`, `prompt-unconfirmed` (no `SessionStart`/prompt seen in time), `box-not-ready`,
 `not-insert-mode`, `not-interrupted`, `agent-gone`, `session-ended`, `already-running`, `invalid-request`,
 `job-gone` (the job's process died), `attempts` (the sweep gave up), `tmux`, `io`

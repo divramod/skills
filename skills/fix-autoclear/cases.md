@@ -3,6 +3,24 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-03 · a hand-off written just before the soft stop did not count (hal2 wt 07)
+
+- **Signature**: job `failed` `ignored-soft-stop` (several jobs, the sweep's retries); the job log's `hand-off check:
+  HANDOFF.md not written since <request>` before and after the typed request; the transcript shows `Write
+  .../HANDOFF.md` seconds before the guard's denial (the hand-off's commit was the denied tool), then the model
+  answering "the hand-off is already done" to each typed request; the worktree clean, HEAD older than HANDOFF.md.
+- **Cause**: the job counted only a `HANDOFF.md` modified at or after the request; one written 3 s before the soft
+  stop was the session's real hand-off, and the model (rightly) would not write it again.
+- **Fix**: hal2 plan 0123 (`36941a5c`, `e41d6146`, `902c856f`) fix(agents): `handoff.rs` judges the facts (mtime,
+  newest commit of real work, uncommitted work) as `written` / `current` / `missing (why)`; the typed request asks to
+  write HANDOFF.md again even when it is current — tests `incident_07_tests::*`, `handoff::tests::*`.
+- **Recovered**: by the sweep's next retry with the fixed binary installed (the window is measured from the original
+  request, so a retry still accepts it), or by hand when the sweep had given up.
+- **Would have caught it sooner**: the check's log line naming why a HANDOFF.md did not count (now: `not written since
+  ... (<why>)`, `current (written ..., last work commit ...)`).
+- **Same reason, other cause**: 2026-09-30 (hal2 wt 00), the guard split a commit message. Check the transcript for a
+  denied hand-off tool before blaming the check.
+
 ## 2026-09-30 · a history-browsing box hid the typed /clear (hal2 wt 02)
 
 - **Signature**: job `failed` `typing-mismatch` or `clear-unconfirmed`; the job log's screen tail shows the input box
