@@ -37,6 +37,11 @@ def argv(top: str) -> list[str]:
     return [sys.executable, str(OWNER), "tick", "--repo", top]
 
 
+def env() -> dict[str, str]:
+    """What the tick needs from this shell: PATH (hal2's CLIs), OWNER_DIR when set."""
+    return {k: os.environ[k] for k in ("PATH", "OWNER_DIR") if k in os.environ}
+
+
 def plist(name: str, top: str, state: Path, cron: str) -> str:
     def s(x):
         return f"<string>{x}</string>"
@@ -46,7 +51,7 @@ def plist(name: str, top: str, state: Path, cron: str) -> str:
             f'<plist version="1.0"><dict><key>Label</key>{s(label(name))}'
             f'<key>ProgramArguments</key><array>{"".join(s(a) for a in argv(top))}</array>'
             f'<key>WorkingDirectory</key>{s(top)}'
-            f'<key>EnvironmentVariables</key><dict><key>PATH</key>{s(os.environ.get("PATH", ""))}</dict>'
+            f'<key>EnvironmentVariables</key><dict>{"".join(f"<key>{k}</key>{s(v)}" for k, v in env().items())}</dict>'
             f'<key>StartCalendarInterval</key><array>{times}</array>'
             f'<key>StandardOutPath</key>{s(state / "tick.log")}<key>StandardErrorPath</key>{s(state / "tick.log")}'
             '</dict></plist>\n')
@@ -55,7 +60,7 @@ def plist(name: str, top: str, state: Path, cron: str) -> str:
 def systemd(name: str, top: str, state: Path, cron: str) -> tuple[str, str]:
     mins = ",".join(f"{m:02d}" for m in minutes(cron))
     service = (f"[Unit]\nDescription=owner tick for {name}\n\n[Service]\nType=oneshot\nWorkingDirectory={top}\n"
-               f"Environment=PATH={os.environ.get('PATH', '')}\nExecStart={' '.join(argv(top))}\n"
+               + "".join(f"Environment={k}={v}\n" for k, v in env().items()) + f"ExecStart={' '.join(argv(top))}\n"
                f"StandardOutput=append:{state / 'tick.log'}\nStandardError=append:{state / 'tick.log'}\n")
     timer = (f"[Unit]\nDescription=owner tick for {name}\n\n[Timer]\nOnCalendar=*-*-* *:{mins}:00\n"
              "Persistent=false\n\n[Install]\nWantedBy=timers.target\n")

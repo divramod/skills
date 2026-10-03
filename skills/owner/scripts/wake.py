@@ -33,13 +33,13 @@ def wake_file(main: str) -> Path:
 
 
 def instructions(duty: str, kind: str) -> str:
-    """The one file the woken session reads for an item: the kind's own instructions (step 8 writes them), else
-    its duty's subskill, else SKILL.md."""
-    own = SKILL / "instructions" / f"{kind}.md"
-    if own.exists():
-        return str(own)
-    sub = SKILL / "subskills" / SUBSKILLS.get(duty, "-") / "SUBSKILL.md"
-    return str(sub if sub.exists() else SKILL / "SKILL.md")
+    """The one file the woken session reads for an item: `instructions/<duty>.<kind>.md`, else
+    `instructions/<duty>.md`, else its duty's subskill, else SKILL.md."""
+    for own in (SKILL / "instructions" / f"{duty}.{kind}.md", SKILL / "instructions" / f"{duty}.md",
+                SKILL / "subskills" / SUBSKILLS.get(duty, "-") / "SUBSKILL.md"):
+        if own.exists():
+            return str(own)
+    return str(SKILL / "SKILL.md")
 
 
 def items(out: dict) -> list[dict]:

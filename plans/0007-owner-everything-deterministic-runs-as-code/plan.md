@@ -35,7 +35,7 @@ starting "after the landing: ...".
 | 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; a live dry run names them (the first live delegation: step 9) | done |
 | 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted as a proposal for the user ([owner-role-hal2-tasks.md](owner-role-hal2-tasks.md)) | `due.py check` names each task's mode; tick runs hal2's proposed tasks with no wake (live checks) | done |
 | 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | done |
-| 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | |
+| 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | done |
 | 8 | Skill text split: SKILL.md down to start/stop/act/authority, `instructions/<kind>.md` per J kind, subskills only for the woken parts; README and description updated | SKILL.md under 8 KB; every J kind has its instruction file; check-plugins passes | |
 | 9 | Measure: one hour of ticks on hal2, model tokens of the owner session before vs after | the owner's transcript shows ≤ 1 wake per real J item; noted in the plan | |
 | 10 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
@@ -102,6 +102,16 @@ starting "after the landing: ...".
   wake --done <seq>`); the session is woken once per batch, a refused wake retried next tick, an unacted wake
   repeated after an hour. Each item names one instructions file: `instructions/<kind>.md` (step 8), else its duty's
   SUBSKILL.md, else SKILL.md. Failed delegations become `delegate-failed` wake items.
+- 2026-10-03 (step 7): the timer is `owner.py timer install|remove|status` (not `install-timer`): launchd agent
+  `local.owner.<repo>` with one StartCalendarInterval per minute of `loop_cron` (always hourly-shaped), a systemd
+  user timer on Linux; PATH and OWNER_DIR are taken from the installing shell; `timer.json` keeps the installed
+  cron and a tick reinstalls when OWNER-ROLE.md changed it; tick output to `tick.log` (rotated at 1 MB). Its
+  live check runs on a throwaway repository with its own OWNER_DIR, since hal2's owner still runs the Claude loop.
+- 2026-10-03 (step 8): instructions are per duty, not per kind (lead's kinds come from lead_scan and a task's kind
+  is its name): `instructions/<duty>.md` for mtm, lead, ci, watch, autoclear, task, frame and owner, an optional
+  `instructions/<duty>.<kind>.md` for a kind that needs its own; wake.py looks them up in that order.
+- 2026-10-03 (step 8): hal2's owner switches to timer mode (step 9's switch) before step 8 trims the subskills: the
+  Claude loop reads them until it is gone. Step 8 writes the instructions first, then the switch, then the trim.
 - 2026-10-03 (user): the empty-prompt check moves into hal2 as `hal2-cli-agents send --if-empty` (shot
   plugin-agents 29); once it lands, `deliver.py` calls it and drops its Python copy.
 
@@ -136,3 +146,9 @@ starting "after the landing: ...".
   slot), `tick.run` hands over after the delegations (a dry run lists `wake_items` only), `owner.py wake [--done]`,
   SKILL.md's `/owner act`. Live dry run in hal2's owner slot: 12 J items (long queue, a question, idle-in-plan,
   F6 judges), each with its instructions file; `owner_pane` finds the owner (%127). 72 tests pass.
+- Step 7 (2026-10-03): `timer.py`, `owner.py timer install|remove|status`, `follow_cron` after each tick, SKILL.md's
+  loop installs the timer. Live: a throwaway repository's owner slot (own OWNER_DIR), `launchctl list` named
+  `local.owner.ownertest`, launchd ran ticks at 11:47 and 11:52 (exit 0, quiet, no wake), then removed. 77 tests.
+- Step 8 (2026-10-03, part 1): `instructions/<duty>.md` for mtm, lead, ci, watch, autoclear, task, frame, owner (the
+  woken parts only). The user's go for the switch: the owner session hands off and deletes its cron job first, then
+  `owner.py timer install` in its slot; then the subskills are trimmed and SKILL.md split.

@@ -12,7 +12,7 @@ Every rule below serves that goal. When a situation isn't covered, decide by it.
 
 **Only the user starts the owner** (`/owner start`, typed by the user in the owner slot's session). No other
 session, skill, plan, hook or cron job starts it, restarts it or sends it `/owner`, and the owner never starts a
-second owner. Its own cron job and its `/handoff` + `/clear` + `/owner start` continuation are the user's start
+second owner. Its own timer (which types only `/owner act`) and its `/handoff` + `/clear` + `/owner start` continuation are the user's start
 carried on.
 
 The owner is the user's stand-in while they are away or busy. It runs in a dedicated Claude session in **its own
@@ -58,7 +58,7 @@ share the round, the state folder, the log, the delegation rules and the summary
 |---|---|
 | `/owner` | one round now, every duty |
 | `/owner start` | [start the loop](#the-loop) on the cron `due.py` derives from OWNER-ROLE.md, then one round |
-| `/owner stop` | delete this session's owner cron job; a queue pause the boss set is lifted |
+| `/owner stop` | `python3 $S/owner.py timer remove` (and an old owner cron job of this session); a queue pause the boss set is lifted |
 | `/owner mtm`, `/owner lead`, `/owner ci`, `/owner watch`, `/owner autoclear` | one round of that duty now, when OWNER-ROLE.md opts in to it |
 | `/owner act` | [handle what the tick woke you for](#act) (`wake.json`); typed by the tick, not the user |
 | `/owner check` | `python3 $S/due.py list`: OWNER-ROLE.md valid? Every opted-in duty and task with its cron, last run, due |
@@ -196,16 +196,14 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 3. `bash $S/check-prerequisites.sh`. On exit 1, run `bash $S/install-prerequisites.sh` once.
    Then `python3 $S/due.py check --json`. Exit 3 (no OWNER-ROLE.md) or 1 (invalid): tell the user what is missing,
    point to the template, and stop. **No loop starts.**
-4. Check with `CronList` that this session has no owner job yet. Then call `CronCreate` with:
-   - `cron`: `loop_cron` from `python3 $S/due.py check --json` (for example `7-59/15 * * * *`). When a round finds
-     that `loop_cron` has changed because OWNER-ROLE.md changed, delete the job and create it again;
-   - `prompt`: `/owner`;
-   - `recurring`: true.
-
-   The owner replaces sanity-watch's own loop: when this session also holds a `/sanity-watch` cron job, delete it.
-5. Tell the user that the loop runs while this session is open and idle, and that it expires after 7 days (run
-   `/owner start` again then).
-6. Run one round.
+4. Install the external timer: `python3 $S/owner.py timer install`. It runs `owner.py tick` at `loop_cron`
+   (launchd agent `local.owner.<repo>` on macOS, a systemd user timer on Linux), switches the mode to `timer` and
+   follows a changed `loop_cron` on its own. The tick does every rule-based step as code and wakes this session
+   with `/owner act` only for judgment ([Act](#act)); a quiet round costs no model call. When this session still
+   holds an owner or `/sanity-watch` cron job from before (`CronList`), delete it: the two never run together.
+5. Tell the user that the timer runs whether this session is open or not, that it wakes this session only when
+   something needs judgment, and that `/owner stop` removes it. `python3 $S/owner.py timer status` shows it.
+6. Run one tick now: `python3 $S/owner.py tick`.
 
 ## Act
 

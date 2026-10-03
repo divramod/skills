@@ -50,7 +50,7 @@ class Wake(Repo):
         self.assertEqual(len(self.sent), 1)
         items = wake.read(self.main)["items"]
         self.assertEqual([(i["seq"], i["kind"]) for i in items], [(1, "question"), (2, "role-invalid")])
-        self.assertTrue(items[0]["instructions"].endswith("development-lead/SUBSKILL.md"))
+        self.assertEqual(items[0]["instructions"], wake.instructions("lead", "question"))
         self.assertEqual(items[0]["evidence"], {"question": "07 asks which API to keep"})
         self.assertEqual(wake.done(self.main, 1), 1)
         self.over({}, NOW + dt.timedelta(minutes=30))
@@ -76,7 +76,13 @@ class Wake(Repo):
         items = wake.read(self.main)["items"]
         self.assertEqual([(i["do"], i["kind"]) for i in items], [("relay", "front"), ("wake", "delegate-failed")])
         self.assertEqual(items[1]["evidence"]["error"], "create.py failed")
-        self.assertTrue(items[1]["instructions"].endswith("owner/SKILL.md"))
+        self.assertEqual(items[1]["instructions"], wake.instructions("owner", "delegate-failed"))
+
+
+class Instructions(unittest.TestCase):
+    def test_every_duty_has_its_instructions(self):
+        for duty in ("mtm", "lead", "ci", "watch", "autoclear", "task", "frame", "owner"):
+            self.assertTrue(wake.instructions(duty, "any").endswith(f"instructions/{duty}.md"), duty)
 
 
 class Ticks(Repo):
