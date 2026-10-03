@@ -1,6 +1,6 @@
 ---
 name: farmer
-description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, sanity-watch, fix-autoclear, FARMER-ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
+description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, sanity-watch, fix-autoclear, merge trains, FARMER-ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
 ---
 
 # farmer
@@ -29,6 +29,7 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 | `ci` | `duties.plan_ci` | [instructions/ci.md](instructions/ci.md) | |
 | `watch` | `duties.plan_watch` (sanity-watch's scan) | [instructions/watch.md](instructions/watch.md) | sanity-watch's |
 | `autoclear` | `duties.plan_autoclear` (fix-autoclear's doctor) | [instructions/autoclear.md](instructions/autoclear.md) | fix-autoclear's |
+| `trains` | `trains.py` (merge trains: finished, non-overlapping waiters land as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
 | tasks | `tasks.py` (machine form) | [instructions/task.md](instructions/task.md) | |
 
 `S=<skill-dir>/scripts`, `K=<skills repo>/skills`. **State** in `~/skills/farmer/<repo>/` (`FARMER_DIR` overrides):

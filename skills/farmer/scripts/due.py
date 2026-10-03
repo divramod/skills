@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
-DUTIES = ("mtm", "lead", "ci", "watch", "autoclear")
+DUTIES = ("mtm", "lead", "ci", "watch", "autoclear", "trains")
 NOTIFY = ("every-round", "hourly", "daily", "never")
 MIN_TICK = 5
 LOOKBACK = dt.timedelta(days=8)

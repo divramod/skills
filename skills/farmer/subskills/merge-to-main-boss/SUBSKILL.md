@@ -40,7 +40,8 @@ all slots trip on) gets a servant: [Delegate a fix](../../reference.md#delegate-
 
 ## Merge trains
 
-Several finished branches land as one. One landing runs the gates once instead of once per branch.
+Several finished branches land as one. One landing runs the gates once instead of once per branch. The duty
+`trains` does this as code ([merge-train](../merge-train/SUBSKILL.md)); by hand it goes like this:
 
 1. Candidates are waiting or finished slots whose plans are done and whose diffs do not overlap much
    (`git diff --stat origin/<default>...<branch>`). Gates that would rebuild broadly anyway, like a workspace-wide
@@ -50,7 +51,7 @@ Several finished branches land as one. One landing runs the gates once instead o
 3. Tell each **passenger**: "your branch rides in <carrier>'s landing; wait. After it lands run /mfm; your
    `/mtm` then lands what is left (plan steps checked after the landing), probably nothing". Its ticket stays,
    because its follow-up landing is quick.
-4. At most 3 branches per train. A train whose landing fails on a passenger's change splits again: the carrier
+4. At most 4 branches per train. A train whose landing fails on a passenger's change splits again: the carrier
    resets its merge with `git reset --hard ORIG_HEAD`, but only before it lands.
 
 ## Review and okays

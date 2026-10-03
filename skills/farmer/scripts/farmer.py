@@ -46,6 +46,7 @@ import duties
 import tasks
 import tick
 import timer
+import trains
 import wake
 
 HERE = Path(__file__).resolve().parent
@@ -57,6 +58,7 @@ HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned 
     "duty:ci": duties.plan_ci,
     "duty:watch": duties.plan_watch,
     "duty:autoclear": duties.plan_autoclear,
+    "duty:trains": trains.handler,
     "task:*": tasks.plan_task,
 }
 

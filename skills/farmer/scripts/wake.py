@@ -24,7 +24,7 @@ import mtm_scan
 SKILL = Path(__file__).resolve().parents[1]
 KINDS = ("wake", "relay", "notify")
 SUBSKILLS = {"mtm": "merge-to-main-boss", "lead": "development-lead", "ci": "ci", "watch": "sanity-watch",
-             "autoclear": "fix-autoclear"}
+             "autoclear": "fix-autoclear", "trains": "merge-train"}
 ACT = "/farmer act"
 CLEAR_AT = 10  # context percent above which a wake starts with /clear: a call re-reads the whole context
 CLEARED = 60  # seconds to wait for the cleared session
