@@ -36,7 +36,7 @@ starting "after the landing: ...".
 | 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted as a proposal for the user ([owner-role-hal2-tasks.md](owner-role-hal2-tasks.md)) | `due.py check` names each task's mode; tick runs hal2's proposed tasks with no wake (live checks) | done |
 | 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | done |
 | 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | done |
-| 8 | Skill text split: SKILL.md down to start/stop/act/authority, `instructions/<kind>.md` per J kind, subskills only for the woken parts; README and description updated | SKILL.md under 8 KB; every J kind has its instruction file; check-plugins passes | |
+| 8 | Skill text split: SKILL.md down to start/stop/act/authority, `instructions/<kind>.md` per J kind, subskills only for the woken parts; README and description updated | SKILL.md under 8 KB; every J kind has its instruction file; check-plugins passes | done |
 | 9 | Measure: one hour of ticks on hal2, model tokens of the owner session before vs after | the owner's transcript shows ≤ 1 wake per real J item; noted in the plan | |
 | 10 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
@@ -152,3 +152,9 @@ starting "after the landing: ...".
 - Step 8 (2026-10-03, part 1): `instructions/<duty>.md` for mtm, lead, ci, watch, autoclear, task, frame, owner (the
   woken parts only). The user's go for the switch: the owner session hands off and deletes its cron job first, then
   `owner.py timer install` in its slot; then the subskills are trimmed and SKILL.md split.
+- Step 8 (2026-10-03, part 2): hal2's owner switched to timer mode at 12:30 (the owner session handed off and
+  deleted its cron first; slot 11's open `ask` already held its orphan restart, an `ask` recorded for 04). SKILL.md
+  8048 bytes (start, stop, act, authority, calls), `reference.md` (OWNER-ROLE.md, owner branch, log, delegation by
+  hand, decisions, moved verbatim), the subskills reduced to pointers, merge-to-main-boss's to the procedures the
+  woken session links; README. First live tick 12:38: 14 items, one wake, the owner handled them in ~1 min; it found
+  the owner's own slot planned as `lead/asks` (fixed: da473c5).
