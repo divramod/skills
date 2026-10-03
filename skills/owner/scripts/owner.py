@@ -17,11 +17,15 @@
   owner.py wake [--done <seq>] [--repo <dir>] [--json]
       what the tick handed to the owner session (wake.json: items that need judgment, relays, notices, failed
       delegations, each with the file to read for it); --done drops the items up to <seq> once handled
+  owner.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]
+      the external timer that runs `tick` at the loop's cron (launchd on macOS, a systemd user timer on Linux;
+      timer.py); install switches the mode to `timer`, remove back to `claude`
   owner.py mode [claude|timer] [--repo <dir>]
       who runs the rounds: the owner's Claude session (`claude`, the default) or the external
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
 
-State: ~/skills/owner/<repo>/ (OWNER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl, wake.json.
+State: ~/skills/owner/<repo>/ (OWNER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl, wake.json,
+timer.json, tick.log.
 Exit 0 ok (also: another tick holds the lock, `busy`), 1 OWNER-ROLE.md invalid, 2 a tool missing,
 3 no OWNER-ROLE.md, 4 not the owner slot, a slot holding other work, or not in timer mode.
 """
@@ -41,6 +45,7 @@ import due
 import duties
 import tasks
 import tick
+import timer
 import wake
 
 HERE = Path(__file__).resolve().parent
@@ -122,11 +127,47 @@ def run_tick(repo: str, dry: bool, as_json: bool) -> int:
         except BlockingIOError:
             print("busy: another tick runs")
             return 0
+        timer.rotate(state(repo))
         r = tick.run(repo, dry, HANDLERS)
+        if not dry and not r.get("problem"):
+            follow_cron(repo)
     print(json.dumps(r, indent=1, default=str) if as_json else "", end="")
     if not as_json:
         print_round(r)
     return 4 if r.get("problem") else 0
+
+
+def follow_cron(repo: str) -> None:
+    """Reinstall the timer when OWNER-ROLE.md changed the loop's cron."""
+    code, check = start_check(repo)
+    st = state(repo)
+    if code == 0 and timer.installed(st).get("cron") not in (None, check["loop_cron"]):
+        timer.install(due.repo_name(repo), tick.git(repo, "rev-parse", "--show-toplevel"), st, check["loop_cron"])
+        print(f"timer: loop cron now {check['loop_cron']}")
+
+
+def run_timer(args) -> int:
+    st, name = state(args.repo), due.repo_name(args.repo)
+    if args.action == "status":
+        r = timer.status(name, st) | {"mode": mode(args.repo)}
+        print(json.dumps(r, indent=1) if args.json else
+              f"{r['label']}: {'loaded' if r['loaded'] else 'not loaded'}, cron {r.get('cron', '-')}, mode {r['mode']}")
+        return 0
+    if args.action == "remove":
+        cmds = timer.remove(name, st, args.dry_run)
+    else:
+        code, check = start_check(args.repo)
+        if code:
+            print("\n".join(f"- {x}" for x in check["problems"]), file=sys.stderr)
+            return code
+        top = tick.git(args.repo, "rev-parse", "--show-toplevel")
+        try:
+            cmds = timer.install(name, top, st, check["loop_cron"], args.dry_run)
+        except (RuntimeError, ValueError) as e:
+            print(f"owner.py: {e}", file=sys.stderr)
+            return 2
+    print("\n".join(" ".join(c) for c in cmds) if args.dry_run else f"{args.action}: mode {mode(args.repo)}")
+    return 0
 
 
 def run_wake(args) -> int:
@@ -159,7 +200,7 @@ def run_delegate(args) -> int:
     return 1 if result["state"] == "error" else 0
 
 
-def main(argv: list[str]) -> int:
+def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     sc = sub.add_parser("start-check")
@@ -181,10 +222,19 @@ def main(argv: list[str]) -> int:
     w.add_argument("--done", type=int)
     w.add_argument("--repo", default=os.getcwd())
     w.add_argument("--json", action="store_true")
+    tm = sub.add_parser("timer")
+    tm.add_argument("action", choices=("install", "remove", "status"))
+    tm.add_argument("--repo", default=os.getcwd())
+    tm.add_argument("--dry-run", action="store_true")
+    tm.add_argument("--json", action="store_true")
     m = sub.add_parser("mode")
     m.add_argument("set", nargs="?", choices=MODES)
     m.add_argument("--repo", default=os.getcwd())
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv: list[str]) -> int:
+    args = parser().parse_args(argv)
 
     if args.cmd == "start-check":
         code, result = start_check(args.repo)
@@ -206,6 +256,8 @@ def main(argv: list[str]) -> int:
         return run_delegate(args)
     if args.cmd == "wake":
         return run_wake(args)
+    if args.cmd == "timer":
+        return run_timer(args)
     return run_tick(args.repo, args.dry_run, args.json)
 
 
