@@ -198,6 +198,13 @@ def last_runs(repo: str) -> dict[str, dt.datetime]:
     return out
 
 
+def record_run(repo: str, name: str, at: dt.datetime | None = None) -> None:
+    d = DATA / repo_name(repo)
+    d.mkdir(parents=True, exist_ok=True)
+    with (d / "runs.jsonl").open("a") as f:
+        f.write(json.dumps({"at": (at or dt.datetime.now()).isoformat(timespec="seconds"), "name": name}) + "\n")
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -211,10 +218,7 @@ def main(argv: list[str]) -> int:
     args = p.parse_args(argv)
 
     if args.cmd == "ran":
-        d = DATA / repo_name(args.repo)
-        d.mkdir(parents=True, exist_ok=True)
-        with (d / "runs.jsonl").open("a") as f:
-            f.write(json.dumps({"at": dt.datetime.now().isoformat(timespec="seconds"), "name": args.name}) + "\n")
+        record_run(args.repo, args.name)
         return 0
     role = Path(git_out(["rev-parse", "--show-toplevel"], args.repo) or args.repo) / "OWNER-ROLE.md"
     if not role.exists():
