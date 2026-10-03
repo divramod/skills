@@ -2,8 +2,8 @@
 
 `plan(snap, ctx)` turns mtm_scan's snapshot into planned actions (see tick.py): what a rule settles is done by code,
 messages are templates, and what needs judgment (a merge train, what an idle slot waits for, an unclear flaky test,
-a long landing) becomes a `wake` item with the finding as evidence. A slot that waits for the user (an `ask` in the
-log with no `answered` after it) gets no message, wake or new session from the tick. Every action carries a `key`; a key already in
+a long landing) becomes a `wake` item with the finding as evidence. Keys and windows go to tick.fresh, which drops
+what an earlier round did and what concerns a slot waiting for the user. Every action carries a `key`; a key already in
 the owner's log within its window is not done again, so a quiet queue gives a quiet round.
 """
 
@@ -48,40 +48,20 @@ def last(log: list[dict], key: str) -> dt.datetime | None:
     return max(hits) if hits else None
 
 
-def waiting_for_user(log: list[dict]) -> set[str]:
-    """Slots with an open question to the user: their last `ask`/`answered` entry is an `ask`."""
-    state: dict[str, str] = {}
-    for e in log:
-        if e.get("kind") in ("ask", "answered"):
-            for slot in str(e.get("slot", "")).split(","):
-                state[slot.strip()] = e["kind"]
-    return {s for s, k in state.items() if k == "ask"}
-
-
-def recent(log: list[dict], key: str, now: dt.datetime, window: dt.timedelta) -> bool:
-    t = last(log, key)
-    return t is not None and now - t < window
-
-
 class Planner:
     def __init__(self, snap: dict, ctx: dict):
         self.snap, self.ctx, self.now, self.log = snap, ctx, ctx["now"], ctx["log"]
         self.wt = {w["slot"]: w for w in snap["worktrees"]}
         self.queue = snap["queue"]
-        self.asked = waiting_for_user(self.log)
         self.out: list[dict] = []
 
-    def add(self, kind: str, do: str, slot: str = "-", window: dt.timedelta | None = None, **fields) -> bool:
-        if slot in self.asked and (do in ("send", "wake") or kind == "orphan"):
-            return False
-        key = fields.get("key")
-        if key and window and recent(self.log, key, self.now, window):
-            return False
+    def add(self, kind: str, do: str, slot: str = "-", window: dt.timedelta | None = None, **fields) -> None:
+        if window:
+            fields["window"] = window.total_seconds()
         self.out.append(act("mtm", kind, do, slot, **fields))
-        return True
 
-    def tell(self, slot: str, kind: str, text: str, key: str, window: dt.timedelta = REWAKE) -> bool:
-        return self.add(kind, "send", slot, window, pane=self.wt.get(slot, {}).get("pane"), text=text, key=key)
+    def tell(self, slot: str, kind: str, text: str, key: str, window: dt.timedelta = REWAKE, **fields) -> None:
+        self.add(kind, "send", slot, window, pane=self.wt.get(slot, {}).get("pane"), text=text, key=key, **fields)
 
     def ticket(self, slot: str) -> dict:
         return next((t for t in self.queue if t["slot"] == slot), {})
@@ -93,7 +73,8 @@ class Planner:
             self.add("priority-done", "run", slot, argv=[sys.executable, str(HERE / "mtm_scan.py"), "priority",
                                                           "--clear", "--repo", self.ctx["main"]],
                      text=f"priority {slot} landed: cleared")
-            self.add("priority-done", "notify", slot, text=f"owner: your priority slot {slot} has landed")
+            self.add("priority-done", "notify", slot, text=f"owner: your priority slot {slot} has landed",
+                     key=f"priority-done:{slot}", window=dt.timedelta(hours=1))
             return
         waiting = [t["slot"] for t in self.queue if t["state"] == "waiting"]
         if slot in waiting and waiting[0] != slot:
@@ -113,14 +94,15 @@ class Planner:
             return
         if woken is not None and self.now - woken < SECOND_LOOK:
             return
-        if self.add("release", "run", slot, dt.timedelta(days=7), key=f"release:{slot}:{seq}",
-                    argv=["hal2-cli-git", "worktree", "release", slot, "--json"],
-                    text=f"released the queue held by {slot}",
-                    why="no session" if woken is None else "did not move after a wake"):
-            self.tell(slot, "released", TEXT["released"], f"released:{slot}:{seq}", dt.timedelta(days=7))
-            for t in self.queue:
-                if t["state"] == "waiting":
-                    self.tell(t["slot"], "moves", TEXT["moves"].format(slot=slot), f"moves:{slot}:{seq}:{t['slot']}")
+        release = f"release:{slot}:{seq}"
+        self.add("release", "run", slot, dt.timedelta(days=7), key=release,
+                 argv=["hal2-cli-git", "worktree", "release", slot, "--json"], text=f"released the queue held by {slot}",
+                 why="no session" if woken is None else "did not move after a wake")
+        self.tell(slot, "released", TEXT["released"], f"released:{slot}:{seq}", dt.timedelta(days=7), after=release)
+        for t in self.queue:
+            if t["state"] == "waiting":
+                self.tell(t["slot"], "moves", TEXT["moves"].format(slot=slot), f"moves:{slot}:{seq}:{t['slot']}",
+                          after=release)
 
     def load_high(self, f: dict) -> None:
         landing = self.ticket(f["slot"]).get("landing")

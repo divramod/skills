@@ -27,6 +27,7 @@ from pathlib import Path
 
 import boss
 import due
+import duties
 import tick
 
 HERE = Path(__file__).resolve().parent
@@ -34,6 +35,10 @@ TOOLS = ("git", "hal2-cli-git", "hal2-cli-hooks", "hal2-cli-agents")
 MODES = ("claude", "timer")
 HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned actions
     "duty:mtm": boss.handler,
+    "duty:lead": duties.plan_lead,
+    "duty:ci": duties.plan_ci,
+    "duty:watch": duties.plan_watch,
+    "duty:autoclear": duties.plan_autoclear,
 }
 
 

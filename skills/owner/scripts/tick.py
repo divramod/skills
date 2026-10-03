@@ -16,7 +16,9 @@ with `do` one of
   wake    text: an item that needs the model (step 6 hands these to the woken session)
   notify  text: a notice for the user (the woken session pushes them, batched)
 
-An action may carry a `key`: the log keeps it, and planners skip what an earlier round already did.
+An action may carry a `key` (the log keeps it) and a `window` in seconds (default a week): `fresh` drops an action
+whose key was logged within its window, and an action `after` a dropped key with it. Messages and wakes for a slot
+that waits for the user (an `ask` in the log with no `answered` after it) are dropped too.
 
 Every executed action except `ran` goes into the owner's log with `"by": "tick"`.
 """
@@ -116,6 +118,58 @@ def read_log(main: str) -> list[dict]:
     return [json.loads(line) for line in f.read_text().splitlines() if line.strip()] if f.exists() else []
 
 
+WEEK = 7 * 24 * 3600
+
+
+def waiting_for_user(log: list[dict]) -> set[str]:
+    """Slots with an open question to the user: their last `ask`/`answered` log entry is an `ask`."""
+    state: dict[str, str] = {}
+    for e in log:
+        if e.get("kind") in ("ask", "answered"):
+            for slot in str(e.get("slot", "")).split(","):
+                state[slot.strip()] = e["kind"]
+    return {s for s, k in state.items() if k == "ask"}
+
+
+def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
+    """The actions an earlier round has not done yet (see the module doc)."""
+    seen: dict[str, dt.datetime] = {}
+    for e in log:
+        if e.get("key"):
+            t = dt.datetime.fromisoformat(e["at"])
+            seen[e["key"]] = max(t, seen.get(e["key"], t))
+    asked, dropped, out = waiting_for_user(log), set(), []
+    for a in actions:
+        key = a.get("key")
+        old = key and key in seen and (now - seen[key]).total_seconds() < a.get("window", WEEK)
+        held = a["slot"] in asked and (a["do"] in ("send", "relay", "wake") or a["kind"] == "orphan")
+        if old or held or a.get("after") in dropped:
+            dropped.add(key)
+            continue
+        out.append(a)
+    return out
+
+
+def context(top: str, main: str, items: dict, now: dt.datetime, dry: bool) -> dict:
+    """What every duty's planner reads: the log, the opted-in duties, the agents by pane, each slot's pane and the
+    slots whose landing runs or holds the queue (never touched)."""
+    agents = deliver.cli("list", "--json")[1]
+    try:
+        data = json.loads(agents)
+    except json.JSONDecodeError:
+        data = []
+    rows = data.get("list", []) if isinstance(data, dict) else data
+    queue = mtm_scan.run_json(["hal2-cli-git", "worktree", "queue", "--json"], main) or {}
+    landing = {t.get("slot") for t in queue.get("queue", []) if t.get("state") == "active"
+               or (t.get("hold") or {}).get("reason") == "reserved"}
+    return {"top": top, "main": main, "now": now, "dry": dry, "log": read_log(main),
+            "duties": {n.split(":", 1)[1] for n in items if n.startswith("duty:")},
+            "agents_by_pane": {a.get("pane_id"): a for a in rows},
+            "panes": {a["slot"]: a.get("pane_id") for a in rows if a.get("slot") and a.get("checkout")
+                      and Path(a["checkout"]).parent == Path.home() / ".hal/git/worktree" / Path(main).name},
+            "landing": landing}
+
+
 def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bool = True) -> dict:
     """Plan everything after the frame's git work: the due items and their actions."""
     items, settings, problems = due_items(top, now)
@@ -123,8 +177,12 @@ def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bo
         return {"due": [], "settings": settings, "actions": [act("frame", "role-invalid", "notify",
                                                                  text="; ".join(problems))], "stop": True}
     main = mtm_scan.main_checkout(top)
-    ctx = {"top": top, "main": main, "now": now or dt.datetime.now(), "dry": dry, "log": read_log(main)}
-    actions = [a for item in items for a in item_actions(item, handlers, ctx)]
+    ctx = context(top, main, due.schedule((Path(top) / ROLE).read_text())[0], now or dt.datetime.now(), dry)
+    actions = []
+    for item in items:
+        planned = fresh(item_actions(item, handlers, ctx), ctx["log"], ctx["now"])
+        ctx.setdefault("told", set()).update(a["slot"] for a in planned if a["do"] in ("send", "relay"))
+        actions += planned
     return {"due": items, "settings": settings, "actions": actions, "stop": False}
 
 
@@ -137,7 +195,8 @@ def execute(a: dict, top: str, main: str, out: dict) -> None:
         code, text = sh(a["argv"], top)
         a["exit"], a["output"] = code, text[-2000:]
     if a["do"] == "send":
-        refused = deliver.send(a["pane"], a["text"]) if a.get("pane") else "no session"
+        states = set(a.get("states", ())) | deliver.READY
+        refused = deliver.send(a["pane"], a["text"], states) if a.get("pane") else "no session"
         if refused:
             a.update(do="relay", why=f"{a.get('why', '')} not typed: {refused}".strip())
     if a["do"] in ("wake", "notify", "relay", "delegate"):

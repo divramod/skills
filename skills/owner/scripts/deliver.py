@@ -47,12 +47,12 @@ def agent(pane: str) -> dict | None:
     return next((a for a in rows if a.get("pane_id") == pane), None)
 
 
-def ready(pane: str) -> str | None:
-    """None when a message may be typed into `pane` now, else why not."""
+def ready(pane: str, states: set[str] = READY) -> str | None:
+    """None when a message may be typed into `pane` now (its agent in one of `states`, no draft), else why not."""
     a = agent(pane)
     if a is None:
         return "no agent in that pane"
-    if a.get("state") not in READY:
+    if a.get("state") not in states:
         return f"agent is {a.get('state')}"
     code, screen = cli("capture", pane, "--styled")
     if code:
@@ -63,9 +63,9 @@ def ready(pane: str) -> str | None:
     return f"a draft in the prompt: {text[:40]!r}" if text else None
 
 
-def send(pane: str, text: str) -> str | None:
+def send(pane: str, text: str, states: set[str] = READY) -> str | None:
     """Type `text` and Enter into the agent at `pane`. None when sent, else why it was not."""
-    why = ready(pane)
+    why = ready(pane, states)
     if why:
         return why
     if cli("send", pane, text, "--paste")[0] or cli("send", pane, "enter", "--key")[0]:

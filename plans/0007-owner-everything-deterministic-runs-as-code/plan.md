@@ -31,8 +31,8 @@ starting "after the landing: ...".
 |---|---|---|---|
 | 1 | `owner.py` skeleton: `start-check` and `tick` running the round frame (stay current, the OWNER-ROLE.md edit, due, a log line per action, the summary from the log), plus `--dry-run` | `python3 skills/owner/scripts/owner.py tick --dry-run` in the owner slot prints the due items and the planned actions; unit tests pass | done |
 | 2 | The D/T actions of merge-to-main-boss in `tick` (priority front, wake → release rule, waiter-gone, load-high pause/go, flaky ledger, work-without-agent with HANDOFF), messages through `hal2-cli-agents send` to idle sessions only | tests per action on fixtures; a dry run on the live queue names the right actions | done |
-| 3 | The D/T actions of development-lead, ci (transient-rerun regex, runners, hung runs, slot-red), watch (sanity-watch `scan.py resume`), autoclear (known continuations) | tests per action; dry runs on live data | next |
-| 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; one live delegation in hal2 logged | |
+| 3 | The D/T actions of development-lead, ci (transient-rerun regex, runners, hung runs, slot-red), watch (sanity-watch `scan.py resume`), autoclear (known continuations) | tests per action; dry runs on live data | done |
+| 4 | Delegation as code: `owner.py delegate --brief`, briefs from templates, limit, free/new slot, prompt, log; `follow-up` (landed → stop idle worker) | a fixture test spawns nothing but prints the exact create.py/free.py calls; one live delegation in hal2 logged | next |
 | 5 | OWNER-ROLE.md tasks with machine-readable Check/Act (a command in backticks runs; `notify`, `delegate`, prose = wake); hal2's four tasks converted (in the owner branch) | `due.py check` validates the new form; tick runs hal2's tasks with no wake | |
 | 6 | `needs_model` + wake: tick writes `~/skills/owner/<repo>/wake.json` (items, evidence, instruction paths) and wakes the owner session (`hal2-cli-agents send <pane> "/owner act"`) only when it is non-empty; `/owner act` reads only that | a quiet tick adds no turn to the owner's transcript; an injected J item wakes it once | |
 | 7 | External timer: `owner.py install-timer` (launchd on macOS, systemd user timer on Linux) at `loop_cron`; `/owner start` installs it, `/owner stop` removes it; Claude cron no longer used | `launchctl list` names the owner's timer; ticks appear in the log every interval with the session idle | |
@@ -78,6 +78,10 @@ starting "after the landing: ...".
   Proposal for hal2: `hal2-cli-agents send --if-empty`, so the rule lives once.
 - 2026-10-03 (step 2): a slot with an open `ask` in the owner's log (no `answered` after it) gets no message, wake
   or new session from the tick (the live owner held slot 11's benchmarks for the user's go).
+- 2026-10-03 (step 3): dedupe and the waiting-for-user rule live once, in `tick.fresh` (an action's `key` +
+  `window`, companions `after` a key); planners only plan. Kinds that stay J for now, being rare and needing a look
+  at a host or a log: ci `queued-long`/`running-long`, watch `restore` (F8 orphans can be days old) and `judge`, the
+  boss's `active-long`.
 
 ## Notes
 - Step 1 (2026-10-03): `owner.py start-check|tick [--dry-run]|mode`, `tick.py` (the frame: planned actions as data,
@@ -90,3 +94,10 @@ starting "after the landing: ...".
   flaky under load → `delegate`, else wake, orphan with HANDOFF.md → `worktree run --prompt "/handoff c"`; active-long,
   work-not-queued, long-queue and paused wake at most hourly), `deliver.py`, `snapshot(fetch=False)` for dry runs.
   `active-long` stays J for now (reading the landing's step is step 3's kind of work).
+- Step 3 (2026-10-03): `duties.py` (lead: no-plan, context-high, a stop announcing its next step → continue, failed
+  without the watch duty; ci: a transient main-red reruns once (regex over `--log-failed`), a real one is
+  delegated, slot-red told; watch: sanity-watch's `find_incidents` imported (its CLI writes its heartbeat), resume
+  typed into the `failed` session, never into a landing, count/escalate/handover recorded; autoclear:
+  `evidence.py doctor --json`/`doctor_items`, the same resting session continued with clear-and-continue, one
+  delegation per reason), `tick.context` (agents, panes, landings once per round). The live dry run planned only
+  wakes for real questions and waits.

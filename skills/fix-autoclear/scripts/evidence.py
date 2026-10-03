@@ -10,7 +10,7 @@
       the same incident as files, to turn into hal2 test fixtures: screen.txt,
       agent.json, job.json, job.log, marker-<session>.json, transcript-<session>.txt,
       guard.log, sweep.log (the pane's lines), README.md (what each file is)
-  evidence.py doctor [--hours 24]
+  evidence.py doctor [--hours 24] [--json]
       every pane's failed or stuck autoclear of the last hours (nobody reported)
   evidence.py selfcheck [--repo <hal2 checkout>]
       whether the insider facts in SKILL.md still match hal2's code
@@ -315,10 +315,12 @@ def capture(args):
     return 0
 
 
-def doctor(args):
-    since = time.time() - args.hours * 3600
-    problems = 0
+def doctor_items(hours):
+    """Every pane's failed or stuck autoclear of the last `hours` (nobody reported), as dicts:
+    {what: job|marker, pane, session, who, state, reason, message, attempts, gave_up, at}."""
+    since = time.time() - hours * 3600
     by_pane = {a.get("pane_id"): a for a in agents()}
+    out = []
 
     def who(pane, session):
         # The session's own folder first: the pane may host another agent now.
@@ -333,16 +335,29 @@ def doctor(args):
         if job.get("state") in ("failed",) or (
             job.get("state") in ("waiting", "requesting") and time.time() - record.stat().st_mtime > 1800
         ):
-            problems += 1
-            print(f"{who(job.get('pane'), job.get('old_session'))}: {job.get('state')} {job.get('reason') or ''} "
-                  f"{job.get('message') or ''} "
-                  f"({stamp(job.get('updated_at'))})")
+            out.append({"what": "job", "pane": job.get("pane"), "session": job.get("old_session"),
+                        "who": who(job.get("pane"), job.get("old_session")), "state": job.get("state"),
+                        "reason": job.get("reason") or "", "message": job.get("message") or "",
+                        "at": stamp(job.get("updated_at"))})
     for path, m in markers():
         if path.stat().st_mtime >= since and (m.get("gave_up") or m.get("attempts", 0) >= 2):
-            problems += 1
-            print(f"{who(m.get('pane'), m['session_id'])}: session {m['session_id']} attempts {m.get('attempts', 0)}"
-                  f"{' gave up' if m.get('gave_up') else ''}")
-    print(f"{problems} problem(s) in the last {args.hours} h")
+            out.append({"what": "marker", "pane": m.get("pane"), "session": m["session_id"],
+                        "who": who(m.get("pane"), m["session_id"]), "attempts": m.get("attempts", 0),
+                        "gave_up": bool(m.get("gave_up"))})
+    return out
+
+
+def doctor(args):
+    items = doctor_items(args.hours)
+    if args.json:
+        print(json.dumps({"hours": args.hours, "problems": items}, indent=1))
+        return
+    for i in items:
+        if i["what"] == "job":
+            print(f"{i['who']}: {i['state']} {i['reason']} {i['message']} ({i['at']})")
+        else:
+            print(f"{i['who']}: session {i['session']} attempts {i['attempts']}{' gave up' if i['gave_up'] else ''}")
+    print(f"{len(items)} problem(s) in the last {args.hours} h")
 
 
 def selfcheck(args):
@@ -388,6 +403,7 @@ def main():
     k.add_argument("--hours", type=float, default=3)
     d = sub.add_parser("doctor")
     d.add_argument("--hours", type=float, default=24)
+    d.add_argument("--json", action="store_true")
     c = sub.add_parser("selfcheck")
     c.add_argument("--repo", default="~/a/hal2")
     args = parser.parse_args()

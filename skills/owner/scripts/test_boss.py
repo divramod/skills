@@ -26,7 +26,8 @@ def snap(findings, queue=(), worktrees=(), landings=(), priority=None):
 
 
 def plan(s, log=(), main="/x/hal2"):
-    return [(a["do"], a["kind"], a["slot"]) for a in boss.plan(s, {"now": NOW, "log": list(log), "main": main})]
+    planned = boss.plan(s, {"now": NOW, "log": list(log), "main": main})
+    return [(a["do"], a["kind"], a["slot"]) for a in tick.fresh(planned, list(log), NOW)]
 
 
 HELD = {"kind": "held-idle", "slot": "04", "why": "held", "failure": "test-unit hal2-macos"}

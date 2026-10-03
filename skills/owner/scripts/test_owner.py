@@ -54,8 +54,10 @@ class Repo(unittest.TestCase):
         self.slot = self.tmp / "wt" / "owner"
         git(self.main, "worktree", "add", "-q", "-b", "owner", str(self.slot))
         self.data = self.tmp / "state"
-        for m in (due, mtm_scan):
-            p = mock.patch.object(m, "DATA", self.data)
+        patches = [mock.patch.object(m, "DATA", self.data) for m in (due, mtm_scan)]
+        patches += [mock.patch.object(tick.deliver, "cli", return_value=(0, "[]")),
+                    mock.patch.object(mtm_scan, "run_json", return_value=None)]
+        for p in patches:
             p.start()
             self.addCleanup(p.stop)
 
