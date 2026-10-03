@@ -192,7 +192,7 @@ def run_delegate(args) -> int:
                              / tick.ROLE).read_text())[1] if (Path(args.repo) / tick.ROLE).exists() else {}
     a = tick.act("farmer", "brief", "delegate", key=f"brief:{delegation.slug(args.title)}", text=args.title,
                  brief={"brief_file": str(Path(args.brief).resolve())})
-    result = delegation.delegate(a, main_dir, int(settings.get("servant_limit") or 1), args.dry_run,
+    result = delegation.delegate(a, main_dir, delegation.parse_limit(settings.get("servant_limit")), args.dry_run,
                                  datetime.datetime.now())
     print(json.dumps(result, indent=1) if args.json else
           f"{result['state']}: {result.get('slot') or '-'}" + "".join(f"\n  {' '.join(map(str, c))}"

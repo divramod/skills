@@ -8,6 +8,7 @@ The servant does the thinking (its plan, its autogrill); the brief only carries 
 
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -93,7 +94,25 @@ def start(prompt: str, main: str, dry: bool) -> dict:
         return {"error": out[-500:]}
 
 
-def delegate(a: dict, main: str, limit: int, dry: bool, now: dt.datetime) -> dict:
+AUTO_LOAD = 0.8  # `servant_limit: auto`: a new servant only while load1 / cores stays below this
+
+
+def parse_limit(value) -> int | str:
+    """`servant_limit`: a number caps the running servants; `auto` (also when unset) decides by the machine's load."""
+    return "auto" if value is None or str(value).strip() == "auto" else int(value)
+
+
+def machine_load() -> float:
+    """load1 per core."""
+    return os.getloadavg()[0] / (os.cpu_count() or 1)
+
+
+def has_room(limit: int | str, running: int) -> bool:
+    """Whether one more servant may start: fewer than the number, or (`auto`) while the load is below AUTO_LOAD."""
+    return machine_load() < AUTO_LOAD if limit == "auto" else running < limit
+
+
+def delegate(a: dict, main: str, limit: int | str, dry: bool, now: dt.datetime) -> dict:
     """Hand one `delegate` action to a servant, or keep it waiting at the limit. Returns what happened."""
     held = ledger(main)
     if a.get("key") in held and held[a["key"]].get("state") in ("running", "landed"):
@@ -101,7 +120,7 @@ def delegate(a: dict, main: str, limit: int, dry: bool, now: dt.datetime) -> dic
     running = [e for e in held.values() if e.get("state") == "running"]
     given = (a.get("brief") or {}).get("brief_file")
     brief = Path(given) if given else write_brief(a, main, now) if not dry else Path("<brief>")
-    if len(running) >= limit:
+    if not has_room(limit, len(running)):
         result = {"key": a["key"], "state": "waiting", "brief": str(brief), "title": a["text"]}
     else:
         prompt = PROMPT.format(repo=Path(main).name, brief=brief, title=a["text"][:80])
@@ -115,7 +134,7 @@ def delegate(a: dict, main: str, limit: int, dry: bool, now: dt.datetime) -> dic
     return result
 
 
-def follow_up(main: str, slots: dict[str, dict], limit: int, dry: bool, now: dt.datetime) -> list[dict]:
+def follow_up(main: str, slots: dict[str, dict], limit: int | str, dry: bool, now: dt.datetime) -> list[dict]:
     """Running servants whose slot holds nothing any more have landed: recorded, their session stopped.
     `slots`: slot → {"plan": CURRENT_PLAN text, "ahead": commits not on main}. Waiting briefs start when there
     is room."""
@@ -134,5 +153,7 @@ def follow_up(main: str, slots: dict[str, dict], limit: int, dry: bool, now: dt.
                                 "note": "session stopped when idle", "by": "tick", "key": d["key"]})
     waiting = [{"key": k, "text": e["title"], "brief": {"brief_file": e["brief"]}, "duty": "farmer",
                 "kind": "waiting", "slot": "-"} for k, e in ledger(main).items() if e.get("state") == "waiting"]
-    room = limit - sum(1 for e in ledger(main).values() if e.get("state") == "running")
+    running = sum(1 for e in ledger(main).values() if e.get("state") == "running")
+    # auto: one at a time, the load shows a new servant only after a while
+    room = int(has_room(limit, running)) if limit == "auto" else limit - running
     return done + [delegate(w, main, limit, dry, now) for w in waiting[:max(room, 0)]]

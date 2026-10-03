@@ -68,8 +68,16 @@ class Role(unittest.TestCase):
     def test_nothing_implicit_missing_settings_and_crons_are_problems(self):
         _, _, problems = due.schedule("---\nduties:\n  boss: \"x\"\n---\n\n## Tasks\n\n### t\n\n- **Check**: a\n")
         text = "\n".join(problems)
-        for part in ("unknown duty 'boss'", "task 't' has no", "servant_limit", "notify", "duty:boss"):
+        for part in ("unknown duty 'boss'", "task 't' has no", "notify", "duty:boss"):
             self.assertIn(part, text)
+        self.assertNotIn("servant_limit", text, "servant_limit defaults to auto")
+
+    def test_servant_limit_is_auto_by_default_or_a_number(self):
+        self.assertEqual(due.schedule(ROLE.replace("servant_limit: 5\n", ""))[1]["servant_limit"], "auto")
+        self.assertEqual(due.schedule(ROLE.replace("servant_limit: 5", "servant_limit: auto"))[1]["servant_limit"],
+                         "auto")
+        problems = due.schedule(ROLE.replace("servant_limit: 5", "servant_limit: lots"))[2]
+        self.assertIn("`servant_limit:` is `auto` or a number", problems)
         self.assertEqual(due.schedule("")[0], {})
 
 

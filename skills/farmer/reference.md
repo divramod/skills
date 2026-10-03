@@ -12,7 +12,8 @@ round. A change counts from the next round, without waiting for a landing.
 
 - **Front matter: settings, all required.**
   - `duties`: maps each duty it opts in to to its cron (`mtm: "*/15 * * * *"`). A duty left out does not run.
-  - `servant_limit`: how many farmer-started servants may run at once.
+  - `servant_limit`: `auto` (the default: a new servant only while load1 per core is below 0.8, at most one more
+    per round) or a number, how many farmer-started servants may run at once.
   - `notify`: one of `every-round`, `hourly`, `daily`, `never`.
 
   `python3 $S/due.py check` names anything missing or invalid. Then the farmer runs nothing and tells the user.
@@ -70,7 +71,7 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 
 1. **Already in hand?** Read the log's `delegate` entries and the slots' `plans/CURRENT_PLAN`. If a servant already
    has it, or the session whose work it concerns can do it in its own plan, send that session a message instead.
-2. **Limit.** At most `servant_limit` farmer-started servants at a time. These are the log's `delegate` entries whose slot still has
+2. **Limit.** At most `servant_limit` farmer-started servants at a time (`auto`: while the load allows). These are the log's `delegate` entries whose slot still has
    their plan in `CURRENT_PLAN`. When the limit is reached, the brief waits in `briefs/` for the next round.
 3. **Brief.** Write `~/skills/farmer/<repo>/briefs/<date>-<slug>.md`. It holds:
    - what is wrong, with the evidence quoted as data;
@@ -108,7 +109,7 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
 - One farmer per repository, in its `farmer` slot. It never changes its own branch (except committing the user's
   FARMER-ROLE.md), and every fix goes to a servant
   with a plan.
-- Servants: at most `servant_limit` at a time (hal2: 5); idle sessions first (the user's too), else new ones. They run the same model as the
+- Servants: at most `servant_limit` at a time (`auto` by load, or a number); idle sessions first (the user's too), else new ones. They run the same model as the
   user's servants (create-worktree-session's default).
 - Notification: every round that has open items, batched into one push.
 - **Nothing implicit**: every duty and task is an opt-in in FARMER-ROLE.md, each with its own cron (5-field

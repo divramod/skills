@@ -12,7 +12,7 @@
 
 Nothing is implicit: only the duties under the front matter's `duties:` (name → cron) and the
 tasks under `## Tasks` (each `### <name>` with its `- **Cron**: <cron>` line) run, and the
-settings `servant_limit` and `notify` are required. No FARMER-ROLE.md: nothing runs (exit 3).
+setting `notify` is required, `servant_limit` (`auto` or a number) defaults to `auto`. No FARMER-ROLE.md: nothing runs (exit 3).
 A cron is standard 5-field notation in local time: minute hour day-of-month month day-of-week
 (`*/15 * * * *`, `0 * * * *`, `7 9 * * *`, `0 8 * * 1-5`). An item is due when one of its fire
 times passed since it last ran. Writes only ~/skills/farmer/<repo>/runs.jsonl.
@@ -163,8 +163,10 @@ def schedule(role_text: str) -> tuple[dict[str, str], dict, list[str]]:
         except ValueError as e:
             problems.append(f"{name}: {e}")
     settings = {k: fm.get(k) for k in ("servant_limit", "notify")}
-    if not isinstance(settings["servant_limit"], int) and not str(settings["servant_limit"]).isdigit():
-        problems.append("`servant_limit:` (a number) is required")
+    if settings["servant_limit"] is None:
+        settings["servant_limit"] = "auto"
+    elif settings["servant_limit"] != "auto" and not str(settings["servant_limit"]).isdigit():
+        problems.append("`servant_limit:` is `auto` or a number")
     if settings["notify"] not in NOTIFY:
         problems.append(f"`notify:` is required: one of {', '.join(NOTIFY)}")
     return items, settings, problems

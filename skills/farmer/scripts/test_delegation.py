@@ -63,6 +63,28 @@ class Delegation(unittest.TestCase):
         self.assertIn(delegation.STOP + ["18", "--repo", MAIN], self.calls)
         self.assertEqual(delegation.ledger(MAIN)["flaky:u"]["state"], "running")
 
+    def test_auto_starts_servants_while_the_load_allows_one_per_round(self):
+        self.assertEqual(delegation.parse_limit(None), "auto")
+        self.assertEqual(delegation.parse_limit("auto"), "auto")
+        self.assertEqual(delegation.parse_limit("3"), 3)
+        with mock.patch.object(delegation, "machine_load", return_value=0.5):
+            self.assertEqual(delegation.delegate(flaky(), MAIN, "auto", False, NOW)["state"], "running")
+        with mock.patch.object(delegation, "machine_load", return_value=0.9):
+            for key in ("flaky:u", "flaky:v"):
+                r = delegation.delegate(dict(flaky(), key=key, text=key), MAIN, "auto", False, NOW)
+                self.assertEqual(r["state"], "waiting", key)
+            busy = {"18": {"plan": "0120-fix-t", "ahead": 2}}
+            self.assertEqual(delegation.follow_up(MAIN, busy, "auto", False, NOW), [])
+        with mock.patch.object(delegation, "machine_load", return_value=0.5):
+            started = delegation.follow_up(MAIN, busy, "auto", False, NOW)
+        self.assertEqual([d["state"] for d in started], ["running"], "one per round")
+
+    def test_a_number_still_caps_whatever_the_load(self):
+        with mock.patch.object(delegation, "machine_load", return_value=0.0):
+            delegation.delegate(flaky(), MAIN, 1, False, NOW)
+            second = dict(flaky(), key="flaky:u", text="disable u")
+            self.assertEqual(delegation.delegate(second, MAIN, 1, False, NOW)["state"], "waiting")
+
     def test_a_running_servant_with_its_plan_is_left_alone(self):
         delegation.delegate(flaky(), MAIN, 5, False, NOW)
         busy = {"18": {"plan": "0120-fix-t", "ahead": 2}}

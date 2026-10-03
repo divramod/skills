@@ -8,7 +8,7 @@ duties:
   ci: "*/30 * * * *"          # GitHub Actions green
   watch: "*/15 * * * *"       # sanity-watch: resume abnormal stops
   autoclear: "0 * * * *"      # fix-autoclear: autoclear failures
-servant_limit: 5               # farmer-started servants at once (required)
+servant_limit: auto            # farmer-started servants: auto (by load) or a number at once
 notify: every-round           # every-round | hourly | daily | never (required)
 ---
 

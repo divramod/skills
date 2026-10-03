@@ -260,7 +260,7 @@ def slot_state(main: str) -> dict[str, dict]:
 
 def delegate_all(main: str, out: dict, dry: bool, now: dt.datetime) -> None:
     """Place this round's delegations (planned ones in a dry run), then follow up on the running servants."""
-    limit = int((out.get("settings") or {}).get("servant_limit") or 1)
+    limit = delegation.parse_limit((out.get("settings") or {}).get("servant_limit"))
     todo = [a for a in out["planned"] if a["do"] == "delegate"] if dry else out.get("delegate", [])
     out["delegations"] = [delegation.delegate(a, main, limit, dry, now) for a in todo]
     out["delegations"] += delegation.follow_up(main, slot_state(main), limit, dry, now)
