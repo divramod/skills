@@ -36,5 +36,16 @@ class Findings(unittest.TestCase):
         self.assertTrue(f[0]["handled"])
 
 
+class Wake(unittest.TestCase):
+    def test_the_oldest_run_queued_over_five_minutes_of_any_branch_wakes(self):
+        runs = [run(1, "land", "land/12", status="queued", conclusion=None, ago=400),
+                run(2, "land", "land/07", status="queued", conclusion=None, ago=900),
+                run(3, "main", "main", status="queued", conclusion=None, ago=60),
+                run(4, "main", "main", status="in_progress", conclusion=None, ago=4000)]
+        w = ci.waiting(runs, time.time())
+        self.assertEqual((w["kind"], w["run"], w["branch"]), ("queued-wake", 2, "land/07"))
+        self.assertIsNone(ci.waiting(runs[2:], time.time()))
+
+
 if __name__ == "__main__":
     unittest.main()

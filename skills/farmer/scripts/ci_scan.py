@@ -27,6 +27,10 @@ from pathlib import Path
 DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
 MINUTE = 60
 QUEUED_TOO_LONG = 20 * MINUTE
+# A job queued this long wakes the repository's parked runner, when it has a wake tool (hal2's webhook missed it).
+WAKE_AFTER = 5 * MINUTE
+WAKE_TOOL = "code/bash/scripts/ci-wake/main.sh"
+QUEUED = ("queued", "waiting", "pending", "requested")
 RUNNING_TOO_LONG = 90 * MINUTE
 RED = {"failure", "timed_out", "startup_failure", "action_required"}
 FIELDS = "databaseId,workflowName,status,conclusion,headBranch,headSha,createdAt,updatedAt,url,event"
@@ -88,12 +92,24 @@ def findings(latest: list[dict], default: str, now: float, done: set[int]) -> li
         if status == "completed" and conclusion in RED:
             kind = "main-red" if branch == default else "slot-red"
             out.append({**base, "kind": kind, "why": f"{name} {conclusion} on {branch}"})
-        elif status in ("queued", "waiting", "pending", "requested") and age > QUEUED_TOO_LONG:
+        elif status in QUEUED and age > QUEUED_TOO_LONG:
             out.append({**base, "kind": "queued-long", "why": f"{name} queued {int(age // 60)} min on {branch}: a runner offline?"})
         elif status == "in_progress" and age > RUNNING_TOO_LONG:
             out.append({**base, "kind": "running-long", "why": f"{name} running {int(age // 60)} min on {branch}"})
     order = {"main-red": 0, "queued-long": 1, "running-long": 2, "slot-red": 3}
     return sorted(out, key=lambda f: order[f["kind"]])
+
+
+def waiting(runs: list[dict], now: float) -> dict | None:
+    """The oldest run of any branch queued longer than WAKE_AFTER: one wake serves them all."""
+    old = [r for r in runs if r.get("status") in QUEUED and now - parse_time(r.get("createdAt")) > WAKE_AFTER]
+    if not old:
+        return None
+    r = min(old, key=lambda r: parse_time(r.get("createdAt")))
+    age = int((now - parse_time(r.get("createdAt"))) // 60)
+    return {"run": r.get("databaseId"), "workflow": r.get("workflowName"), "branch": r.get("headBranch"),
+            "url": r.get("url"), "sha": (r.get("headSha") or "")[:8], "handled": False, "kind": "queued-wake",
+            "why": f"{r.get('workflowName')} queued {age} min on {r.get('headBranch')}: waking the runner"}
 
 
 def failed_jobs(rid: int, cwd: str) -> list[str]:
@@ -119,6 +135,9 @@ def scan(repo: str, show_all: bool) -> dict:
     found = findings(latest_runs(runs, default), default, time.time(), handled(main))
     if not show_all:
         found = [f for f in found if not f["handled"]]
+    wake = waiting(runs, time.time()) if (Path(main) / WAKE_TOOL).exists() else None
+    if wake:
+        found.insert(0, {**wake, "tool": str(Path(main) / WAKE_TOOL)})
     for f in found:
         if f["kind"].endswith("-red"):
             f["failed_jobs"] = failed_jobs(f["run"], main)
