@@ -79,22 +79,74 @@ class Wake(Repo):
         self.assertEqual(items[1]["instructions"], wake.instructions("farmer", "delegate-failed"))
 
 
-class SmallContext(unittest.TestCase):
-    def run_with(self, rows, refuse=None):
-        sent, it = [], iter(rows)
-        with mock.patch.object(wake.deliver, "agent", lambda pane: next(it)), \
-                mock.patch.object(wake.deliver, "send", lambda p, t, s=None: refuse or sent.append(t)):
-            return wake.small_context("%9", sleep=lambda s: None), sent
+class Handoff(Repo):
+    """The farmer's context: below CLEAR_AT a plain wake, from it the handoff, which holds other wakes back until
+    the farmer pane shows its new session or HANDOFF_TIMEOUT falls back to a plain /clear."""
 
-    def test_a_small_context_is_woken_as_it_is(self):
-        self.assertEqual(self.run_with([{"context_percent": 5}]), (None, []))
+    def setUp(self):
+        super().setUp()
+        self.sent, self.agent = [], {"context_percent": 5, "session_id": "a", "state": "idle"}
 
-    def test_a_large_one_is_cleared_first_and_waited_for(self):
-        old, new = {"context_percent": 55, "session_id": "a"}, {"session_id": "b", "state": "idle"}
-        self.assertEqual(self.run_with([old, {"session_id": "a", "state": "working"}, new]), (None, ["/clear"]))
-        why, _ = self.run_with([old] + [{"session_id": "a", "state": "idle"}] * 40)
-        self.assertIn("did not come back", why)
-        self.assertIn("agent is working", self.run_with([old], refuse="agent is working")[0])
+        def send(pane, text, states=None):
+            self.sent.append(text)
+            if text == "/clear":
+                self.agent = {"context_percent": 0, "session_id": "c", "state": "idle"}
+
+        for p in (mock.patch.object(wake.deliver, "send", send),
+                  mock.patch.object(wake.deliver, "agent", lambda pane: dict(self.agent)),
+                  mock.patch.object(wake, "farmer_pane", return_value="%9"),
+                  mock.patch.object(wake.time, "sleep", lambda s: None)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.main = str(self.main)
+
+    def over(self, out, minutes=0):
+        return wake.hand_over("/x/wt/farmer", self.main, out, NOW + dt.timedelta(minutes=minutes))
+
+    def test_below_the_threshold_a_plain_wake(self):
+        self.agent["context_percent"] = wake.CLEAR_AT - 1
+        self.assertTrue(self.over({"wake": [judgment()]})["woken"])
+        self.assertEqual(self.sent, ["/farmer act"])
+
+    def test_from_the_threshold_the_handoff_no_clear_and_no_double_wake(self):
+        self.agent["context_percent"] = wake.CLEAR_AT
+        r = self.over({"wake": [judgment()]})
+        self.assertEqual((r["woken"], r["why"], self.sent), (False, "handoff asked", ["/farmer handoff"]))
+        self.assertEqual(wake.read(self.main)["handoff"], {"at": NOW.isoformat(timespec="seconds"), "session": "a"})
+        for minutes in (5, 14):
+            r = self.over({"wake": [judgment("08 asks too")]}, minutes)
+            self.assertEqual(r["why"], "handoff under way")
+        self.assertEqual(self.sent, ["/farmer handoff"])
+        self.assertEqual([e["kind"] for e in self.log()], ["handoff"])
+
+    def test_the_new_session_ends_the_handoff_and_counts_as_the_wake(self):
+        self.agent["context_percent"] = 55
+        self.over({"wake": [judgment()]})
+        self.agent = {"context_percent": 3, "session_id": "b", "state": "working"}
+        r = self.over({}, 3)
+        self.assertTrue(r["woken"])
+        self.assertEqual(self.sent, ["/farmer handoff"])
+        data = wake.read(self.main)
+        self.assertNotIn("handoff", data)
+        self.assertEqual(data["woken_at"], (NOW + dt.timedelta(minutes=3)).isoformat(timespec="seconds"))
+        self.over({}, 10)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual([e["kind"] for e in self.log()], ["handoff", "handoff-done", "wake"])
+
+    def test_a_handoff_never_done_falls_back_to_a_plain_clear(self):
+        self.agent["context_percent"] = 55
+        self.over({"wake": [judgment()]})
+        r = self.over({}, 16)
+        self.assertTrue(r["woken"])
+        self.assertEqual(self.sent, ["/farmer handoff", "/clear", "/farmer act"])
+        self.assertNotIn("handoff", wake.read(self.main))
+        self.assertIn("handoff-timeout", [e["kind"] for e in self.log()])
+
+    def test_done_ends_a_pending_handoff(self):
+        self.agent["context_percent"] = 55
+        self.over({"wake": [judgment()], "notify": [tick.act("frame", "x", "notify", text="n")]})
+        self.assertEqual(wake.done(self.main, 1), 1)
+        self.assertNotIn("handoff", wake.read(self.main))
 
 
 class Instructions(unittest.TestCase):

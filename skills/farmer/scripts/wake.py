@@ -11,6 +11,12 @@ Items accumulate until the session handles them (`farmer.py wake --done <seq>` d
 session is woken by typing `/farmer act` into its empty prompt (deliver.py) once per batch: a tick with nothing new
 adds no turn, a refused wake (the session busy, a draft) is retried by the next tick, and a wake the
 session has not acted on within an hour is repeated.
+
+A session whose context reached `CLEAR_AT` percent is woken with `/farmer handoff` instead (plan 0132 in hal2): it
+writes its handoff.md and starts hal2's clear-and-continue, which types `/clear` and then `/farmer act` itself.
+wake.json's `handoff` ({"at", "session"}) holds every other wake back meanwhile; the farmer pane's new session id
+ends it (that counts as the wake), and one not done within `HANDOFF_TIMEOUT` falls back to a plain `/clear` and
+`/farmer act`.
 """
 
 import datetime as dt
@@ -26,7 +32,9 @@ KINDS = ("wake", "relay", "notify")
 SUBSKILLS = {"mtm": "merge-to-main-boss", "lead": "development-lead", "ci": "ci", "watch": "sanity-watch",
              "autoclear": "fix-autoclear", "trains": "merge-train"}
 ACT = "/farmer act"
-CLEAR_AT = 10  # context percent above which a wake starts with /clear: a call re-reads the whole context
+HANDOFF = "/farmer handoff"
+CLEAR_AT = 40  # context percent from which a wake asks for the handoff and its clear: a call re-reads the context
+HANDOFF_TIMEOUT = dt.timedelta(minutes=15)  # a handoff not done by then falls back to a plain /clear
 CLEARED = 60  # seconds to wait for the cleared session
 REWAKE = dt.timedelta(hours=1)  # a wake the session never acted on is repeated
 
@@ -86,21 +94,53 @@ def farmer_pane(top: str) -> str | None:
                  if a.get("checkout") and Path(a["checkout"]).resolve() == target), None)
 
 
-def small_context(pane: str, sleep=time.sleep) -> str | None:
-    """Clear the farmer session first when its context is large (all its state lives in files; Act records open
-    threads in the log). None when it is ready for the wake, else why not."""
-    a = deliver.agent(pane) or {}
-    if (a.get("context_percent") or 0) < CLEAR_AT:
-        return None
+def plain_clear(pane: str, before: dict, sleep=time.sleep) -> str | None:
+    """Type `/clear` and wait for the new session (the fallback when a handoff never finished). None when it is
+    ready for the wake, else why not."""
     why = deliver.send(pane, "/clear")
     if why:
         return f"/clear not typed: {why}"
     for _ in range(CLEARED // 2):
         sleep(2)
         b = deliver.agent(pane) or {}
-        if b.get("session_id") != a.get("session_id") and b.get("state") in deliver.READY:
+        if b.get("session_id") != before.get("session_id") and b.get("state") in deliver.READY:
             return None
     return "the cleared session did not come back"
+
+
+def log_wake(main: str, kind: str, what: str) -> None:
+    mtm_scan.log(main, {"kind": kind, "slot": "farmer", "what": what, "note": "", "by": "tick", "do": "wake"})
+
+
+def pending_handoff(pane: str, main: str, data: dict, now: dt.datetime, sleep=time.sleep) -> tuple[str | None, bool]:
+    """A handoff under way: (why no wake now, woken). Its new session counts as the wake (the clear-and-continue
+    job typed /farmer act); past HANDOFF_TIMEOUT the plain /clear and /farmer act."""
+    pending, a = data["handoff"], deliver.agent(pane) or {}
+    if a.get("session_id") and a["session_id"] != pending.get("session"):
+        del data["handoff"]
+        log_wake(main, "handoff-done", f"handed off: session {a['session_id']} got {ACT}")
+        return None, True
+    if now - dt.datetime.fromisoformat(pending["at"]) < HANDOFF_TIMEOUT:
+        return "handoff under way", False
+    del data["handoff"]
+    log_wake(main, "handoff-timeout", f"no handoff since {pending['at']}: plain /clear, then {ACT}")
+    why = plain_clear(pane, a, sleep) or deliver.send(pane, ACT)
+    return why, not why
+
+
+def wake_session(pane: str, main: str, data: dict, now: dt.datetime, sleep=time.sleep) -> tuple[str | None, bool]:
+    """Wake the farmer session: (why not, woken). A large context gets the handoff request instead of the wake."""
+    if data.get("handoff"):
+        return pending_handoff(pane, main, data, now, sleep)
+    a = deliver.agent(pane) or {}
+    if (a.get("context_percent") or 0) < CLEAR_AT:
+        why = deliver.send(pane, ACT)
+        return why, not why
+    why = deliver.send(pane, HANDOFF)
+    if not why:
+        data["handoff"] = {"at": now.isoformat(timespec="seconds"), "session": a.get("session_id")}
+        log_wake(main, "handoff", f"{HANDOFF}: context {a.get('context_percent')}%")
+    return why or "handoff asked", False
 
 
 def hand_over(top: str, main: str, out: dict, now: dt.datetime) -> dict:
@@ -115,15 +155,14 @@ def hand_over(top: str, main: str, out: dict, now: dt.datetime) -> dict:
         data["woken_at"] = data.get("woken_at") if data["items"][:-len(new)] else None
     result = {"items": len(new), "pending": len(data["items"]), "woken": False}
     stale = data.get("woken_at") and now - dt.datetime.fromisoformat(data["woken_at"]) > REWAKE
-    if data["items"] and (not data.get("woken_at") or stale):
+    if data["items"] and (not data.get("woken_at") or stale or data.get("handoff")):
         pane = farmer_pane(top)
-        why = (small_context(pane) or deliver.send(pane, ACT)) if pane else "no farmer session"
+        why, woken = wake_session(pane, main, data, now) if pane else ("no farmer session", False)
         if why:
             result["why"] = why
-        else:
+        if woken:
             data["woken_at"], result["woken"] = now.isoformat(timespec="seconds"), True
-            mtm_scan.log(main, {"kind": "wake", "slot": "farmer", "what": f"{ACT}: {len(data['items'])} items",
-                                "note": "", "by": "tick", "do": "wake"})
+            log_wake(main, "wake", f"{ACT}: {len(data['items'])} items")
     write(main, data)
     return result
 
@@ -134,5 +173,6 @@ def done(main: str, upto: int) -> int:
     data = read(main)
     data["items"] = [i for i in data["items"] if i["seq"] > upto]
     data["woken_at"] = None
+    data.pop("handoff", None)
     write(main, data)
     return len(data["items"])
