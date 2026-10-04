@@ -17,6 +17,9 @@
   farmer.py wake [--done <seq>] [--repo <dir>] [--json]
       what the tick handed to the farmer session (wake.json: items that need judgment, relays, notices, failed
       delegations, each with the file to read for it); --done drops the items up to <seq> once handled
+  farmer.py handoff [--clear] [--repo <dir>]
+      the farmer's handoff before its clear (handoff.py): the path of handoff.md in the state folder (its sections
+      when it is missing); --clear, once it is written, starts hal2's clear-and-continue (/clear, then /farmer act)
   farmer.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]
       the external timer that runs `tick` at the loop's cron (launchd on macOS, a systemd user timer on Linux;
       timer.py); install switches the mode to `timer`, remove back to `claude`
@@ -25,7 +28,7 @@
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
 
 State: ~/skills/farmer/<repo>/ (FARMER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl, wake.json,
-timer.json, tick.log.
+timer.json, tick.log, handoff.md.
 Exit 0 ok (also: another tick holds the lock, `busy`), 1 FARMER-ROLE.md invalid, 2 a tool missing,
 3 no FARMER-ROLE.md, 4 not the farmer slot, a slot holding other work, or not in timer mode.
 """
@@ -43,6 +46,7 @@ import boss
 import delegation
 import due
 import duties
+import handoff
 import tasks
 import tick
 import timer
@@ -178,6 +182,8 @@ def run_wake(args) -> int:
         print(f"{wake.done(main, args.done)} items left")
         return 0
     data = wake.read(main)
+    if handoff.path(main).exists() and not args.json:
+        print(f"read first: {handoff.path(main)}")
     if args.json:
         print(json.dumps(data, indent=1))
         return 0
@@ -186,6 +192,17 @@ def run_wake(args) -> int:
               f"    read {i['instructions']}")
     print(f"{len(data['items'])} items" + (f", woken {data['woken_at']}" if data.get("woken_at") else ""))
     return 0
+
+
+def run_handoff(args) -> int:
+    main = tick.mtm_scan.main_checkout(args.repo)
+    if not args.clear:
+        print(handoff.show(main))
+        return 0
+    top = tick.git(args.repo, "rev-parse", "--show-toplevel") or args.repo
+    code, what = handoff.clear(top, main, datetime.datetime.now())
+    print(what)
+    return code
 
 
 def run_delegate(args) -> int:
@@ -224,6 +241,9 @@ def parser() -> argparse.ArgumentParser:
     w.add_argument("--done", type=int)
     w.add_argument("--repo", default=os.getcwd())
     w.add_argument("--json", action="store_true")
+    ho = sub.add_parser("handoff")
+    ho.add_argument("--clear", action="store_true")
+    ho.add_argument("--repo", default=os.getcwd())
     tm = sub.add_parser("timer")
     tm.add_argument("action", choices=("install", "remove", "status"))
     tm.add_argument("--repo", default=os.getcwd())
@@ -258,6 +278,8 @@ def main(argv: list[str]) -> int:
         return run_delegate(args)
     if args.cmd == "wake":
         return run_wake(args)
+    if args.cmd == "handoff":
+        return run_handoff(args)
     if args.cmd == "timer":
         return run_timer(args)
     return run_tick(args.repo, args.dry_run, args.json)
