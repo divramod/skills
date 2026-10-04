@@ -41,8 +41,8 @@ class Plan(unittest.TestCase):
     def setUp(self):
         self.specs = tasks.parse(PROPOSAL)
 
-    def plan(self, name, ok, specs=None):
-        return tasks.plan_task(item(name), CTX, specs or self.specs, lambda cmds, top, main: (ok, "boom: exit 7"))
+    def plan(self, name, ok, specs=None, why="boom: exit 7", online=True):
+        return tasks.plan_task(item(name), CTX, specs or self.specs, lambda cmds, top, main: (ok, why), lambda: online)
 
     def test_hal2s_tasks_run_without_a_wake_while_their_checks_pass(self):
         for name in self.specs:
@@ -61,11 +61,48 @@ class Plan(unittest.TestCase):
 
     def test_the_recheck_follow_ups_run_only_when_it_fails(self):
         recheck = self.plan("n8n.hal9k.app stays up", False)[2]
-        for code, follows in ((0, 0), (1, 2)):
+        for code, follows in ((0, 0), (1, 2), (tasks.OFFLINE, 0)):
             out = {"wake": [], "notify": []}
             with mock.patch.object(tick, "sh", return_value=(code, "")), mock.patch.object(mtm_scan, "log"):
                 tick.execute(dict(recheck), "/x/farmer", "/x/hal2", out)
             self.assertEqual(len(out.get("delegate", [])) + len(out["notify"]), follows)
+
+    def test_the_2026_10_04_dns_outage_of_this_mac_deploys_nothing(self):
+        why = ("curl -fsS -m 20 https://n8n.hal9k.app/healthz: exit 6\n"
+               "curl: (6) Could not resolve host: n8n.hal9k.app\n")
+        plan = self.plan("n8n.hal9k.app stays up", False, why=why, online=False)
+        self.assertEqual([(a["do"], a["text"]) for a in plan],
+                         [("record", "task n8n.hal9k.app stays up: check skipped: this machine is offline")])
+        self.assertEqual([a["do"] for a in self.plan("hal9k production healthy", False, online=False)], ["record"])
+
+    def test_a_real_outage_still_acts_and_the_brief_carries_the_checks_output(self):
+        why = "curl -fsS -m 20 https://n8n.hal9k.app/healthz: exit 22\ncurl: (22) The requested URL returned error: 502\n"
+        plan = self.plan("n8n.hal9k.app stays up", False, why=why, online=True)
+        self.assertEqual([a["do"] for a in plan], ["run", "notify", "run"])
+        delegate = plan[2]["on_fail"][0]
+        self.assertEqual(delegate["text"], "task n8n.hal9k.app stays up: still failing after the act")
+        self.assertIn("returned error: 502", delegate["brief"]["check"])
+
+    def test_farmer_check_task_exits_75_when_offline(self):
+        role = PROPOSAL
+        with mock.patch.object(Path, "read_text", return_value=role), \
+                mock.patch.object(mtm_scan, "main_checkout", return_value="/x/hal2"), \
+                mock.patch.object(tasks, "run_check", return_value=(False, "curl: (6) Could not resolve host")):
+            self.assertEqual(tasks.builtin("n8n.hal9k.app stays up", "/x/farmer", lambda: False)[0], tasks.OFFLINE)
+            self.assertEqual(tasks.builtin("n8n.hal9k.app stays up", "/x/farmer", lambda: True)[0], 1)
+
+
+class Online(unittest.TestCase):
+    def test_online_needs_a_name_and_a_connection(self):
+        conn = mock.Mock()
+        with mock.patch("socket.getaddrinfo", side_effect=OSError("nodename nor servname provided")), \
+                mock.patch("socket.create_connection", return_value=conn):
+            self.assertFalse(tasks.online())
+        with mock.patch("socket.getaddrinfo", return_value=[1]), mock.patch("socket.create_connection", return_value=conn):
+            self.assertTrue(tasks.online())
+        with mock.patch("socket.getaddrinfo", return_value=[1]), \
+                mock.patch("socket.create_connection", side_effect=OSError("no route")):
+            self.assertFalse(tasks.online())
 
 
 class Flaky(unittest.TestCase):

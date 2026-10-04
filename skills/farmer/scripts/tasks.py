@@ -10,19 +10,52 @@ Commands run with `sh -c` in the main checkout; `farmer <args>` runs this skill'
 `notify` (tell the user, batched), `delegate` (a servant fixes it, the failing check's output as evidence) and `wake`
 (the farmer's model decides). Anything else on those lines, any prose, makes the task the model's: it wakes the
 farmer with the task's text. So a task written before this form never runs a command by accident.
+
+Offline is not an outage: when a check fails, `online()` probes this machine's own network (a name resolves and a
+TCP connect succeeds). Without it the failure says nothing about production, so the task only records that it
+skipped (no Act, notify or delegate; the next round checks again) and `farmer check task` exits 75 (EX_TEMPFAIL),
+which the Act's recheck does not count as still failing (hal2 plan 0135: this Mac's DNS was down on 2026-10-04 and
+the farmer redeployed n8n and delegated a fix for a production that was up). A delegation's brief carries the
+failing check's output.
 """
 
 import re
+import socket
 import subprocess
 import sys
 from pathlib import Path
 
-from tick import act
+from tick import OFFLINE, act
 
 FARMER = [sys.executable, str(Path(__file__).resolve().parent / "farmer.py")]
 CMD = r"`([^`]+)`"
 CHECK = re.compile(rf"^{CMD}(?:\s*(?:,|and|&&)\s*{CMD})*\.?$")
 KEYWORDS = ("notify", "delegate", "wake")
+PROBE_NAMES = ("github.com", "cloudflare.com")
+PROBE_ADDRS = (("1.1.1.1", 443), ("8.8.8.8", 443))
+
+
+def online(timeout: float = 3.0) -> bool:
+    """This machine reaches the internet: one of two names resolves and one of two addresses accepts a connection."""
+    def resolves(name: str) -> bool:
+        try:
+            return bool(socket.getaddrinfo(name, 443, type=socket.SOCK_STREAM))
+        except OSError:
+            return False
+
+    def connects(addr: tuple[str, int]) -> bool:
+        try:
+            socket.create_connection(addr, timeout=timeout).close()
+            return True
+        except OSError:
+            return False
+
+    old = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(timeout)
+    try:
+        return any(map(resolves, PROBE_NAMES)) and any(map(connects, PROBE_ADDRS))
+    finally:
+        socket.setdefaulttimeout(old)
 
 
 def field(block: str, name: str) -> str | None:
@@ -85,7 +118,7 @@ def outcome(kind: str, name: str, why: str) -> dict:
     return act("task", name, "wake", key=f"task-wake:{name}", window=3600, text=f"task {name}: {why[:300]}")
 
 
-def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check) -> list[dict]:
+def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check, net=online) -> list[dict]:
     name = item["name"].split(":", 1)[1]
     spec = (specs if specs is not None else parse((Path(ctx["top"]) / "FARMER-ROLE.md").read_text())).get(name)
     if not spec or not spec["machine"]:
@@ -94,6 +127,9 @@ def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check)
     ok, why = check(spec["check"], ctx["top"], ctx["main"])
     if ok:
         return [act("task", name, "record", text=f"task {name}: check passed")]
+    if not net():
+        return [act("task", name, "record", text=f"task {name}: check skipped: this machine is offline",
+                    why=why.splitlines()[0])]
     out, recheck = [], None
     for kind, cmd in spec["act"]:
         if kind == "run":
@@ -105,7 +141,7 @@ def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check)
     if recheck:
         out.append(act("task", name, "run", argv=FARMER + ["check", "task", name, "--repo", ctx["top"]], cwd=ctx["main"],
                        text=f"task {name}: check again",
-                       on_fail=[outcome(k, name, "still failing after the act") for k, _ in spec["still"]]))
+                       on_fail=[outcome(k, name, f"still failing after the act\n{why}") for k, _ in spec["still"]]))
     return out
 
 
@@ -134,8 +170,8 @@ def orphans(top: str) -> list[dict]:
     return [f for f in snap["findings"] if f["kind"] == "work-without-agent" and f["slot"] not in asked]
 
 
-def builtin(what: str, top: str) -> tuple[int, str]:
-    """`farmer check task <name>|flaky|orphans`: exit 0 when fine, 1 with what is wrong."""
+def builtin(what: str, top: str, net=online) -> tuple[int, str]:
+    """`farmer check task <name>|flaky|orphans`: exit 0 when fine, 1 with what is wrong, 75 when offline."""
     import mtm_scan
     import tick
     main = mtm_scan.main_checkout(top)
@@ -148,5 +184,7 @@ def builtin(what: str, top: str) -> tuple[int, str]:
         if not spec or not spec["check"]:
             return 2, f"no machine-run task {what!r}"
         ok, why = run_check(spec["check"], top, main)
+        if not ok and not net():
+            return OFFLINE, f"this machine is offline, check not conclusive:\n{why}"
         bad = [] if ok else [why]
     return (1 if bad else 0), "\n".join(bad)

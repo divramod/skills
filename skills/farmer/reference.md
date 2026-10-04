@@ -25,6 +25,10 @@ round. A change counts from the next round, without waiting for a landing.
 - **Prose:** the repository's priorities and rules for the farmer.
 - **`## Tasks`**: one `### <name>` per task, each with **Cron** (required), **Check**, **Act** and **Done when**.
   Tasks run after the duties.
+- **Offline is not an outage.** When a machine-run task's Check fails, `tasks.py` probes this machine's own network
+  (a name resolves and a TCP connect succeeds). Offline, the round only records "check skipped: this machine is
+  offline": no Act (no production deploy), no notify, no delegation; the next round checks again, and `farmer
+  check task` exits 75. A delegation's brief carries the failing Check's output (hal2 plan 0135).
 - **It is the user's word.** A task may widen the farmer's authority for that task only, for example a production
   redeploy, or narrow it. The farmer logs every use of a widened right.
 - **Only the user changes it.** The farmer writes what it learned and the rules it wants as **proposals** in its

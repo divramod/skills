@@ -35,6 +35,8 @@ import due
 import mtm_scan
 import wake
 
+OFFLINE = 75  # EX_TEMPFAIL: a recheck that could not tell (this machine is offline) is not a failure
+
 FARMER_SLOT = "farmer"
 ROLE = "FARMER-ROLE.md"
 MFM = ["hal2-cli-git", "worktree", "merge-from-main", "--json"]
@@ -218,7 +220,7 @@ def execute(a: dict, top: str, main: str, out: dict) -> None:
     if a["do"] == "run":
         code, text = sh(a["argv"], a.get("cwd") or top)
         a["exit"], a["output"] = code, text[-2000:]
-        for follow in a.get("on_fail", []) if code else []:
+        for follow in a.get("on_fail", []) if code and code != OFFLINE else []:
             execute(follow, top, main, out)
     if a["do"] == "send":
         states = set(a.get("states", ())) | deliver.READY
