@@ -1,5 +1,7 @@
 # Plan 0009: farmer decision-check reports only current, really missing decisions
 
+Finished: 2026-10-05
+
 Grilled: 2026-10-05 (autogrill ×1)
 
 Landing: auto
@@ -31,7 +33,7 @@ starting "after the landing: ...".
 | 3 | One line per missing decision: date, slot, the user's quote (the topic in brackets when the quote is short) | tests assert the line format | done |
 | 4 | hal2's log: list the superseded candidates as a dry run (recorded below), apply only those clearly replaced by a later entry for the same slot (a repo-wide `-` entry covers every slot), then rerun the slot-12 check | `farmer.py decision list --all` in hal2 shows the marks; the slot-12 output recorded in Notes lists only current, really missing decisions | done |
 | 5 | Docs and suites: farmer SKILL.md (decision checks, `decision supersede` when the user replaces a decision), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | done |
-| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | next |
+| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | done |
 
 ## Pre-authorized
 
