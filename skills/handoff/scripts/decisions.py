@@ -67,7 +67,7 @@ def collect(root: Path, main_name: str, farmer_repo: str | None) -> dict:
     farmer, repo = (m.group(1), (m.group(2) or "").strip()) if m else (None, "")
     repo = farmer_repo or repo or main_name
     slot = root.name if repo == main_name else f"{main_name}/{root.name}"
-    listed = " ".join(f"({n}) {short(d)}" for n, (_, d) in enumerate(found, 1)) or "none"
+    listed = " ".join(f"({n}) {short(d)}" for n, (_, d) in enumerate(found, 1)).rstrip(".") or "none"
     return {"root": str(root), "plan": str(plan.relative_to(root)) if plan else None, "farmer": farmer,
             "farmer_repo": repo, "slot": slot, "decisions": [{"from": s, "text": d} for s, d in found],
             "message": f"decision check {slot}: I have these decisions: {listed}. Did I forget one?"}
