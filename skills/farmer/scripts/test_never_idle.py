@@ -77,6 +77,16 @@ class SlotTwelveOvernight(unittest.TestCase):
         self.assertEqual(lead_scan.classify(quiet, "Step 6 done.", NOW.timestamp())[0], "idle-in-plan")
 
 
+class RelayedGo(unittest.TestCase):
+    def test_the_marker_is_documented_verbatim_where_it_is_accepted(self):
+        skills = Path(__file__).resolve().parents[2]
+        for doc in ("farmer/SKILL.md", "farmer/instructions/lead.md", "plan/SKILL.md", "mtm/SKILL.md"):
+            self.assertIn(duties.USER_DECIDED, (skills / doc).read_text(), doc)
+
+    def test_a_relayed_go_quotes_the_users_words(self):
+        self.assertEqual(duties.user_decided("12-3", 'go "1a" 2a'), "farmer [12-3]: the user decided: \"go '1a' 2a\"")
+
+
 class HandledExpires(unittest.TestCase):
     def test_a_handled_mark_counts_for_an_hour(self):
         with tempfile.TemporaryDirectory() as d:

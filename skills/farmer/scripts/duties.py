@@ -22,6 +22,14 @@ import evidence  # noqa: E402  (fix-autoclear)
 import scan as watch_scan  # noqa: E402  (sanity-watch)
 
 LEAD = "farmer (development lead)"
+# The relayed go (plan 0137): a farmer message whose first line has this form carries the user's own decision, quoted
+# from the farmer's session or the log's `decision` entries; the plan and mtm skills accept it for exactly those words.
+USER_DECIDED = 'farmer [<id>]: the user decided: "<the user\'s words>"'
+
+
+def user_decided(ack_id: str, words: str) -> str:
+    """The first line of a relayed go."""
+    return USER_DECIDED.replace("<id>", ack_id).replace("<the user's words>", words.replace('"', "'"))
 TEXT = {
     "no-plan": LEAD + ": write your task into plans/CURRENT_PLAN now: the plan's <NNNN>-<slug>, the shot's "
                       "<shotfile>/<n>/<title-slug>, or a short kebab-case task name (global CLAUDE.md).",

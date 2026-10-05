@@ -23,6 +23,13 @@ starting "after the landing: ...".
 | 1 | <step> | <a check anyone can run> | next |
 | 2 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
+## Pre-authorized
+
+User-only decisions (money, production deploys, accounts and secrets, paid resources, product choices), asked and
+answered before implementation, with the user's words and the date; the run acts on them without asking again.
+
+- <none: the plan needs no user-only decision>
+
 ## Decisions
 
 - <decisions taken while planning or grilling, with dates>

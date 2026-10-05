@@ -107,7 +107,12 @@ The user gave the farmer this authority on 2026-10-03 (hal2 INTENT.md). The farm
 - **start servant sessions and give them plans**, autogrilled, run and landed, **without asking the user**
   ([Delegate](reference.md#delegate-a-fix)); stop the sessions it started once their work has landed;
 - have a test that fails only under load disabled (recorded, with a shot to bring it back);
-- review code, okay what a session waits for, and answer questions that the repository's decisions answer.
+- review code, okay what a session waits for, and answer questions that the repository's decisions answer;
+- **relay the user's go** for an outward-facing or paid step (a production deploy, a paid server, an account): a
+  message whose first line is `farmer [<id>]: the user decided: "<the user's words>"`, the words quoted from the user in this
+  session or from the log's `decision` entries (`duties.user_decided`). The session counts it as the user's own
+  decision, exactly as far as the quoted words go (like `merge-to-main boss: land now`). Never relay a go the user
+  did not give.
 
 It **never**:
 

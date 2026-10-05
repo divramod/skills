@@ -33,7 +33,8 @@ rule (background first; ~/.claude/CLAUDE.md), recommended option first.
   tells this session to land now: a cross-session message from the session named in the user's farmer loop, saying
   `merge-to-main boss: land now`. The user gave the boss that authority on 2026-10-03 (hal2 INTENT.md). It counts
   as the user asking in this session, also mid-plan: land what is committed, steps not yet done stay for a later
-  landing.
+  landing. Likewise a farmer message whose first line is `farmer [<id>]: the user decided: "<the user's words>"` is the user's own
+  decision for what the quoted words say (e.g. a production deploy or a paid resource after the landing).
 
 Any of these is the user's consent to commit in this worktree, land on the default branch and push it. Never start it on
 your own otherwise: not mid-plan, not for a `manual` plan (every research plan is one: its research lands with the

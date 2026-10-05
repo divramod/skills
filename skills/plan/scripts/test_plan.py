@@ -128,6 +128,14 @@ class PlanTest(unittest.TestCase):
         research = self.plan("new", "Compare tabs", "--research")
         self.assertFalse(any("UAT" in s["step"] for s in research["steps"]))
 
+    def test_new_plan_has_a_pre_authorized_section_before_its_decisions(self):
+        """Hal2 plan 0137: user-only questions are answered before implementation and recorded there."""
+        info = self.plan("new", "deploy the hub")
+        text = (self.root / info["path"]).read_text()
+        self.assertIn("## Pre-authorized", text)
+        self.assertLess(text.index("## Pre-authorized"), text.index("## Decisions"))
+        self.assertEqual(len(info["steps"]), 2)
+
     def test_uat_scaffolds_once_with_the_feature_shotfile(self):
         info = self.plan("new", "plugin-plan 3 tabs")
         self.assertEqual((info["uat"], info["uat_checks"]), ("", []))
