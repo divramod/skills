@@ -155,8 +155,7 @@ def main() -> int:
     main_dir = mtm_scan.main_checkout(args.repo)
     tickets = (mtm_scan.run_json(QUEUE, main_dir) or {}).get("queue", [])
     info = slot_info(main_dir, tickets)
-    log = [json.loads(x) for x in (mtm_scan.DATA / Path(main_dir).name / "log.jsonl").read_text().splitlines()
-           if x.strip()] if (mtm_scan.DATA / Path(main_dir).name / "log.jsonl").exists() else []
+    log = mtm_scan.entries(mtm_scan.DATA / Path(main_dir).name / "log.jsonl")
     actions = plan(tickets, info, log, {}, dt.datetime.now())
     if args.json:
         print(json.dumps({"slots": {s: {"finished": i["finished"], "files": len(i["files"])} for s, i in info.items()},

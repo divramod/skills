@@ -323,8 +323,25 @@ def state_dir(main: str) -> Path:
     return d
 
 
+LOG_FIELDS = ("kind", "slot", "what", "note")
+
+
+def entries(path: Path) -> list[dict]:
+    """The log's entries, tolerant of old or hand-written ones: an unreadable line or one without `at` is skipped,
+    a missing kind, slot, what or note reads as "" (plan 0137: one entry without `note` crashed every tick)."""
+    out = []
+    for line in path.read_text().splitlines() if path.exists() else []:
+        try:
+            e = json.loads(line)
+            dt.datetime.fromisoformat(e["at"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            continue
+        out.append({**{k: "" for k in LOG_FIELDS}, **{k: v for k, v in e.items() if v is not None}})
+    return out
+
+
 def log(main: str, entry: dict) -> None:
-    entry = {"at": dt.datetime.now().isoformat(timespec="seconds"), **entry}
+    entry = {"at": dt.datetime.now().isoformat(timespec="seconds"), **{k: "" for k in LOG_FIELDS}, **entry}
     with (state_dir(main) / "log.jsonl").open("a") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -339,15 +356,7 @@ def summary_dir(main: str) -> Path:
 
 
 def actions_since(main: str, since: float) -> list[dict]:
-    f = state_dir(main) / "log.jsonl"
-    if not f.exists():
-        return []
-    out = []
-    for line in f.read_text().splitlines():
-        e = json.loads(line)
-        if dt.datetime.fromisoformat(e["at"]).timestamp() >= since:
-            out.append(e)
-    return out
+    return [e for e in entries(state_dir(main) / "log.jsonl") if dt.datetime.fromisoformat(e["at"]).timestamp() >= since]
 
 
 def render_summary(snap: dict, actions: list[dict], landings: list[dict], notes: str, lead: str = "") -> str:
@@ -371,8 +380,8 @@ def render_summary(snap: dict, actions: list[dict], landings: list[dict], notes:
     lines += ["", "## Findings", ""]
     lines += [f"- {f['kind']} {f['slot']}: {f['why']}" for f in snap["findings"]] or ["- none"]
     lines += ["", "## Actions", ""]
-    lines += [f"- {e['at'][11:16]} {e['kind']} {e['slot']}: {e['what']}" + (f" ({e['note']})" if e["note"] else "")
-              for e in actions] or ["- none"]
+    lines += [f"- {e['at'][11:16]} {e['kind']} {e['slot']}: {e['what']}" + (f" ({e['note']})" if e.get("note") else "")
+              for e in ({**{k: "" for k in LOG_FIELDS}, **a} for a in actions)] or ["- none"]
     lines += ["", "## Worktrees", "", "| slot | not on main | agent | plan |", "|---|---|---|---|"]
     lines += [f"| {w['slot']} | {w['ahead']} | {w.get('agent_state') or '-'} | {w.get('plan') or '-'} |"
               for w in snap["worktrees"] if w["ahead"] or w.get("plan")]
@@ -479,8 +488,7 @@ def main(argv: list[str]) -> int:
     elif args.cmd == "status":
         d = state_dir(main_dir)
         cutoff = dt.datetime.now() - dt.timedelta(hours=6)
-        lines = (d / "log.jsonl").read_text().splitlines() if (d / "log.jsonl").exists() else []
-        recent = [e for e in map(json.loads, lines) if dt.datetime.fromisoformat(e["at"]) >= cutoff]
+        recent = [e for e in entries(d / "log.jsonl") if dt.datetime.fromisoformat(e["at"]) >= cutoff]
         last = d / "last-scan.json"
         status = {
             "priority": json.loads((d / "priority.json").read_text()) if (d / "priority.json").exists() else None,

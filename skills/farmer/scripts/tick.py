@@ -119,8 +119,7 @@ def item_actions(item: dict, handlers: dict, ctx: dict) -> list[dict]:
 
 
 def read_log(main: str) -> list[dict]:
-    f = mtm_scan.DATA / Path(main).name / "log.jsonl"
-    return [json.loads(line) for line in f.read_text().splitlines() if line.strip()] if f.exists() else []
+    return mtm_scan.entries(mtm_scan.DATA / Path(main).name / "log.jsonl")
 
 
 WEEK = 7 * 24 * 3600

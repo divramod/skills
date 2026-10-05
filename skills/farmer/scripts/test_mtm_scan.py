@@ -114,6 +114,31 @@ class Summary(unittest.TestCase):
             self.assertIn(part, text)
         self.assertNotIn("| 03 |", text)
 
+    def test_old_log_entries_without_note_or_slot_render(self):
+        """Plan 0137: an entry without `note` crashed every tick at the summary."""
+        acts = [{"at": "2026-10-04T21:00:00", "kind": "ask", "slot": "12", "what": "go?"},
+                {"at": "2026-10-04T21:05:00", "kind": "lead", "what": "no slot", "note": None}]
+        text = scan.render_summary(snap(findings=[]), acts, [], "")
+        self.assertIn("- 21:00 ask 12: go?", text)
+        self.assertIn("- 21:05 lead : no slot", text)
+
+    def test_log_entries_are_read_tolerantly_and_written_whole(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "log.jsonl"
+            f.write_text('{"at": "2026-10-04T21:00:00", "kind": "ask"}\nnot json\n{"kind": "no at"}\n')
+            self.assertEqual(scan.entries(f), [{"at": "2026-10-04T21:00:00", "kind": "ask", "slot": "", "what": "",
+                                                "note": ""}])
+            old, scan.DATA = scan.DATA, Path(d)
+            try:
+                main = str(Path(d) / "hal2")
+                scan.state_dir(main).mkdir(parents=True, exist_ok=True)
+                scan.log(main, {"kind": "decision", "slot": "12"})
+                self.assertEqual(scan.entries(scan.state_dir(main) / "log.jsonl")[0]["note"], "")
+            finally:
+                scan.DATA = old
+
     def test_the_summary_folder_ignores_itself(self):
         import tempfile
         from pathlib import Path
