@@ -16,15 +16,10 @@ import re
 from pathlib import Path
 
 import decision_log
+from decision_log import ACKS, IDS, concerns, flat, quotes, shares_wording, words
 
 WORKTREES = Path(os.environ.get("HAL2_WORKTREE_ROOT", Path.home() / ".hal/git/worktree"))
 MESSAGE = re.compile(r"^\s*decision check\s+([\w./-]+?):?(?:\s+(.*))?$", re.S | re.I)
-QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”')
-STOP = {"with", "that", "this", "from", "into", "have", "after", "before", "when", "then", "than", "them", "they",
-        "their", "there", "what", "which", "where", "every", "each", "also", "only", "should", "would", "could", "must",
-        "will", "were", "been", "being", "does", "done", "make", "made", "user", "slot", "plan", "step", "steps",
-        "decided", "decision", "decisions", "farmer", "servant", "skill"}
-REPO_WIDE = ("", "-", "*", "all")
 
 
 def parse(message: str) -> tuple[str, str]:
@@ -35,43 +30,11 @@ def parse(message: str) -> tuple[str, str]:
     return m.group(1), (m.group(2) or "").strip()
 
 
-def words(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(w) >= 4 and w not in STOP}
-
-
-def names(text: str, slot: str) -> bool:
-    """`slot` as a standalone token: not part of a date (2026-10-04), a time (10:04), a path or a longer word."""
-    return re.search(r"(?<![\w./:-])" + re.escape(slot) + r"(?![\w/:-])", text or "") is not None
-
-
-def concerns(entry: dict, slot: str, repo: str) -> bool:
-    """Is this `decision` entry for the slot (`<slot>` of the farmer's repo `repo`, or `<other repo>/<slot>`)? Its `slot`
-    names it, or it is repo-wide and its `what` names it."""
-    own, _, bare = slot.rpartition("/")
-    slots = [s.strip() for s in str(entry.get("slot", "")).split(",")]
-    if slot in slots or (not own or own == repo) and bare in slots:
-        return True
-    if not all(s in REPO_WIDE for s in slots):
-        return False
-    text = entry.get("what", "")  # the decision itself; a note naming a slot is bookkeeping ("relayed to 12")
-    return names(text, bare) and (not own or own == repo or re.search(rf"\b{re.escape(own)}\b", text) is not None)
-
-
-IDS = re.compile(r"(?<![\w-])\d{1,2}[a-z](?![\w-])")  # option ids: 1a, 2b
-ACKS = re.compile(r"(?<![\w:-])\d{2}-\d{1,3}(?![\w:-])")  # farmer instruction ids: 12-33
 ITEMS = re.compile(r"\(\d+\)|[;,\n]")
 
 
 def items(have: str) -> list[str]:
     return [i.strip() for i in ITEMS.split(have) if i.strip()]
-
-
-def quotes(entry: dict) -> list[str]:
-    for field in ("note", "what"):
-        found = [(a or b).strip() for a, b in QUOTED.findall(entry.get(field) or "")]
-        if found:
-            return found
-    return []
 
 
 def topic(entry: dict) -> set[str]:
@@ -80,20 +43,12 @@ def topic(entry: dict) -> set[str]:
     return words(head) if colon and len(head.split()) <= 6 else set()
 
 
-def flat(text: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
-
-
 def fragment(entry: dict, have: str) -> bool:
     """Shared wording: 4 consecutive words of the user's quote or the entry's `what` (a whole quote of 3) occur in the
     list, or a list item of 3+ words with two key words occurs verbatim in the entry."""
-    listed = f" {flat(have)} "
     sources = quotes(entry) + [entry.get("what", "")]
-    for s in sources:
-        w = flat(s).split()
-        n = min(4, len(w))
-        if n >= 3 and any(f" {' '.join(w[i:i + n])} " in listed for i in range(len(w) - n + 1)):
-            return True
+    if any(shares_wording(s, have) for s in sources):
+        return True
     said = " " + " ".join(flat(s) for s in sources) + " "
     return any(len(flat(i).split()) >= 3 and len(words(i)) >= 2 and f" {flat(i)} " in said for i in items(have))
 
@@ -129,7 +84,7 @@ def quote(entry: dict) -> str:
 
 
 def missing(log: list[dict], slot: str, repo: str, have: str) -> list[dict]:
-    return [e for e in decision_log.decisions(log) if concerns(e, slot, repo) and not present(e, have)]
+    return [e for e in decision_log.decisions(log, repo=repo) if concerns(e, slot, repo) and not present(e, have)]
 
 
 def known(slot: str, repo: str, log: list[dict], worktrees: list[str]) -> bool:

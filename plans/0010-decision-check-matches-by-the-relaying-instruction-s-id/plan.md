@@ -28,8 +28,8 @@ starting "after the landing: ...".
 
 | # | Step | Done when | Status |
 |---|---|---|---|
-| 1 | Decision links: `decision_log.links(log)` gives each decision the ack ids that relayed it: its own `ack`/`acks` field, `decision-link` entries, and a back-fill from the log's `ask-ack` entries (the decision's quote in the instruction's text; a quote-less decision when all its key words are in an instruction sent within an hour; a decision whose option ids are a strict subset of an earlier one's of the same slot within an hour inherits its links). `acks.py instruct --decision <id>` records the link; `farmer.py decision list` shows the links | `python3 -m unittest test_decision_check` in skills/farmer/scripts: links from each source | next |
-| 2 | Matching: an item's ack ids (`12-6`, `12-29/30` = 12-29 and 12-30) meeting a decision's links count it present; topic matching also counts an item sharing two key words of which one is distinctive (in no other decision under check); a test built from 12's exact message over a trimmed fixture of the log | the test from 12's message passes: 12-6, the hotfix, 12-29/30 (with 3a done), 12-33, 12-35 and 12-36 present, decisions it does not name reported | |
+| 1 | Decision links: `decision_log.links(log)` gives each decision the ack ids that relayed it: its own `ack`/`acks` field, `decision-link` entries, and a back-fill from the log's `ask-ack` entries (the decision's quote in the instruction's text; a quote-less decision when all its key words are in an instruction sent within an hour; a decision whose option ids are a strict subset of an earlier one's of the same slot within an hour inherits its links). `acks.py instruct --decision <id>` records the link; `farmer.py decision list` shows the links | `python3 -m unittest test_decision_check` in skills/farmer/scripts: links from each source | | done |
+| 2 | Matching: an item's ack ids (`12-6`, `12-29/30` = 12-29 and 12-30) meeting a decision's links count it present; topic matching also counts an item sharing two key words of which one is distinctive (in no other decision under check); a test built from 12's exact message over a trimmed fixture of the log | the test from 12's message passes: 12-6, the hotfix, 12-29/30 (with 3a done), 12-33, 12-35 and 12-36 present, decisions it does not name reported | next |
 | 3 | Live: 12's message from the farmer on hal2's real log, the output recorded below | the recorded output reports none of the decisions 12's list names | |
 | 4 | Docs and suites: farmer SKILL.md (relay a decision with `acks.py instruct --decision`), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | |
 | 5 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
@@ -80,3 +80,11 @@ answered before implementation, with the user's words and the date; the run acts
   built in 5bf85ed9, folded into this landing)."
 - The `concerns` rule (plan 0009) counts a repo-wide decision only when its `what` names the slot, so 12-12 (iOS) and
   12-15 (main finishes) are not under 12's check at all; expect them neither present nor missing.
+- Step 1 (links on hal2's real log): 09:02:29, 09:04:30 and 09:04:38 → 12-6; 09:04:56 → 12-9; 16:26:11 → 12-20,
+  12-34 (12-34 quotes it again); 20:30:22 → 12-27; 21:00:20 → 12-29; 21:22:06 and 21:26:40 → 12-30, 12-33; 21:30:00
+  → 12-33; 21:41:34 → 12-35; 22:10:02 → 12-30, 12-33 (inherited: its `2a`), 12-36; 19:12:10 (the hotfix) none.
+  Known looseness: the 3-word quote "1a, 2a, 3a" also matches 12-33, which relays the version bumps' "1a, 2a, 3a";
+  harmless for 12's list (it names both), left as the autogrill's rule says.
+- The decision check after this session's /clear (farmer-a4, 2026-10-05) reported the user's "can we adapt the
+  handoff ..." / "1" (plan 0008) and "1" (plan 0009) as missing: both are in those landed plans' Decisions; the
+  handoff's list holds only the current plan's decisions. Not in this plan's scope.

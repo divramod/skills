@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Every farmer instruction carries an id and asks for an ack (hal2 plan 0137, the user's point 5, 2026-10-05).
 
-  acks.py instruct <slot> <text> [--repo <dir>] [--json]
-      stamp a message the farmer sends itself (SendMessage): prints it with its id, logs the `ask-ack`
+  acks.py instruct <slot> <text> [--decision <id>]... [--repo <dir>] [--json]
+      stamp a message the farmer sends itself (SendMessage): prints it with its id, logs the `ask-ack`; with
+      --decision (a prefix of a `decision` entry's id) also a `decision-link`, so a servant naming the user's
+      decision by this id has it in a decision check (skills plan 0010)
   acks.py ack <id> started|done|refused [<why>...] [--repo <dir>]
       record a session's ack when its message arrives
   acks.py open [--repo <dir>] [--json]
@@ -21,6 +23,7 @@ import os
 import re
 import sys
 
+import decision_log
 import deliver
 import mtm_scan
 
@@ -107,6 +110,7 @@ def main(argv: list[str]) -> int:
     ins = sub.add_parser("instruct")
     ins.add_argument("slot")
     ins.add_argument("text")
+    ins.add_argument("--decision", action="append", default=[])
     ack = sub.add_parser("ack")
     ack.add_argument("id")
     ack.add_argument("status", choices=STATUSES)
@@ -119,9 +123,17 @@ def main(argv: list[str]) -> int:
     main_dir = mtm_scan.main_checkout(args.repo)
     log = mtm_scan.entries(mtm_scan.state_dir(main_dir) / "log.jsonl")
     if args.cmd == "instruct":
+        try:
+            relays = [decision_log.find(log, d)["id"] for d in args.decision]
+        except ValueError as e:
+            print(f"acks.py instruct --decision {e}", file=sys.stderr)
+            return 1
         ack_id = next_id(log, args.slot)
         text = stamp(args.text, ack_id)
         mtm_scan.log(main_dir, ask_entry(args.slot, ack_id, text, None, "farmer"))
+        for d in relays:
+            mtm_scan.log(main_dir, {"kind": "decision-link", "slot": args.slot, "what": f"{d} relayed as {ack_id}",
+                                    "note": "", "decision": d, "ack": ack_id, "by": "farmer"})
         print(json.dumps({"id": ack_id, "text": text}) if args.json else text)
     elif args.cmd == "ack":
         known = instructions(log).get(args.id)
