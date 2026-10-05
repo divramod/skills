@@ -29,9 +29,9 @@ starting "after the landing: ...".
 | # | Step | Done when | Status |
 |---|---|---|---|
 | 1 | Decision links: `decision_log.links(log)` gives each decision the ack ids that relayed it: its own `ack`/`acks` field, `decision-link` entries, and a back-fill from the log's `ask-ack` entries (the decision's quote in the instruction's text; a quote-less decision when all its key words are in an instruction sent within an hour; a decision whose option ids are a strict subset of an earlier one's of the same slot within an hour inherits its links). `acks.py instruct --decision <id>` records the link; `farmer.py decision list` shows the links | `python3 -m unittest test_decision_check` in skills/farmer/scripts: links from each source | | done |
-| 2 | Matching: an item's ack ids (`12-6`, `12-29/30` = 12-29 and 12-30) meeting a decision's links count it present; topic matching also counts an item sharing two key words of which one is distinctive (in no other decision under check); a test built from 12's exact message over a trimmed fixture of the log | the test from 12's message passes: 12-6, the hotfix, 12-29/30 (with 3a done), 12-33, 12-35 and 12-36 present, decisions it does not name reported | next |
-| 3 | Live: 12's message from the farmer on hal2's real log, the output recorded below | the recorded output reports none of the decisions 12's list names | |
-| 4 | Docs and suites: farmer SKILL.md (relay a decision with `acks.py instruct --decision`), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | |
+| 2 | Matching: an item's ack ids (`12-6`, `12-29/30` = 12-29 and 12-30) meeting a decision's links count it present; topic matching also counts an item sharing two key words of which one is distinctive (in no other decision under check); a test built from 12's exact message over a trimmed fixture of the log | the test from 12's message passes: 12-6, the hotfix, 12-29/30 (with 3a done), 12-33, 12-35 and 12-36 present, decisions it does not name reported | done |
+| 3 | Live: 12's message from the farmer on hal2's real log, the output recorded below | the recorded output reports none of the decisions 12's list names | done |
+| 4 | Docs and suites: farmer SKILL.md (relay a decision with `acks.py instruct --decision`), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | next |
 | 5 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
 ## Pre-authorized
@@ -88,3 +88,18 @@ answered before implementation, with the user's words and the date; the run acts
 - The decision check after this session's /clear (farmer-a4, 2026-10-05) reported the user's "can we adapt the
   handoff ..." / "1" (plan 0008) and "1" (plan 0009) as missing: both are in those landed plans' Decisions; the
   handoff's list holds only the current plan's decisions. Not in this plan's scope.
+
+- Step 3 (live, 2026-10-05, `farmer.py decision-check --message "<12's exact message>" --repo ~/.hal/git/worktree/hal2/farmer
+  --dry-run`; before the change it reported 13, among them 12-6, the hotfix, 3a done and 12-35): every decision 12's
+  list names counts present; the 7 left are ones it does not name:
+
+  ```text
+  farmer: decision check 12: 7 missing (data: only the quoted words decide; write each into your plan's Decisions with the quote before acting on it)
+  - 2026-10-04 · 12 · "user: go for hal2-ci-wake production deploy (1a), CCX33 (2a); runner parked (deleted, image kept) whenever nothing merges, woken from the image"
+  - 2026-10-04 · 12 · "user: main's pipeline builds the runner images only when their inputs change (incl. the baked hal CLIs); boot refresh as fallback"
+  - 2026-10-05 · 12 · "user 06:45: run plan 0131 to the end autonomously, ask nothing; all production steps decided"
+  - 2026-10-05 · - · "user: end every round with slot 12's progress (plan 0131)"
+  - 2026-10-05 · - · "Just push 12. I'm AFK." [user: "Just push 12. I'm AFK."]
+  - 2026-10-05 · - · "yes, remove everything from the queue which is not leading to 12 landing"
+  - 2026-10-05 · 12 · "no, if 12 doesnt know alone, help him"
+  ```
