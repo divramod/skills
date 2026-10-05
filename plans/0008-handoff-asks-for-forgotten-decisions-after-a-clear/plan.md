@@ -1,5 +1,7 @@
 # Plan 0008: handoff asks for forgotten decisions after a clear
 
+Finished: 2026-10-05
+
 Grilled: 2026-10-05 (autogrill ×1)
 
 Landing: auto
@@ -34,7 +36,7 @@ starting "after the landing: ...".
 | 3 | handoff SKILL.md (design points 1, 2, 4): Continue gets the decision-check step after reading HANDOFF.md and the plan (ask the farmer by SendMessage without waiting, write each missing decision with the user's words quoted before acting on it; no farmer: compare plan, INTENT.md and HANDOFF.md and name the gaps in the first report); Write step 1 also collects decisions relayed through farmer and peer messages; the handoff names the farmer a servant serves | `grep -c "decision check" skills/handoff/SKILL.md` ≥ 1 and `grep -c "the user decided" skills/handoff/SKILL.md` ≥ 1; the farmer's SERVANT-ROLE.md mentions the check | done |
 | 4 | Dry run end to end: a scratch servant slot (temp repo with a plan and HANDOFF.md) and a scratch farmer state (`FARMER_DIR`) with a `decision` entry absent from the plan; run the Continue step's scripts: `decisions.py` builds the message, `farmer.py decision-check --message` returns the entry with its quote, the decision is written into the plan's Decisions; a second check says "none missing" | `bash plans/0008-*/dry-run.sh` exits 0 and prints the returned decision, then `none missing` | done |
 | 5 | Whole suite and rules: README/skill descriptions name the check, `python3 scripts/check-plugins.py`, every scripts test suite | `python3 scripts/check-plugins.py` ok; `python3 -m unittest discover -s skills/farmer/scripts` and `-s skills/handoff/scripts` pass | done |
-| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | next |
+| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | done |
 
 ## Pre-authorized
 
