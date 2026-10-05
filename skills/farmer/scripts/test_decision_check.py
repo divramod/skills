@@ -8,6 +8,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+import acks
 import decision_check as dc
 import decision_log
 import farmer
@@ -68,12 +69,12 @@ class Check(unittest.TestCase):
         self.assertNotIn("workflow runs", text)  # hal2's slot 12, not skills/04
         self.assertIn("none missing", check("decision check 07: use sqlite")[1])
         relayed = {**OTHER, "slot": "-", "what": "commit the skills edits", "note": "12 told skills is free"}
-        self.assertFalse(dc.concerns(relayed, "12", "hal2"))  # a note naming a slot is bookkeeping
+        self.assertFalse(decision_log.concerns(relayed, "12", "hal2"))  # a note naming a slot is bookkeeping
 
     def test_a_slot_is_a_standalone_token(self):
-        self.assertTrue(dc.names("in ~/a/skills (slot 04).", "04"))
-        self.assertFalse(dc.names("on 2026-10-04 at 10:04", "04"))
-        self.assertFalse(dc.names("plan 0004", "04"))
+        self.assertTrue(decision_log.names("in ~/a/skills (slot 04).", "04"))
+        self.assertFalse(decision_log.names("on 2026-10-04 at 10:04", "04"))
+        self.assertFalse(decision_log.names("plan 0004", "04"))
 
 
 # hal2's slot 12 as the farmer's evidence of 2026-10-05 showed it (shortened): the servant listed "1a/2a/3a CI
@@ -163,6 +164,100 @@ class SharedAt(unittest.TestCase):
         self.assertEqual([e["what"] for e in decision_log.decisions(log)], ["I'm AFK"])
 
 
+# hal2's log of 2026-10-05, trimmed: the farmer's relays of 12's decisions (plan 0010's Notes).
+def ask(at, ack_id, text, slot="12"):
+    return {"at": at, "kind": "ask-ack", "slot": slot, "id": ack_id, "text": f"farmer [{ack_id}]: {text}"}
+
+
+COPILOT = {"at": "2026-10-05T21:26:40", "kind": "decision", "slot": "12",
+           "what": "3a done: the user switched off Copilot's automatic code review",
+           "note": 'user: "done, copilot review is off"'}
+RELAYS = [EFFORT, MIX, ask("2026-10-05T09:04:38", "12-6", 'the user decided: "12 needs to be fast but also high quality. '
+                           'So we need to find a mix." Spend tokens freely; your effort is now High.'),
+          REDESIGN, ask("2026-10-05T21:22:06", "12-30", 'the user decided: "1a, 2a, 3a" on the CI redesign'), COPILOT,
+          RUNS, ask("2026-10-05T21:41:34", "12-35", 'the user decided: "it should delete all the old workflow runs".')]
+
+
+class Links(unittest.TestCase):
+    """Plan 0010: each decision knows the ack ids of the farmer instructions that relayed it."""
+
+    def links(self, log):
+        return {e["id"]: e["links"] for e in decision_log.decisions(log, True)}
+
+    def test_the_back_fill_links_quotes_key_words_and_inherited_option_ids(self):
+        self.assertEqual(self.links(RELAYS), {
+            EFFORT["at"]: ["12-6"],  # no quote: its key words (effort, high) in 12-6, within an hour
+            MIX["at"]: ["12-6"],  # 4 words of the quote
+            REDESIGN["at"]: ["12-30"],  # a whole quote of 3 words
+            COPILOT["at"]: ["12-30"],  # {3a} a strict subset of 21:22:06's option ids, 4 minutes later
+            RUNS["at"]: ["12-35"]})
+
+    def test_no_link_to_another_slot_too_late_or_too_short(self):
+        log = [MIX, ask("2026-10-05T09:05:00", "07-1", "12 needs to be fast but also high quality", slot="07"),
+               RUNS, ask("2026-10-06T10:00:00", "12-40", "it should delete all the old workflow runs"),
+               EFFORT, ask("2026-10-05T11:00:00", "12-41", "your effort is now High"),
+               {**OTHER, "slot": "12", "note": 'user: "go on"'}, ask("2026-10-05T09:00:10", "12-42", "go on, then")]
+        self.assertEqual(set(map(tuple, self.links(log).values())), {()})
+
+    def test_explicit_links_from_the_decision_and_from_decision_link_entries(self):
+        log = [{**OTHER, "ack": "07-3"}, {**RUNS, "acks": ["12-33", "12-34"]},
+               {"at": "2026-10-05T22:00:00", "kind": "decision-link", "slot": "12", "decision": RUNS["at"], "ack": "12-50"}]
+        self.assertEqual(self.links(log), {OTHER["at"]: ["07-3"], RUNS["at"]: ["12-33", "12-34", "12-50"]})
+
+
+# 12's exact message after its /clear (the farmer's report, 2026-10-05), and the decisions under its check, trimmed.
+TWELVES_MESSAGE = (
+    "decision check 12: after a /clear I have these decisions in plan 0131 (Decisions + step rows): 12-6 fast/high "
+    "quality, 12-12 no iOS in pipelines, 12-15 a running main always finishes, the one-time hotfix to main, 12-29/30 "
+    "park the Linux runner ASAP (1a,2a,3a), 12-33 steps 19+20 before the next landing (version bump every changed "
+    "unit), 12-34 step 20's design, 12-35 delete all old main.yml/deliver.yml/macos.yml runs after the landing, 12-36 "
+    "publish+deliver are jobs of the land run (step 21, built in 5bf85ed9, folded into this landing).")
+TOKENS = {"at": "2026-10-05T09:04:38", "kind": "decision", "slot": "12",
+          "what": 'user clarified: "I mean tokens spent." (tokens are not important, not server money)'}
+AFK = {"at": "2026-10-05T09:04:56", "kind": "decision", "slot": "-", "what": 'user: "Just push 12. I\'m AFK."'}
+HOTFIX = {"at": "2026-10-05T19:12:10", "kind": "decision", "slot": "12",
+          "what": "the user answered 12 directly: option 1 (hotfix pushed to main outside CI)", "note": "per 12's report"}
+HELP = {"at": "2026-10-05T20:30:22", "kind": "decision", "slot": "12",
+        "what": 'the user decided: "no, if 12 doesnt know alone, help him"'}
+PARK = {"at": "2026-10-05T21:00:20", "kind": "decision", "slot": "12",
+        "what": "the user: park the Linux runner right after the last Linux job; 12 does it",
+        "note": 'user\'s words: "yes, park right after the last linux job. i think 12 should do that."'}
+PUBLISH = {"at": "2026-10-05T22:10:02", "kind": "decision", "slot": "12",
+           "what": "publish and deliver are jobs of the land workflow itself, not a separately dispatched run",
+           "note": 'user: "we said, we want only one, which does everything?"'}
+TWELVES_LOG = [
+    DEPLOY, EFFORT, {**MIX, "supersedes": EFFORT["at"]}, TOKENS,
+    ask("2026-10-05T09:04:38", "12-6", 'the user decided: "12 needs to be fast but also high quality. So we need to '
+        'find a mix." and then "I mean tokens spent."'), AFK, HOTFIX, HELP,
+    ask("2026-10-05T20:30:08", "12-27", 'help is coming (the user: "if 12 doesnt know alone, help him")'), PARK,
+    ask("2026-10-05T21:00:21", "12-29", 'the user decided: "yes, park right after the last linux job."'), REDESIGN,
+    ask("2026-10-05T21:22:06", "12-30", 'the user decided: "1a, 2a, 3a" on the CI redesign'), COPILOT, VERSION,
+    ask("2026-10-05T21:30:12", "12-33", 'the user decided: "every lib or app, which changed, should also be version '
+        'bumped"'), RUNS, ask("2026-10-05T21:41:34", "12-35", 'the user decided: "it should delete all the old '
+                              'workflow runs".'), PUBLISH,
+    ask("2026-10-05T22:10:02", "12-36", 'the user decided: "we said, we want only one, which does everything?"')]
+
+
+class ByRelay(unittest.TestCase):
+    """Plan 0010: a servant naming the farmer's instruction ids or a distinctive topic has those decisions."""
+
+    def test_twelves_exact_message_misses_only_what_it_does_not_name(self):
+        slot, have = dc.parse(TWELVES_MESSAGE)
+        gone = dc.missing(TWELVES_LOG, slot, "hal2", have)
+        self.assertEqual([e["at"] for e in gone], [DEPLOY["at"], AFK["at"], HELP["at"]])
+
+    def test_a_short_range_names_each_instruction(self):
+        self.assertEqual(dc.acks_in("12-29/30 park, 07-3/4/5, 12-33; not 2026-10-05 or 10:04-10:05"),
+                         {"12-29", "12-30", "07-3", "07-4", "07-5", "12-33"})
+        self.assertTrue(dc.present({**HELP, "links": ["12-27"]}, "12-26/27 help"))
+        self.assertFalse(dc.present({**HELP, "links": ["12-27"]}, "12-26 help, 12-28"))
+
+    def test_two_shared_key_words_count_only_with_a_distinctive_one(self):
+        self.assertTrue(dc.present(HOTFIX, "the one-time hotfix to main", {"hotfix", "answered"}))
+        self.assertFalse(dc.present(HOTFIX, "the one-time hotfix to main"))  # "hotfix" also in another decision
+        self.assertFalse(dc.present(HOTFIX, "a main hotfix", {"answered"}))
+
+
 class Cli(Repo):
     """`farmer.py decision-check` reads the farmer's log and logs the check."""
 
@@ -205,6 +300,23 @@ class Cli(Repo):
                          ("supersede", [EFFORT["at"]], "by 2026-10-05T09:04:30: a mix, not High"))
         self.assertNotIn("effort to High", cli("list", "--slot", "12")[1])
         self.assertIn("(superseded) user set 12's effort", cli("list", "--all")[1])
+
+    def test_instruct_with_decision_links_the_relay_and_list_shows_it(self):
+        log = mtm_scan.state_dir(str(self.main)) / "log.jsonl"
+        log.write_text("".join(json.dumps(e) + "\n" for e in TWELVE))
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), mock.patch("sys.stderr", err):
+            self.assertEqual(acks.main(["instruct", "12", "x", "--decision", "2026-10-05", "--repo", str(self.slot)]), 1)
+            self.assertEqual(log.read_text().count("ask-ack"), 0)  # an ambiguous id sends nothing
+            self.assertEqual(acks.main(["instruct", "12", "the user decided: delete them", "--decision",
+                                        RUNS["at"][:16], "--repo", str(self.slot)]), 0)
+        self.assertIn("decisions match", err.getvalue())
+        link = json.loads(log.read_text().splitlines()[-1])
+        self.assertEqual((link["kind"], link["decision"], link["ack"]), ("decision-link", RUNS["at"], "12-1"))
+        listed = io.StringIO()
+        with redirect_stdout(listed):
+            farmer.main(["decision", "list", "--slot", "12", "--repo", str(self.slot)])
+        self.assertIn("delete all old GitHub Actions workflow runs (relayed as 12-1)", listed.getvalue())
 
 
 if __name__ == "__main__":

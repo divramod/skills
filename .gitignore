@@ -4,3 +4,5 @@
 shotfiles/
 __pycache__/
 plans/CURRENT_PLAN
+# This worktree's session state (/handoff), never committed
+HANDOFF.md

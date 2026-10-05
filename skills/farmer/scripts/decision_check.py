@@ -16,15 +16,10 @@ import re
 from pathlib import Path
 
 import decision_log
+from decision_log import ACKS, IDS, concerns, flat, quotes, shares_wording, words
 
 WORKTREES = Path(os.environ.get("HAL2_WORKTREE_ROOT", Path.home() / ".hal/git/worktree"))
 MESSAGE = re.compile(r"^\s*decision check\s+([\w./-]+?):?(?:\s+(.*))?$", re.S | re.I)
-QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”')
-STOP = {"with", "that", "this", "from", "into", "have", "after", "before", "when", "then", "than", "them", "they",
-        "their", "there", "what", "which", "where", "every", "each", "also", "only", "should", "would", "could", "must",
-        "will", "were", "been", "being", "does", "done", "make", "made", "user", "slot", "plan", "step", "steps",
-        "decided", "decision", "decisions", "farmer", "servant", "skill"}
-REPO_WIDE = ("", "-", "*", "all")
 
 
 def parse(message: str) -> tuple[str, str]:
@@ -35,43 +30,20 @@ def parse(message: str) -> tuple[str, str]:
     return m.group(1), (m.group(2) or "").strip()
 
 
-def words(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(w) >= 4 and w not in STOP}
-
-
-def names(text: str, slot: str) -> bool:
-    """`slot` as a standalone token: not part of a date (2026-10-04), a time (10:04), a path or a longer word."""
-    return re.search(r"(?<![\w./:-])" + re.escape(slot) + r"(?![\w/:-])", text or "") is not None
-
-
-def concerns(entry: dict, slot: str, repo: str) -> bool:
-    """Is this `decision` entry for the slot (`<slot>` of the farmer's repo `repo`, or `<other repo>/<slot>`)? Its `slot`
-    names it, or it is repo-wide and its `what` names it."""
-    own, _, bare = slot.rpartition("/")
-    slots = [s.strip() for s in str(entry.get("slot", "")).split(",")]
-    if slot in slots or (not own or own == repo) and bare in slots:
-        return True
-    if not all(s in REPO_WIDE for s in slots):
-        return False
-    text = entry.get("what", "")  # the decision itself; a note naming a slot is bookkeeping ("relayed to 12")
-    return names(text, bare) and (not own or own == repo or re.search(rf"\b{re.escape(own)}\b", text) is not None)
-
-
-IDS = re.compile(r"(?<![\w-])\d{1,2}[a-z](?![\w-])")  # option ids: 1a, 2b
-ACKS = re.compile(r"(?<![\w:-])\d{2}-\d{1,3}(?![\w:-])")  # farmer instruction ids: 12-33
 ITEMS = re.compile(r"\(\d+\)|[;,\n]")
+RANGE = re.compile(r"(?<![\w:-])(\d{2})-(\d{1,3})((?:/\d{1,3})+)(?![\w:-])")  # 12-29/30: 12-29 and 12-30
 
 
 def items(have: str) -> list[str]:
     return [i.strip() for i in ITEMS.split(have) if i.strip()]
 
 
-def quotes(entry: dict) -> list[str]:
-    for field in ("note", "what"):
-        found = [(a or b).strip() for a, b in QUOTED.findall(entry.get(field) or "")]
-        if found:
-            return found
-    return []
+def acks_in(text: str) -> set[str]:
+    """The farmer instruction ids a text names, a short range (`12-29/30`) expanded."""
+    found = set(ACKS.findall(text))
+    for slot, first, more in RANGE.findall(text):
+        found |= {f"{slot}-{n}" for n in [first, *more.strip("/").split("/")]}
+    return found
 
 
 def topic(entry: dict) -> set[str]:
@@ -80,35 +52,31 @@ def topic(entry: dict) -> set[str]:
     return words(head) if colon and len(head.split()) <= 6 else set()
 
 
-def flat(text: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
-
-
 def fragment(entry: dict, have: str) -> bool:
     """Shared wording: 4 consecutive words of the user's quote or the entry's `what` (a whole quote of 3) occur in the
     list, or a list item of 3+ words with two key words occurs verbatim in the entry."""
-    listed = f" {flat(have)} "
     sources = quotes(entry) + [entry.get("what", "")]
-    for s in sources:
-        w = flat(s).split()
-        n = min(4, len(w))
-        if n >= 3 and any(f" {' '.join(w[i:i + n])} " in listed for i in range(len(w) - n + 1)):
-            return True
+    if any(shares_wording(s, have) for s in sources):
+        return True
     said = " " + " ".join(flat(s) for s in sources) + " "
     return any(len(flat(i).split()) >= 3 and len(words(i)) >= 2 and f" {flat(i)} " in said for i in items(have))
 
 
-def present(entry: dict, have: str) -> bool:
-    """Does the servant's list hold this decision, also in a short form? An item with the same option-id set
-    (1a/2a/3a: two or more ids, or one and a shared key word) or an ack id (12-33), the entry's topic, a fragment of the
-    user's quote, the entry's date with two key words; else at least half of its key words (biased toward reporting)."""
+def present(entry: dict, have: str, distinct: set[str] | frozenset = frozenset()) -> bool:
+    """Does the servant's list hold this decision, also in a short form? An ack id of an instruction that relayed it
+    (its `links`, or one its text names: 12-33, 12-29/30), an item with the same option-id set (1a/2a/3a: two or more
+    ids, or one and a shared key word), an item sharing two key words of which one is `distinct` (in no other decision
+    under the check), the entry's topic, a fragment of the user's quote, the entry's date with two key words; else at
+    least half of its key words (biased toward reporting)."""
     text, want = f"{entry.get('what', '')} {entry.get('note', '')}".lower(), words(entry.get("what", ""))
-    ids, acks, day = set(IDS.findall(text)), set(ACKS.findall(text)), entry["at"][:10]
+    ids, day = set(IDS.findall(text)), entry["at"][:10]
+    if (set(entry.get("links", [])) | set(ACKS.findall(text))) & acks_in(have):
+        return True
     for item in items(have):
         low, iw = item.lower(), words(item)
         if ids and set(IDS.findall(low)) == ids and (len(ids) >= 2 or want & iw):
             return True
-        if acks & set(ACKS.findall(low)) or day in item and len(want & iw) >= 2:
+        if len(want & iw) >= 2 and (want & iw & distinct or day in item):
             return True
     head = topic(entry)
     if head and head <= words(have) or fragment(entry, have):
@@ -129,7 +97,10 @@ def quote(entry: dict) -> str:
 
 
 def missing(log: list[dict], slot: str, repo: str, have: str) -> list[dict]:
-    return [e for e in decision_log.decisions(log) if concerns(e, slot, repo) and not present(e, have)]
+    under = [e for e in decision_log.decisions(log, repo=repo) if concerns(e, slot, repo)]
+    keys = [words(e.get("what", "")) for e in under]
+    return [e for n, e in enumerate(under)
+            if not present(e, have, keys[n] - set().union(*keys[:n], *keys[n + 1:]))]
 
 
 def known(slot: str, repo: str, log: list[dict], worktrees: list[str]) -> bool:
