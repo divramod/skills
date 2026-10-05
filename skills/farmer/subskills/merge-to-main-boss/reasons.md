@@ -15,7 +15,7 @@ Nothing holds the queue on red and nothing runs on the Mac, so the local cases c
 
 - **Gone**: R1 (a red candidate releases the queue at once; its session fixes and lands again), R2 and R3 (the
   gates run on fixed-resource runners, not under the Mac's load), R4 (`merge-to-main --max-wait` keeps its place),
-  R10 and R11 locally (a job's `timeout-minutes` ends it on GitHub), R12 (`deliver.yml` installs after the landing).
+  R10 and R11 locally (a job's `timeout-minutes` ends it on GitHub), R12 (`ship.yml` installs after the landing).
 - **Stay**: R6, R7, R8, R9 (a real failure is now a red job: its session reads `gh run view --log-failed` and
   reproduces it with `gate/main.sh <job>`).
 - **New**, the C cases below. A red job's cause in the runner, its image or the workflow is the ci duty's (one fix

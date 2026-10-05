@@ -45,6 +45,7 @@ be on it). Keep going until the PR is merged: every fix is a new candidate, and 
 
 ## After the landing
 
-`deliver.yml` installs the landed apps on the Mac host (cargo installs, hal2-api/hal2-daemon, the apps' install)
-and pulls the main checkout; the landing pulls it too when deliver.yml has not yet. In the report, name the PR,
-the run and the deliver run (`gh run list --workflow deliver.yml -L 1`), not hook tasks or durations of local steps.
+land.yml's `merge` pushes the version tags and dispatches `ship.yml`, a run of its own: it promotes the staged Linux
+bundle, installs the landed apps on the Mac host (cargo installs, hal2-api/hal2-daemon, the apps' install) and pulls
+the main checkout; the landing pulls it too when ship.yml has not yet. In the report, name the PR, the land run and
+the ship run (`gh run list --workflow ship.yml -L 1`), not hook tasks or durations of local steps.
