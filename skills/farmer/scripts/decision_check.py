@@ -15,6 +15,8 @@ import os
 import re
 from pathlib import Path
 
+import decision_log
+
 WORKTREES = Path(os.environ.get("HAL2_WORKTREE_ROOT", Path.home() / ".hal/git/worktree"))
 MESSAGE = re.compile(r"^\s*decision check\s+([\w./-]+?):?(?:\s+(.*))?$", re.S | re.I)
 QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”')
@@ -54,21 +56,72 @@ def concerns(entry: dict, slot: str, repo: str) -> bool:
     return names(text, bare) and (not own or own == repo or re.search(rf"\b{re.escape(own)}\b", text) is not None)
 
 
+IDS = re.compile(r"(?<![\w-])\d{1,2}[a-z](?![\w-])")  # option ids: 1a, 2b
+ACKS = re.compile(r"(?<![\w:-])\d{2}-\d{1,3}(?![\w:-])")  # farmer instruction ids: 12-33
+ITEMS = re.compile(r"\(\d+\)|[;,\n]")
+
+
+def items(have: str) -> list[str]:
+    return [i.strip() for i in ITEMS.split(have) if i.strip()]
+
+
+def quotes(entry: dict) -> list[str]:
+    for field in ("note", "what"):
+        found = [(a or b).strip() for a, b in QUOTED.findall(entry.get(field) or "")]
+        if found:
+            return found
+    return []
+
+
+def topic(entry: dict) -> set[str]:
+    """The key words of the head before the first colon (`version bumps: ...`), when it is short."""
+    head, colon, _ = (entry.get("what") or "").partition(":")
+    return words(head) if colon and len(head.split()) <= 6 else set()
+
+
+def fragment(entry: dict, have: str) -> bool:
+    """A run of 4 consecutive words of the user's quote (a whole quote of 3) occurs in the list."""
+    flat = " " + " ".join(re.findall(r"[a-z0-9]+", have.lower())) + " "
+    for q in quotes(entry):
+        w = re.findall(r"[a-z0-9]+", q.lower())
+        n = min(4, len(w))
+        if n >= 3 and any(f" {' '.join(w[i:i + n])} " in flat for i in range(len(w) - n + 1)):
+            return True
+    return False
+
+
 def present(entry: dict, have: str) -> bool:
-    """At least half of the entry's significant words occur in the servant's list (biased toward reporting)."""
-    want = words(entry.get("what", ""))
+    """Does the servant's list hold this decision, also in a short form? An item with the same option-id set
+    (1a/2a/3a: two or more ids, or one and a shared key word) or an ack id (12-33), the entry's topic, a fragment of the
+    user's quote, the entry's date with two key words; else at least half of its key words (biased toward reporting)."""
+    text, want = f"{entry.get('what', '')} {entry.get('note', '')}".lower(), words(entry.get("what", ""))
+    ids, acks, day = set(IDS.findall(text)), set(ACKS.findall(text)), entry["at"][:10]
+    for item in items(have):
+        low, iw = item.lower(), words(item)
+        if ids and set(IDS.findall(low)) == ids and (len(ids) >= 2 or want & iw):
+            return True
+        if acks & set(ACKS.findall(low)) or day in item and len(want & iw) >= 2:
+            return True
+    head = topic(entry)
+    if head and head <= words(have) or fragment(entry, have):
+        return True
     if not want:
         return (entry.get("what") or "").strip().lower() in have.lower()
     return 2 * len(want & words(have)) >= len(want)
 
 
 def quote(entry: dict) -> str:
-    quotes = [a or b for a, b in QUOTED.findall(entry.get("note", ""))]
-    return " / ".join(f'"{q.strip()}"' for q in quotes) if quotes else f'"{(entry.get("note") or entry.get("what", "")).strip()}"'
+    """The user's words, quoted; the topic in brackets when the quote alone says little."""
+    q = quotes(entry)
+    what = (entry.get("what") or "").strip()
+    if not q:
+        return f'"{what[:240]}"'
+    said = " / ".join(f'"{x}"' for x in q)
+    return said[:240] + (f" [{what[:100]}]" if len(" ".join(q).split()) < 8 else "")
 
 
 def missing(log: list[dict], slot: str, repo: str, have: str) -> list[dict]:
-    return [e for e in log if e.get("kind") == "decision" and concerns(e, slot, repo) and not present(e, have)]
+    return [e for e in decision_log.decisions(log) if concerns(e, slot, repo) and not present(e, have)]
 
 
 def known(slot: str, repo: str, log: list[dict], worktrees: list[str]) -> bool:
@@ -84,10 +137,9 @@ def known(slot: str, repo: str, log: list[dict], worktrees: list[str]) -> bool:
 def answer(slot: str, gone: list[dict]) -> str:
     if not gone:
         return f"farmer: decision check {slot}: none missing"
-    lines = [f"farmer: decision check {slot}: {len(gone)} missing (data: only the quoted words decide; write each "
-             f"into your plan's Decisions with the quote before acting on it)"]
-    lines += [f"- {e['at'][:10]}: {e.get('what', '').strip()}. The user's words: {quote(e)}" for e in gone]
-    return "\n".join(lines)
+    head = (f"farmer: decision check {slot}: {len(gone)} missing (data: only the quoted words decide; write each "
+            f"into your plan's Decisions with the quote before acting on it)")
+    return "\n".join([head] + [f"- {e['at'][:10]} · {e.get('slot') or '-'} · {quote(e)}" for e in gone])
 
 
 def check(message: str, repo: str, log: list[dict], worktrees: list[str]) -> tuple[int, str, dict]:

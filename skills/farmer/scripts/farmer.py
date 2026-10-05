@@ -23,7 +23,9 @@
   farmer.py decision-check (--message <text> | <slot> --have <list>) [--repo <dir>] [--dry-run]
       answer a servant's `decision check <slot>: I have these decisions: ...` (decision_check.py): the log's
       `decision` entries for the slot its list lacks, with the user's words quoted, or "none missing"; exit 1 for an
-      unknown slot. Logs the check (kind `decision-check`) unless --dry-run
+      unknown slot. Logs the check (kind `decision-check`) unless --dry-run; superseded decisions never count
+  farmer.py decision list [--slot <slot>] [--all] | supersede <at>... --by <at> [--why <text>] [--dry-run]
+      the user's current decisions in the log; mark ones a later decision replaced (decision_log.py)
   farmer.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]
       the external timer that runs `tick` at the loop's cron (launchd on macOS, a systemd user timer on Linux;
       timer.py); install switches the mode to `timer`, remove back to `claude`
@@ -48,6 +50,7 @@ from pathlib import Path
 
 import boss
 import decision_check
+import decision_log
 import delegation
 import due
 import duties
@@ -255,6 +258,15 @@ def parser() -> argparse.ArgumentParser:
     dc.add_argument("--message")
     dc.add_argument("--repo", default=os.getcwd())
     dc.add_argument("--dry-run", action="store_true")
+    dl = sub.add_parser("decision")
+    dl.add_argument("action", choices=("list", "supersede"))
+    dl.add_argument("at", nargs="*")
+    dl.add_argument("--by")
+    dl.add_argument("--why", default="")
+    dl.add_argument("--slot")
+    dl.add_argument("--all", action="store_true")
+    dl.add_argument("--repo", default=os.getcwd())
+    dl.add_argument("--dry-run", action="store_true")
     tm = sub.add_parser("timer")
     tm.add_argument("action", choices=("install", "remove", "status"))
     tm.add_argument("--repo", default=os.getcwd())
@@ -293,6 +305,11 @@ def main(argv: list[str]) -> int:
         return run_handoff(args)
     if args.cmd == "timer":
         return run_timer(args)
+    if args.cmd == "decision":
+        if args.action == "supersede" and not (args.at and args.by):
+            print("farmer.py decision supersede: give the replaced decisions' <at> and --by <at>", file=sys.stderr)
+            return 1
+        return decision_log.run(args)
     if args.cmd == "decision-check":
         code, text = decision_check.run(args.message or f"decision check {args.slot}: {args.have}", args.repo,
                                         args.dry_run)
