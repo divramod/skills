@@ -24,7 +24,7 @@
 
 Reads hal2 (hal2-cli-git worktree queue, hal2-cli-agents list), git and the recent
 landings: GitHub's land.yml runs (gh) where the default branch has land.yml (mtm_ci.py),
-else `hal2-cli-hooks landings`; writes only ~/skills/farmer/<repo>/ and <main>/plans/farmer/. Exit 0 on success,
+else `hal2-cli-git worktree landings`; writes only ~/skills/farmer/<repo>/ and <main>/plans/farmer/. Exit 0 on success,
 2 when a tool is missing.
 """
 
@@ -252,7 +252,7 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
     if ci:
         recent, tests = mtm_ci.landings(run_json, main, now - hours * 3600), {}
     else:
-        l_raw = run_json(["hal2-cli-hooks", "landings", "--limit", "100", "--json"], main) or {}
+        l_raw = run_json(["hal2-cli-git", "worktree", "landings", "--limit", "100", "--json"], main) or {}
         recent, tests = landings_summary(l_raw.get("landings", []), now - hours * 3600)
     queue = []
     for t in q:
