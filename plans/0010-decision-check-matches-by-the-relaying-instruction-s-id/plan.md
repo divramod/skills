@@ -61,4 +61,22 @@ answered before implementation, with the user's words and the date; the run acts
 
 ## Notes
 
-- <anything learned along the way that changes the plan>
+- Before step 1 (from reading hal2's log): the relays of 12's decisions are ask-ack entries `12-6` (quotes of
+  09:04:30 and 09:04:38; its text also says "your effort is now High", so 09:02:29 links by key words), `12-9`
+  (09:04:56), `12-20` (16:26:11), `12-27` (20:30:22), `12-29` (21:00:20), `12-30` (21:22:06, quote "1a, 2a, 3a"),
+  `12-33` (21:30:00), `12-35` (21:41:34), `12-36` (22:10:02). 21:26:40 "3a done: copilot off" has no relay: it
+  inherits 21:22:06's links (option ids {3a} a strict subset, same slot, within an hour). 19:12:10 "option 1
+  (hotfix pushed to main outside CI)" was answered in 12's own session (12-22 only asked): only the distinctive-word
+  topic rule ("hotfix" + "main") covers "the one-time hotfix to main".
+- Implementation sketch for step 1: `decision_check` imports `decision_log`, so the text helpers it needs for links
+  (`words`, `flat`, `quotes`, `IDS`, `ACKS`, `STOP`, `QUOTED`) move into `decision_log` (decision_check imports them
+  from there) to avoid a circular import; `links(log)` returns `{decision id: set of ack ids}`; `decisions()` adds a
+  `links` key. In items, expand `12-29/30` to 12-29 and 12-30 (`(\d{2})-(\d{1,3})((?:/\d{1,3})+)`).
+- 12's exact message (step 2's test and step 3's live run): "decision check 12: after a /clear I have these decisions
+  in plan 0131 (Decisions + step rows): 12-6 fast/high quality, 12-12 no iOS in pipelines, 12-15 a running main
+  always finishes, the one-time hotfix to main, 12-29/30 park the Linux runner ASAP (1a,2a,3a), 12-33 steps 19+20
+  before the next landing (version bump every changed unit), 12-34 step 20's design, 12-35 delete all old
+  main.yml/deliver.yml/macos.yml runs after the landing, 12-36 publish+deliver are jobs of the land run (step 21,
+  built in 5bf85ed9, folded into this landing)."
+- The `concerns` rule (plan 0009) counts a repo-wide decision only when its `what` names the slot, so 12-12 (iOS) and
+  12-15 (main finishes) are not under 12's check at all; expect them neither present nor missing.
