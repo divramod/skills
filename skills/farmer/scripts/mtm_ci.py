@@ -13,6 +13,7 @@ import re
 LAND_FILE = ".github/workflows/land.yml"
 RED = {"failure", "timed_out", "startup_failure", "cancelled"}
 NOT_COUNTED = {"park", "merge"}  # park's state is no verdict; a red merge is "main moved"
+SHIP = "ship / "  # land.yml's ship jobs run after merge: a delivery never reddens or delays a landing
 FIELDS = "databaseId,headBranch,headSha,status,conclusion,createdAt,url"
 
 
@@ -41,7 +42,13 @@ def outcome(run: dict) -> str:
 
 
 def red_jobs(jobs: list[dict]) -> list[str]:
-    return [j["name"] for j in jobs if j.get("conclusion") in RED and j.get("name") not in NOT_COUNTED]
+    return [j["name"] for j in jobs if j.get("conclusion") in RED and j.get("name") not in NOT_COUNTED
+            and not j.get("name", "").startswith(SHIP)]
+
+
+def merged(jobs: list[dict]) -> bool:
+    """`merge` succeeded: the landing is decided whatever its ship jobs still do."""
+    return any(j.get("name") == "merge" and j.get("conclusion") == "success" for j in jobs)
 
 
 def summary(runs: list[dict], jobs_of, since: float) -> list[dict]:
@@ -53,7 +60,10 @@ def summary(runs: list[dict], jobs_of, since: float) -> list[dict]:
         if not slot or started(r) < since:
             continue
         o = outcome(r)
-        red = red_jobs(jobs_of(r["databaseId"])) if o == "failed" else []
+        jobs = jobs_of(r["databaseId"]) if o != "landed" else []
+        if o != "landed" and merged(jobs):
+            o = "landed"
+        red = red_jobs(jobs) if o == "failed" else []
         out.append({"id": str(r.get("databaseId")), "slot": slot, "outcome": o,
                     "task": ", ".join(red) if o == "failed" else "", "tests": [], "load_hint": False,
                     "url": r.get("url"), "sha": (r.get("headSha") or "")[:8], "started": started(r)})

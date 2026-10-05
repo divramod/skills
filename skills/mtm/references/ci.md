@@ -45,7 +45,8 @@ be on it). Keep going until the PR is merged: every fix is a new candidate, and 
 
 ## After the landing
 
-land.yml's `merge` pushes the version tags and dispatches `ship.yml`, a run of its own: it promotes the staged Linux
-bundle, installs the landed apps on the Mac host (cargo installs, hal2-api/hal2-daemon, the apps' install) and pulls
-the main checkout; the landing pulls it too when ship.yml has not yet. In the report, name the PR, the land run and
-the ship run (`gh run list --workflow ship.yml -L 1`), not hook tasks or durations of local steps.
+land.yml's `merge` pushes the version tags; the same run's `ship / ...` jobs (ship.yml, called after `merge`) promote
+the staged Linux bundle, install the landed apps on the Mac host (cargo installs, hal2-api/hal2-daemon, the apps'
+install) and pull the main checkout; the landing pulls it too when ship has not yet. hal2-cli-git decides the landing
+once `merge` completed: a `ship / ...` job never delays or reddens it. In the report, name the PR and the land run
+(its `ship / publish` and `ship / deliver` state), not hook tasks or durations of local steps.

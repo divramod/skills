@@ -21,6 +21,16 @@ class MtmCiTest(unittest.TestCase):
                          [("07", "landed", ""), ("03", "failed", "linux / rust-test, gate"), ("05", "running", "")])
         self.assertEqual(mtm_ci.running_run(rows, "05")["url"], "https://x/runs/4")
 
+    def test_a_run_is_landed_once_merge_succeeded_whatever_its_ship_jobs_do(self):
+        jobs = {1: [{"name": "merge", "conclusion": "success"}, {"name": "ship / deliver", "conclusion": "failure"}],
+                2: [{"name": "merge", "conclusion": "success"}, {"name": "ship / publish", "conclusion": None}],
+                3: [{"name": "gate", "conclusion": "failure"}, {"name": "ship / deliver", "conclusion": "failure"}]}
+        rows = mtm_ci.summary([run(1, "land/07", conclusion="failure"),
+                               run(2, "land/03", status="in_progress", conclusion=""),
+                               run(3, "land/05", conclusion="failure")], lambda rid: jobs.get(rid, []), 0)
+        self.assertEqual([(r["slot"], r["outcome"], r["task"]) for r in rows],
+                         [("07", "landed", ""), ("03", "landed", ""), ("05", "failed", "gate")])
+
     def test_old_runs_are_left_out(self):
         since = dt.datetime(2026, 10, 5, 7, tzinfo=dt.timezone.utc).timestamp()
         self.assertEqual(mtm_ci.summary([run(1, "land/07")], lambda rid: [], since), [])
