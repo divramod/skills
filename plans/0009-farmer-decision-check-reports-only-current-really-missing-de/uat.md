@@ -29,5 +29,5 @@ Run: cd ~/a/hal2 && python3 ~/a/skills/skills/farmer/scripts/farmer.py decision 
 Steps:
 1. Read the `(superseded)` lines and the plan's Notes (step 4's list with each verdict).
 
-Expected: you agree with each mark; a wrong one is undone by a shot (the log is append-only: a mark is reversed by a
-new entry, not by editing).
+Expected: you agree with each mark. A wrong one becomes a shot: there is no command to undo a mark yet (the log is
+append-only, so the undo would be a new entry).
