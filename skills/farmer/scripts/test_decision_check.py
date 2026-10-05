@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import decision_check as dc
+import decision_log
 import farmer
 import mtm_scan
 from test_farmer import Repo, git
@@ -43,8 +44,7 @@ class Check(unittest.TestCase):
                                   "dependents get a patch bump. Did I forget one?")
         self.assertEqual(code, 0)
         self.assertEqual(text.splitlines()[0][:44], "farmer: decision check 12: 1 missing (data: ")
-        self.assertIn('- 2026-10-05: delete all old GitHub Actions workflow runs. The user\'s words: "it should '
-                      'delete all the old workflow runs"', text)
+        self.assertEqual(text.splitlines()[1], '- 2026-10-05 · 12 · "it should delete all the old workflow runs"')
         self.assertNotIn("version bumps", text)
         self.assertEqual((entry["kind"], entry["slot"], entry["what"]), ("decision-check", "12", "1 missing"))
 
@@ -64,14 +64,103 @@ class Check(unittest.TestCase):
         code, text, _ = check("decision check skills/04: I have these decisions: nothing yet", trees=())
         self.assertEqual(code, 0)
         self.assertIn("handoff skill: after clear-and-continue", text)
-        self.assertIn('"can we adapt the handoff" / "1"', text)
+        self.assertIn('- 2026-10-05 · - · "can we adapt the handoff" / "1" [handoff skill: after clear-and-continue', text)
         self.assertNotIn("workflow runs", text)  # hal2's slot 12, not skills/04
         self.assertIn("none missing", check("decision check 07: use sqlite")[1])
+        relayed = {**OTHER, "slot": "-", "what": "commit the skills edits", "note": "12 told skills is free"}
+        self.assertFalse(dc.concerns(relayed, "12", "hal2"))  # a note naming a slot is bookkeeping
 
     def test_a_slot_is_a_standalone_token(self):
         self.assertTrue(dc.names("in ~/a/skills (slot 04).", "04"))
         self.assertFalse(dc.names("on 2026-10-04 at 10:04", "04"))
         self.assertFalse(dc.names("plan 0004", "04"))
+
+
+# hal2's slot 12 as the farmer's evidence of 2026-10-05 showed it (shortened): the servant listed "1a/2a/3a CI
+# redesign, version bumps" and got 22 back.
+REDESIGN = {"at": "2026-10-05T21:22:06", "kind": "decision", "slot": "12",
+            "what": "1a gate+merge on a label shared by the Linux runner and the Mac host runner; 2a build+publish+deliver "
+                    "inside land.yml; 3a Copilot reviews off", "note": 'user: "1a, 2a, 3a" (to the farmer\'s 3 questions)'}
+DEPLOY = {"at": "2026-10-04T18:23:29", "kind": "decision", "slot": "12",
+          "what": "user: go for hal2-ci-wake production deploy (1a), CCX33 (2a); runner parked whenever nothing merges",
+          "note": "relayed to 12 ~18:40"}
+ORDER = {"at": "2026-10-04T15:26:14", "kind": "decision", "slot": "02,10,12",
+         "what": "user's order: 02 and 10 land now, then 12; nothing else until 12 has landed", "note": "user"}
+FINISH = {"at": "2026-10-05T16:26:11", "kind": "decision", "slot": "-",
+          "what": "the user decided: \"you forgot the goal again? finish 12 before other things\"",
+          "note": "every other slot pauses until 0131 is finished"}
+EFFORT = {"at": "2026-10-05T09:02:29", "kind": "decision", "slot": "12", "what": "user set 12's effort to High",
+          "note": "plan 0131 is careful infra work"}
+MIX = {"at": "2026-10-05T09:04:30", "kind": "decision", "slot": "12", "what": "user: \"12 needs to be fast but also high "
+       "quality. So we need to find a mix.\"", "note": "landing-time report"}
+VERSION = {**BUMPS, "what": "version bumps: 1a conventional commits (feat minor, fix/perf patch), 2a dependents get a "
+           "patch bump, 3a 12 builds it as steps appended to plan 0131"}
+TWELVE = [REDESIGN, DEPLOY, ORDER, FINISH, EFFORT, MIX, VERSION, RUNS, OTHER]
+# Both forms of the mark: a `supersede` entry, and a `supersedes` key on the later decision itself.
+MARKED = [e if e is not MIX else {**MIX, "supersedes": EFFORT["at"]} for e in TWELVE] + [
+    {"at": "2026-10-05T22:30:00", "kind": "supersede", "slot": "02,10,12", "what": ORDER["at"],
+     "supersedes": [ORDER["at"]], "note": f"by {FINISH['at']}"}]
+
+
+class Tightened(unittest.TestCase):
+    """Plan 0009: only current decisions, only those really missing, short forms count."""
+
+    def run_check(self, have, log=MARKED):
+        return dc.check(f"decision check 12: I have these decisions: {have}. Did I forget one?", "hal2", log, ["12"])
+
+    def test_a_short_form_counts_as_present(self):
+        code, text, _ = self.run_check("1a/2a/3a CI redesign, version bumps")
+        self.assertNotIn(REDESIGN["at"][:10] + " · 12 · \"1a, 2a, 3a\"", text)
+        self.assertNotIn("conventional commits", text)
+        self.assertTrue(dc.present(DEPLOY, "runner parked whenever nothing"))  # 4 words of the decision
+        self.assertTrue(dc.present(HANDOFF, "decision check; after clear-and-continue a servant"))  # an item in it
+        self.assertFalse(dc.present(HANDOFF, "the user decided"))  # too few key words
+        for have in ("12-33 deploy go", "the old workflow runs, nothing else", "2026-10-05 delete workflow runs"):
+            entry = {**RUNS, "note": RUNS["note"] + " relayed as 12-33"}
+            self.assertTrue(dc.present(entry, have), have)
+
+    def test_an_option_id_set_covers_only_the_same_set(self):
+        self.assertFalse(dc.present(DEPLOY, "1a/2a/3a CI redesign"))
+        self.assertTrue(dc.present(DEPLOY, "1a/2a production deploy go"))
+
+    def test_a_superseded_entry_is_never_reported(self):
+        _, text, _ = self.run_check("nothing")
+        self.assertNotIn("02 and 10 land now", text)
+        self.assertNotIn("effort to High", text)
+        self.assertIn("finish 12 before other things", text)
+        self.assertIn("find a mix", text)
+
+    def test_a_real_missing_one_is_reported_one_line_each(self):
+        _, text, _ = self.run_check("1a/2a/3a CI redesign, version bumps")
+        lines = text.splitlines()
+        self.assertEqual(lines[0][:44], "farmer: decision check 12: 4 missing (data: ")
+        self.assertEqual(lines[1:], [
+            '- 2026-10-04 · 12 · "user: go for hal2-ci-wake production deploy (1a), CCX33 (2a); runner parked whenever '
+            'nothing merges"',
+            '- 2026-10-05 · - · "you forgot the goal again? finish 12 before other things"',
+            '- 2026-10-05 · 12 · "12 needs to be fast but also high quality. So we need to find a mix."',
+            '- 2026-10-05 · 12 · "it should delete all the old workflow runs"'])
+
+    def test_none_missing(self):
+        have = ("1a/2a/3a CI redesign, version bumps, 1a/2a production deploy and parked runner, finish 12 before "
+                "other things, fast but also high quality, delete the old workflow runs")
+        self.assertEqual(self.run_check(have)[1], "farmer: decision check 12: none missing")
+
+
+class SharedAt(unittest.TestCase):
+    """The farmer logs several decisions in one second: they get `<at>#<n>` ids, and a mark hits only its own."""
+
+    def test_decisions_sharing_an_at_are_marked_one_by_one(self):
+        at = "2026-10-05T08:07:38"
+        log = [{**RUNS, "at": at, "what": "commit them"}, {**RUNS, "at": at, "what": "not away from the Mac"},
+               {**RUNS, "at": "2026-10-05T09:04:56", "what": "I'm AFK"}]
+        self.assertEqual([e["id"] for e in decision_log.decisions(log)], [f"{at}#1", f"{at}#2", "2026-10-05T09:04:56"])
+        with self.assertRaisesRegex(ValueError, "2 decisions match"):
+            decision_log.find(log, at)
+        log.append({"at": "2026-10-05T23:00:00", **decision_log.mark(log, [f"{at}#2"], "2026-10-05T09:04", "")})
+        self.assertEqual([e["what"] for e in decision_log.decisions(log)], ["commit them", "I'm AFK"])
+        log.append({"at": "2026-10-05T23:01:00", "kind": "supersede", "supersedes": at})  # a bare `at`: both
+        self.assertEqual([e["what"] for e in decision_log.decisions(log)], ["I'm AFK"])
 
 
 class Cli(Repo):
@@ -93,6 +182,29 @@ class Cli(Repo):
         self.assertEqual(json.loads(log.read_text().splitlines()[-1])["kind"], "decision-check")
         with redirect_stdout(io.StringIO()):
             self.assertEqual(farmer.main(["decision-check", "09", "--have", "x", "--repo", str(self.slot)]), 1)
+
+    def test_supersede_appends_a_mark_and_list_shows_it(self):
+        log = mtm_scan.state_dir(str(self.main)) / "log.jsonl"
+        log.write_text("".join(json.dumps(e) + "\n" for e in TWELVE))
+
+        def cli(*argv):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = farmer.main(["decision", *argv, "--repo", str(self.slot)])
+            return code, out.getvalue()
+
+        self.assertEqual(cli("supersede", "2026-10-05T09:02", "--by", "2026-10-05T09:04:30", "--dry-run")[0], 0)
+        self.assertNotIn("supersede", log.read_text())
+        code, out = cli("supersede", "2026-10-05T09:04:30", "--by", "2026-10-05T09:02")
+        self.assertEqual((code, "not later" in out), (1, True))
+        self.assertEqual(cli("supersede", "2026-10-05", "--by", "2026-10-05T09:04:30")[0], 1)  # matches several
+        code, out = cli("supersede", "2026-10-05T09:02", "--by", "2026-10-05T09:04:30", "--why", "a mix, not High")
+        self.assertEqual((code, out.splitlines()[0][:46]), (0, "superseded 2026-10-05T09:02:29 [12] user set 1"))
+        mark = json.loads(log.read_text().splitlines()[-1])
+        self.assertEqual((mark["kind"], mark["supersedes"], mark["note"]),
+                         ("supersede", [EFFORT["at"]], "by 2026-10-05T09:04:30: a mix, not High"))
+        self.assertNotIn("effort to High", cli("list", "--slot", "12")[1])
+        self.assertIn("(superseded) user set 12's effort", cli("list", "--all")[1])
 
 
 if __name__ == "__main__":
