@@ -1,0 +1,50 @@
+# Landing through CI
+
+A repository whose default branch (or this worktree's `HEAD`) has `.github/workflows/land.yml` lands through
+GitHub Actions (hal2 plan 0131, `.adr/landings-on-github-actions.md` in hal2). Nothing is tested on this machine:
+`hal2-cli-git worktree merge-to-main` takes the worktree's turn in the merge queue, merges the default branch in,
+builds the `--no-ff` candidate, pushes the branch and `land/<slot>`, opens or updates the landing's pull request
+(`land/<slot>` → the default branch) and waits until `land.yml` has tested the candidate: green, its `merge` job
+fast-forwards the default branch to the candidate (the PR shows merged); red, the queue is released at once. There
+is no hold, no attempts counter and no `reserve`: SKILL.md's steps 2 and 5 to 8 apply as they are, this page
+replaces steps 1, 3 and 4.
+
+## Land
+
+Run in the worktree (SKILL.md step 2 first: everything committed and pushed):
+
+`hal2-cli-git worktree merge-to-main --max-wait 100m --keep-reserved --json [<slot>]`, in the background with the
+shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 7200000; a lower limit gets a
+`--max-wait` 20 minutes below it). It needs `gh` logged in to GitHub (`gh auth status`).
+
+| Exit | JSON `status` | Do |
+|---|---|---|
+| 0 | `landed` | the default branch is the candidate (`commit`), the PR (`pull_request`) merged; `retests` counts how often the default branch moved under it. `reserved: true`: go to SKILL.md [step 5](../SKILL.md#5-finish-the-plan-and-land-it). Report `warnings` (e.g. the main checkout could not be pulled) |
+| 0 | `nothing` | the branch has nothing the default branch lacks: step 5 |
+| 6 | `waiting` | the slice passed: in the queue (`ahead`) or while the candidate is tested (`candidate`, `run`). The place and the candidate are kept: **rerun the same command at once**, as often as it takes |
+| 4 | `gate_failed` | the candidate is red, the queue is already released: [fix it](#red) and run again |
+| 3 | `conflict` | merging the default branch in conflicts (`files`): resolve as the [mfm](../../mfm/SKILL.md) skill's **Conflicts** says, commit, rerun (the queue stays held for this worktree meanwhile: go straight on) |
+| 5 | `stopped`, `cancelled`, `interrupted` | the user ended it: report and stop, never rerun on your own (your own shell's time limit is no user stop: rerun) |
+| 1 | `error` | uncommitted changes: SKILL.md step 2. Anything else: report the `message`; the queue may be held for this worktree, so ask the user (fix, or `hal2-cli-git worktree release`) |
+
+## Red
+
+`gate_failed` lists the `red` jobs, each with its `url` (the job's log) and `reproduce`, the command that runs the
+same job in this checkout (`code/bash/scripts/gate/main.sh <job>`):
+
+1. Read why: `gh run view <run id> --log-failed` (the run is the JSON's `run`), or the job's `url`.
+2. Reproduce locally with `reproduce` when the log does not make the cause plain (it runs the same script as CI;
+   a macOS-only job needs this Mac's Xcode, a stack job Docker).
+3. Fix the cause in this worktree (the code, a test; the gate script or the workflow only when they are wrong, and
+   say so), commit with a real message, push, and run [Land](#land) again. Only the red jobs and what the fix
+   changed run again: jobs and packages whose content key was green before are skipped (green markers).
+
+A job red for a reason outside the code (the runner offline, a network failure, a full disk) is no code fix: rerun
+the landing once; when it is red the same way again, report it and ask the user (the farmer's ci duty may already
+be on it). Keep going until the PR is merged: every fix is a new candidate, and the queue is free meanwhile.
+
+## After the landing
+
+`deliver.yml` installs the landed apps on the Mac host (cargo installs, hal2-api/hal2-daemon, the apps' install)
+and pulls the main checkout; the landing pulls it too when deliver.yml has not yet. In the report, name the PR,
+the run and the deliver run (`gh run list --workflow deliver.yml -L 1`), not hook tasks or durations of local steps.

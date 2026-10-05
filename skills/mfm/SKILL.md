@@ -6,7 +6,8 @@ description: merge-from-main — merge the latest default branch (main, master, 
 # mfm
 
 Brings the default branch into the current worktree. `hal2-cli-git` does the git work (fetch, stash around the
-merge, the setup tasks and the hook, the push); this skill does what needs judgment: conflicts, a failing hook and the report.
+merge, the setup tasks and the hook where the repo still has them, the push; a repository that lands through CI,
+`.github/workflows/land.yml`, has neither: the merge is plain git); this skill does what needs judgment: conflicts, a failing hook and the report.
 `S=<skill-dir>/scripts`. Ask questions by the global question rule (background first; ~/.claude/CLAUDE.md), recommended option first.
 
 | Call | Does |
@@ -44,8 +45,8 @@ worktree), `:3:<f>` (the default branch), and `git log --oneline -3 <side> -- <f
 ## Failing hook
 
 The JSON names the failed task (`task_failed`: `phase`, `row` and `kind`, the verb: the row's own `<row>/.hal/hooks/<verb>.sh` or its
-inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`, settings under `[<row>.<verb>]` in `.hal/hooks.toml`;
-`hal2-cli-hooks run <row> <verb>` reruns it alone) or the `script` (`hook_failed`), its
+inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`, settings under `[<row>.<verb>]` in `.hal/hooks.toml`)
+or the `script` (`hook_failed`), its
 `exit_code` and the tail of its `output`. Fix the cause in this worktree (the
 code, a test, a missing setup step), not the hook: change the hook only when the hook itself is wrong, and say
 so. `left_changes: true` means the hook passed but changed files (generated code, a dependency install): review and

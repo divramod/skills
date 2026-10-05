@@ -25,13 +25,12 @@ install_hal2() {
   fi
 }
 
-# hal2-cli-git with the declarative hooks (merge-to-main --json lists `tasks`).
-if ! command -v hal2-cli-git >/dev/null 2>&1 || ! hal2-cli-git --help | grep -q 'merge-to-main .*--json' ||
-  ! command -v hal2-cli-hooks >/dev/null 2>&1; then
+# hal2-cli-git with --json merges; a landing through CI needs GitHub's gh too.
+if ! command -v hal2-cli-git >/dev/null 2>&1 || ! hal2-cli-git --help | grep -q 'merge-to-main .*--json'; then
   install_hal2 hal2-cli-git
 fi
-if ! command -v hal2-cli-hooks >/dev/null 2>&1 || ! hal2-cli-hooks --help | grep -q 'stamp'; then
-  install_hal2 hal2-cli-hooks
+if ! command -v gh >/dev/null 2>&1 && command -v brew >/dev/null 2>&1; then
+  brew install gh
 fi
 
 bash "$here/check-prerequisites.sh"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check the tools /mfm and /mtm (and /mtm config) need. Exit 1 when a required tool is missing.
+# Check the tools /mfm and /mtm need. Exit 1 when a required tool is missing.
 missing=0
 if command -v git >/dev/null 2>&1; then
   echo "ok git"
@@ -21,10 +21,9 @@ else
   echo "MISSING hal2-cli-git (with --json merges) -> cargo install --git https://github.com/divramod/hal2 hal2-cli-git"
   missing=1
 fi
-if command -v hal2-cli-hooks >/dev/null 2>&1 && hal2-cli-hooks --help | grep -q 'stamp'; then
-  echo "ok hal2-cli-hooks"
+if command -v gh >/dev/null 2>&1; then
+  echo "ok gh"
 else
-  echo "MISSING hal2-cli-hooks -> cargo install --git https://github.com/divramod/hal2 hal2-cli-hooks"
-  missing=1
+  echo "optional gh (a landing through CI, land.yml) -> brew install gh"
 fi
 exit "$missing"
