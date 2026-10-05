@@ -110,15 +110,14 @@ class Work(unittest.TestCase):
         self.assertEqual(plan(snap([f]), [{"at": at(30), "key": "long-queue:01,02,03"}]), [])
 
 
-RULE = "─" * 40
 
 
 class Prompt(unittest.TestCase):
-    def test_empty_with_a_dim_suggestion_a_draft_and_no_box(self):
-        dim = f"⏺ Done.\n{RULE}\n❯ \x1b[2mcontinue\x1b[0m\n{RULE}\n  \x1b[2m? for shortcuts\x1b[0m\n"
-        self.assertEqual(deliver.prompt_text(dim), "")
-        self.assertEqual(deliver.prompt_text(dim.replace("\x1b[2mcontinue\x1b[0m", "my draft")), "my draft")
-        self.assertIsNone(deliver.prompt_text("Do you want to proceed?\n❯ 1. Yes\n  2. No\n"))
+    def test_send_asks_hal2_to_type_only_into_an_empty_box(self):
+        self.assertEqual(deliver.if_empty("%8", "hi"), ["send", "%8", "hi", "--paste", "--if-empty"])
+        self.assertEqual(deliver.if_empty("%8", "hi", deliver.READY | {"failed"})[-2:], ["--allow-state", "failed"])
+        err = 'hal2-cli-agents: not sent: draft: the input box holds "my draft"\n'
+        self.assertEqual(deliver.refusal(err), 'draft: the input box holds "my draft"')
 
     def test_a_refused_send_becomes_a_relay(self):
         out = {"wake": [], "notify": []}

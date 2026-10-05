@@ -7,6 +7,26 @@ it for good: `none`, `shot <shotfile>/<n>`, `plan <NNNN>` or `landed <plan> <dat
 The first eight cases come from the survey of 2026-10-03 07:30. Nothing had landed on hal2 main since 16:31 the day
 before, while 5 landings were ready and waiting.
 
+## R12 · A delivery step fails because a script was committed without +x
+
+- **Signature**: an install or deliver task exits 126 after the merge into main; the old binary stays installed and
+  the queue stays held.
+- **Occurrences**:
+  - 2026-10-04 hal2 wt 19 (plan 0124): package-macos/main.sh and build-linux/main.sh, both from plan 0108.
+- **Remedy**: the holder runs `chmod +x` on the script, commits and reruns /mtm to land the fix and deliver again.
+- **Lasting fix**: none yet. A gate checking that `code/*/scripts/*/main.*` is executable would catch it; file a
+  shot on a second occurrence.
+
+## R11 · A landing task hangs past its timeout
+
+- **Signature**: a task's log stops (xcodebuild "failed with exit code 0 but produced no further output", then
+  nothing) and it runs past its `.hal/hooks.toml` timeout; the landing ends only when something kills it.
+- **Cause**: hal2-hooks' timeout does not kill a hung task (child processes or no output); unverified.
+- **Occurrences**:
+  - 2026-10-03 12:37 · wt 15 · libs.Hal2Kit.test-unit (iOS part), timeout 45m, killed by the shell limit at ~2 h
+- **Remedy**: tell the holder to stop the landing (`hal2-cli-git worktree stop`) and rerun detached.
+- **Lasting fix**: shot skill-mtm/7.
+
 ## R10 · The Docker engine stops starting containers mid-landing
 
 - **Signature**: a `test-e2e` task sits at `Container ... Starting` with no output for minutes;
@@ -51,6 +71,7 @@ before, while 5 landings were ready and waiting.
   - UI tests: AgentsNodesUITests waitForNode, GitNodesUITests.
 - **Occurrences**:
   - 2026-10-01/02/03 in wt 01, 08, 09, 12, 13 and 14, many times.
+  - 2026-10-04 wt 19: WebHostTests.servesThePage… (iOS), load 115, passed on retry; wt 01: WebHostTests.downloadsLandInATemporaryFileForTheHost (iOS), load ~117, disabled.
 - **Remedy**: the user's rule of 2026-10-03 is to disable it rather than retry. Mark it
   `.disabled("flaky under landing load <date>, merge-to-main-boss")` in Swift, or `#[ignore = "..."]` in Rust, in
   the branch that is landing (or directly in main), add an entry to the ledger `~/skills/merge-to-main-boss/<repo>/flaky.md`,
@@ -79,8 +100,12 @@ before, while 5 landings were ready and waiting.
   time limit is not checked while the held head is being settled or taken over.
 - **Occurrences**:
   - 2026-10-03 wt 01, 02 (twice), 09, 10 and 15.
-- **Remedy**: tell waiters to use `--max-wait 25m` slices.
-- **Lasting fix**: none. File a shot for hal2-cli-git.
+  - 2026-10-03 ~12:40 · wt 12's reserve lost its ticket; wt 01's merge-to-main waited 1h48m and was killed; wt 15's whole landing killed at ~2 h (queue held `interrupted`).
+  - 2026-10-04 ~01:30 · wt 01 and 10 (re-enqueued as seq 413/414): `reserve` returned "reserved" (queue_position 11) yet 01 dropped out and 21 got the turn; a new symptom of the same family. The boss's `front` at 00:42 may have been the trigger. Restored with `front 10 01`.
+  - 2026-10-04 01:25–03:54 · wt 06: reserve said reserved; after merge-from-main + push, merge-to-main --keep-reserved waited "8 landing(s) ahead" until the 2 h limit. Fix delegated to a servant (slot 21).
+- **Likely trigger**: the boss's own `front` reorder restarts a waiter's running --max-wait slice (wt 01 saw it twice). Move a slot at most once per slice; prefer 25m slices.
+- **Remedy**: tell waiters to use `--max-wait 25m` slices and to run landings detached (nohup); move carriers forward with `front` sparingly.
+- **Lasting fix**: shot skill-mtm/6.
 
 ## R5 · Docker images are gone in the middle of a landing
 
