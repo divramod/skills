@@ -205,6 +205,59 @@ class Links(unittest.TestCase):
         self.assertEqual(self.links(log), {OTHER["at"]: ["07-3"], RUNS["at"]: ["12-33", "12-34", "12-50"]})
 
 
+# 12's exact message after its /clear (the farmer's report, 2026-10-05), and the decisions under its check, trimmed.
+TWELVES_MESSAGE = (
+    "decision check 12: after a /clear I have these decisions in plan 0131 (Decisions + step rows): 12-6 fast/high "
+    "quality, 12-12 no iOS in pipelines, 12-15 a running main always finishes, the one-time hotfix to main, 12-29/30 "
+    "park the Linux runner ASAP (1a,2a,3a), 12-33 steps 19+20 before the next landing (version bump every changed "
+    "unit), 12-34 step 20's design, 12-35 delete all old main.yml/deliver.yml/macos.yml runs after the landing, 12-36 "
+    "publish+deliver are jobs of the land run (step 21, built in 5bf85ed9, folded into this landing).")
+TOKENS = {"at": "2026-10-05T09:04:38", "kind": "decision", "slot": "12",
+          "what": 'user clarified: "I mean tokens spent." (tokens are not important, not server money)'}
+AFK = {"at": "2026-10-05T09:04:56", "kind": "decision", "slot": "-", "what": 'user: "Just push 12. I\'m AFK."'}
+HOTFIX = {"at": "2026-10-05T19:12:10", "kind": "decision", "slot": "12",
+          "what": "the user answered 12 directly: option 1 (hotfix pushed to main outside CI)", "note": "per 12's report"}
+HELP = {"at": "2026-10-05T20:30:22", "kind": "decision", "slot": "12",
+        "what": 'the user decided: "no, if 12 doesnt know alone, help him"'}
+PARK = {"at": "2026-10-05T21:00:20", "kind": "decision", "slot": "12",
+        "what": "the user: park the Linux runner right after the last Linux job; 12 does it",
+        "note": 'user\'s words: "yes, park right after the last linux job. i think 12 should do that."'}
+PUBLISH = {"at": "2026-10-05T22:10:02", "kind": "decision", "slot": "12",
+           "what": "publish and deliver are jobs of the land workflow itself, not a separately dispatched run",
+           "note": 'user: "we said, we want only one, which does everything?"'}
+TWELVES_LOG = [
+    DEPLOY, EFFORT, {**MIX, "supersedes": EFFORT["at"]}, TOKENS,
+    ask("2026-10-05T09:04:38", "12-6", 'the user decided: "12 needs to be fast but also high quality. So we need to '
+        'find a mix." and then "I mean tokens spent."'), AFK, HOTFIX, HELP,
+    ask("2026-10-05T20:30:08", "12-27", 'help is coming (the user: "if 12 doesnt know alone, help him")'), PARK,
+    ask("2026-10-05T21:00:21", "12-29", 'the user decided: "yes, park right after the last linux job."'), REDESIGN,
+    ask("2026-10-05T21:22:06", "12-30", 'the user decided: "1a, 2a, 3a" on the CI redesign'), COPILOT, VERSION,
+    ask("2026-10-05T21:30:12", "12-33", 'the user decided: "every lib or app, which changed, should also be version '
+        'bumped"'), RUNS, ask("2026-10-05T21:41:34", "12-35", 'the user decided: "it should delete all the old '
+                              'workflow runs".'), PUBLISH,
+    ask("2026-10-05T22:10:02", "12-36", 'the user decided: "we said, we want only one, which does everything?"')]
+
+
+class ByRelay(unittest.TestCase):
+    """Plan 0010: a servant naming the farmer's instruction ids or a distinctive topic has those decisions."""
+
+    def test_twelves_exact_message_misses_only_what_it_does_not_name(self):
+        slot, have = dc.parse(TWELVES_MESSAGE)
+        gone = dc.missing(TWELVES_LOG, slot, "hal2", have)
+        self.assertEqual([e["at"] for e in gone], [DEPLOY["at"], AFK["at"], HELP["at"]])
+
+    def test_a_short_range_names_each_instruction(self):
+        self.assertEqual(dc.acks_in("12-29/30 park, 07-3/4/5, 12-33; not 2026-10-05 or 10:04-10:05"),
+                         {"12-29", "12-30", "07-3", "07-4", "07-5", "12-33"})
+        self.assertTrue(dc.present({**HELP, "links": ["12-27"]}, "12-26/27 help"))
+        self.assertFalse(dc.present({**HELP, "links": ["12-27"]}, "12-26 help, 12-28"))
+
+    def test_two_shared_key_words_count_only_with_a_distinctive_one(self):
+        self.assertTrue(dc.present(HOTFIX, "the one-time hotfix to main", {"hotfix", "answered"}))
+        self.assertFalse(dc.present(HOTFIX, "the one-time hotfix to main"))  # "hotfix" also in another decision
+        self.assertFalse(dc.present(HOTFIX, "a main hotfix", {"answered"}))
+
+
 class Cli(Repo):
     """`farmer.py decision-check` reads the farmer's log and logs the check."""
 

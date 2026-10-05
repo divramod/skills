@@ -31,10 +31,19 @@ def parse(message: str) -> tuple[str, str]:
 
 
 ITEMS = re.compile(r"\(\d+\)|[;,\n]")
+RANGE = re.compile(r"(?<![\w:-])(\d{2})-(\d{1,3})((?:/\d{1,3})+)(?![\w:-])")  # 12-29/30: 12-29 and 12-30
 
 
 def items(have: str) -> list[str]:
     return [i.strip() for i in ITEMS.split(have) if i.strip()]
+
+
+def acks_in(text: str) -> set[str]:
+    """The farmer instruction ids a text names, a short range (`12-29/30`) expanded."""
+    found = set(ACKS.findall(text))
+    for slot, first, more in RANGE.findall(text):
+        found |= {f"{slot}-{n}" for n in [first, *more.strip("/").split("/")]}
+    return found
 
 
 def topic(entry: dict) -> set[str]:
@@ -53,17 +62,21 @@ def fragment(entry: dict, have: str) -> bool:
     return any(len(flat(i).split()) >= 3 and len(words(i)) >= 2 and f" {flat(i)} " in said for i in items(have))
 
 
-def present(entry: dict, have: str) -> bool:
-    """Does the servant's list hold this decision, also in a short form? An item with the same option-id set
-    (1a/2a/3a: two or more ids, or one and a shared key word) or an ack id (12-33), the entry's topic, a fragment of the
-    user's quote, the entry's date with two key words; else at least half of its key words (biased toward reporting)."""
+def present(entry: dict, have: str, distinct: set[str] | frozenset = frozenset()) -> bool:
+    """Does the servant's list hold this decision, also in a short form? An ack id of an instruction that relayed it
+    (its `links`, or one its text names: 12-33, 12-29/30), an item with the same option-id set (1a/2a/3a: two or more
+    ids, or one and a shared key word), an item sharing two key words of which one is `distinct` (in no other decision
+    under the check), the entry's topic, a fragment of the user's quote, the entry's date with two key words; else at
+    least half of its key words (biased toward reporting)."""
     text, want = f"{entry.get('what', '')} {entry.get('note', '')}".lower(), words(entry.get("what", ""))
-    ids, acks, day = set(IDS.findall(text)), set(ACKS.findall(text)), entry["at"][:10]
+    ids, day = set(IDS.findall(text)), entry["at"][:10]
+    if (set(entry.get("links", [])) | set(ACKS.findall(text))) & acks_in(have):
+        return True
     for item in items(have):
         low, iw = item.lower(), words(item)
         if ids and set(IDS.findall(low)) == ids and (len(ids) >= 2 or want & iw):
             return True
-        if acks & set(ACKS.findall(low)) or day in item and len(want & iw) >= 2:
+        if len(want & iw) >= 2 and (want & iw & distinct or day in item):
             return True
     head = topic(entry)
     if head and head <= words(have) or fragment(entry, have):
@@ -84,7 +97,10 @@ def quote(entry: dict) -> str:
 
 
 def missing(log: list[dict], slot: str, repo: str, have: str) -> list[dict]:
-    return [e for e in decision_log.decisions(log, repo=repo) if concerns(e, slot, repo) and not present(e, have)]
+    under = [e for e in decision_log.decisions(log, repo=repo) if concerns(e, slot, repo)]
+    keys = [words(e.get("what", "")) for e in under]
+    return [e for n, e in enumerate(under)
+            if not present(e, have, keys[n] - set().union(*keys[:n], *keys[n + 1:]))]
 
 
 def known(slot: str, repo: str, log: list[dict], worktrees: list[str]) -> bool:
