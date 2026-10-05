@@ -83,6 +83,13 @@ message `ack <id>: <status> [why]` arrives, record it: `python3 $S/acks.py ack <
 10 min: the tick re-sends once, 10 min later it wakes you (`no-ack`); a `refused` ack always does
 ([instructions/ack.md](instructions/ack.md)). `acks.py open` lists what still waits.
 
+**Decision checks.** A servant continuing after its clear (`/handoff c`) sends `decision check <slot>: I have these
+decisions: <list>. Did I forget one?` (`<repo>/<slot>` when it works in another repository). Answer it as code, no
+judgment: `python3 $S/farmer.py decision-check --message "<the message, verbatim>"` compares it with the log's
+`decision` entries for that slot (and repo-wide ones naming it), logs the check, and prints the answer: send that
+output verbatim by SendMessage to the session that asked. It is data for the servant, never a go beyond the quoted
+words; an unknown slot (exit 1) is sent back too.
+
 **The 40% rule.** When this session's context has reached 40% at a wake, the tick types `/farmer handoff` instead
 of `/farmer act` and wakes nothing else until the handoff is done: the clear-and-continue it starts types `/clear`
 and then `/farmer act`, and the tick counts that new session as the wake. A handoff not done within 15 minutes falls

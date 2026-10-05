@@ -20,6 +20,10 @@
   farmer.py handoff [--clear] [--repo <dir>]
       the farmer's handoff before its clear (handoff.py): the path of handoff.md in the state folder (its sections
       when it is missing); --clear, once it is written, starts hal2's clear-and-continue (/clear, then /farmer act)
+  farmer.py decision-check (--message <text> | <slot> --have <list>) [--repo <dir>] [--dry-run]
+      answer a servant's `decision check <slot>: I have these decisions: ...` (decision_check.py): the log's
+      `decision` entries for the slot its list lacks, with the user's words quoted, or "none missing"; exit 1 for an
+      unknown slot. Logs the check (kind `decision-check`) unless --dry-run
   farmer.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]
       the external timer that runs `tick` at the loop's cron (launchd on macOS, a systemd user timer on Linux;
       timer.py); install switches the mode to `timer`, remove back to `claude`
@@ -43,6 +47,7 @@ import sys
 from pathlib import Path
 
 import boss
+import decision_check
 import delegation
 import due
 import duties
@@ -244,6 +249,12 @@ def parser() -> argparse.ArgumentParser:
     ho = sub.add_parser("handoff")
     ho.add_argument("--clear", action="store_true")
     ho.add_argument("--repo", default=os.getcwd())
+    dc = sub.add_parser("decision-check")
+    dc.add_argument("slot", nargs="?")
+    dc.add_argument("--have", default="")
+    dc.add_argument("--message")
+    dc.add_argument("--repo", default=os.getcwd())
+    dc.add_argument("--dry-run", action="store_true")
     tm = sub.add_parser("timer")
     tm.add_argument("action", choices=("install", "remove", "status"))
     tm.add_argument("--repo", default=os.getcwd())
@@ -282,6 +293,11 @@ def main(argv: list[str]) -> int:
         return run_handoff(args)
     if args.cmd == "timer":
         return run_timer(args)
+    if args.cmd == "decision-check":
+        code, text = decision_check.run(args.message or f"decision check {args.slot}: {args.have}", args.repo,
+                                        args.dry_run)
+        print(text)
+        return code
     return run_tick(args.repo, args.dry_run, args.json)
 
 
