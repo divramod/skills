@@ -1,6 +1,7 @@
 # Woken for merge-to-main (mtm)
 
-The tick already woke failed landings, released held queues, put priority slots first, paused and resumed heavy
+The tick already woke failed landings, released held queues (local landings; through CI a red candidate releases
+the queue itself and its session fixes and lands again, see [mtm's CI page](../../mtm/references/ci.md)), put priority slots first, paused and resumed heavy
 work and restarted orphans with a HANDOFF.md. You get what needs a look. Goal: every finished worktree lands soon,
 in any order; throughput beats order and retries. Check each finding is still true
 (`hal2-cli-git worktree queue --json`), act, then log it:
@@ -8,7 +9,7 @@ in any order; throughput beats order and retries. Check each finding is still tr
 
 | Kind | Do |
 |---|---|
-| `active-long` | Read the landing's live step (`hal2-cli-hooks landings <id> --json`). A task past its timeout or a dead process: tell its session to stop and rerun the landing (`hal2-cli-git worktree stop`, then `/mtm`). Never stop a landing that has merged into main |
+| `active-long` | Through CI (`ci: true` in the scan): open the finding's `run` (`gh run view <id>`): a job queued long is a runner question (the ci duty wakes it); a job past its timeout is GitHub's to end. Locally: read the landing's live step in hal2-macos's Landings. A dead process: tell its session to stop and rerun the landing (`hal2-cli-git worktree stop`, then `/mtm`). Never stop a landing that has merged into main |
 | `work-not-queued` | Ask the session in one line what it waits for. Finished and waiting only for a non-product reason (UI tests need the Mac): okay it to land now, the tests after the landing. A product decision: notify the user |
 | `long-queue` | With the duty `trains` opted in the tick forms the trains itself: leave it. Else try one by hand: [merge-to-main-boss › Merge trains](../subskills/merge-to-main-boss/SUBSKILL.md#merge-trains) |
 | `paused` | Lift the pause when its reason is fixed (`python3 $S/mtm_scan.py resume`), tell the waiters "go" |

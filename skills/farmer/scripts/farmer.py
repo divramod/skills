@@ -54,7 +54,7 @@ import trains
 import wake
 
 HERE = Path(__file__).resolve().parent
-TOOLS = ("git", "hal2-cli-git", "hal2-cli-hooks", "hal2-cli-agents")
+TOOLS = ("git", "gh", "hal2-cli-git", "hal2-cli-agents")
 MODES = ("claude", "timer")
 HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned actions
     "duty:mtm": boss.handler,

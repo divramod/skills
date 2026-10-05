@@ -1,0 +1,71 @@
+"""Landings through GitHub Actions (hal2 plan 0131), for mtm_scan.py.
+
+A repository whose default branch has `.github/workflows/land.yml` lands
+through CI: each landing is a `land.yml` run on `land/<slot>`, green ones
+fast-forward the default branch, red ones release the merge queue at once.
+Here they become the same recent-landings rows the local landings' records
+give mtm_scan.py.
+"""
+
+import datetime as dt
+import re
+
+LAND_FILE = ".github/workflows/land.yml"
+RED = {"failure", "timed_out", "startup_failure", "cancelled"}
+NOT_COUNTED = {"park", "merge"}  # park's state is no verdict; a red merge is "main moved"
+FIELDS = "databaseId,headBranch,headSha,status,conclusion,createdAt,url"
+
+
+def ci_mode(run, main: str, default: str) -> bool:
+    """`land.yml` is on origin's default branch."""
+    return bool(run(["git", "cat-file", "-t", f"origin/{default}:{LAND_FILE}"], main).strip())
+
+
+def slot_of(branch: str) -> str:
+    """`land/07` -> `07`; probes (`land/12-probe`) and other branches -> ``."""
+    m = re.fullmatch(r"land/([^/]+)", branch or "")
+    return m.group(1) if m and "-probe" not in m.group(1) else ""
+
+
+def started(run: dict) -> float:
+    try:
+        return dt.datetime.fromisoformat((run.get("createdAt") or "").replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def outcome(run: dict) -> str:
+    if run.get("status") != "completed":
+        return "running"
+    return "landed" if run.get("conclusion") == "success" else "failed"
+
+
+def red_jobs(jobs: list[dict]) -> list[str]:
+    return [j["name"] for j in jobs if j.get("conclusion") in RED and j.get("name") not in NOT_COUNTED]
+
+
+def summary(runs: list[dict], jobs_of, since: float) -> list[dict]:
+    """Recent landing rows from `gh run list --workflow land.yml` (newest first);
+    `jobs_of(run id)` gives a failed run's jobs (`gh run view --json jobs`)."""
+    out = []
+    for r in runs:
+        slot = slot_of(r.get("headBranch") or "")
+        if not slot or started(r) < since:
+            continue
+        o = outcome(r)
+        red = red_jobs(jobs_of(r["databaseId"])) if o == "failed" else []
+        out.append({"id": str(r.get("databaseId")), "slot": slot, "outcome": o,
+                    "task": ", ".join(red) if o == "failed" else "", "tests": [], "load_hint": False,
+                    "url": r.get("url"), "sha": (r.get("headSha") or "")[:8], "started": started(r)})
+    return out
+
+
+def landings(run_json, main: str, since: float) -> list[dict]:
+    runs = run_json(["gh", "run", "list", "--workflow", "land.yml", "--limit", "100", "--json", FIELDS], main) or []
+    return summary(runs, lambda rid: (run_json(["gh", "run", "view", str(rid), "--json", "jobs"], main)
+                                      or {}).get("jobs", []), since)
+
+
+def running_run(recent: list[dict], slot: str) -> dict | None:
+    """The slot's candidate under test, newest first."""
+    return next((l for l in recent if l["slot"] == slot and l["outcome"] == "running"), None)

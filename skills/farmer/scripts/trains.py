@@ -20,6 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import mtm_ci
 import mtm_scan
 from tick import act, default_ref, git
 
@@ -117,8 +118,10 @@ def train_actions(cars: list[str], branches: dict[str, str], panes: dict) -> lis
                       text=f"merge train: {carrier} carries {', '.join(passengers)}")]
 
 
-def failures(trains: dict[str, dict], tickets: list[dict]) -> list[dict]:
-    """A train whose carrier's ticket is held by a failed landing: wake the farmer to split it."""
+def failures(trains: dict[str, dict], tickets: list[dict], red: list[dict] = ()) -> list[dict]:
+    """A train whose carrier's landing failed: its ticket held by a failed local landing, or (CI, mtm_ci) a red
+    land.yml run of the carrier started after the train (red releases the queue, so no hold shows it): wake the
+    farmer to split it."""
     held = {t["slot"]: t for t in tickets if (t.get("hold") or {}).get("reason") == "failed"}
     out = []
     for key, tr in trains.items():
@@ -127,14 +130,31 @@ def failures(trains: dict[str, dict], tickets: list[dict]) -> list[dict]:
             why = (t["hold"].get("message") or t["hold"].get("step") or "failed")[:300]
             out.append(act("trains", "train-failed", "wake", tr["carrier"], key=f"{key}:failed:{t.get('seq')}",
                            text=TEXT["failed"].format(key=key, carrier=tr["carrier"], why=why), train=tr))
+            continue
+        since = dt.datetime.fromisoformat(tr["at"]).timestamp()
+        r = next((r for r in red if r["slot"] == tr["carrier"] and r["started"] >= since), None)
+        if r:
+            why = f"red: {r['task'] or 'the gate'} {r.get('url') or ''}".strip()
+            out.append(act("trains", "train-failed", "wake", tr["carrier"], key=f"{key}:failed:run{r['id']}",
+                           text=TEXT["failed"].format(key=key, carrier=tr["carrier"], why=why), train=tr))
     return out
 
 
-def plan(tickets: list[dict], info: dict[str, dict], log: list[dict], panes: dict, now: dt.datetime) -> list[dict]:
+def ci_red(main: str, now: dt.datetime) -> list[dict]:
+    """The failed land.yml runs within WINDOW, where the repository lands through CI."""
+    default = default_ref(main).removeprefix("origin/")
+    if not mtm_ci.ci_mode(mtm_scan.run, main, default):
+        return []
+    rows = mtm_ci.landings(mtm_scan.run_json, main, (now - WINDOW).timestamp())
+    return [r for r in rows if r["outcome"] == "failed"]
+
+
+def plan(tickets: list[dict], info: dict[str, dict], log: list[dict], panes: dict, now: dt.datetime,
+         red: list[dict] = ()) -> list[dict]:
     trains = under_way(log, now)
     riding = {s for tr in trains.values() for s in [tr["carrier"], *tr["passengers"]]}
     branches = {t["slot"]: t.get("branch") or t["slot"] for t in tickets}
-    out = failures(trains, tickets)
+    out = failures(trains, tickets, red)
     for cars in group(tickets, info, riding):
         out += train_actions(cars, branches, panes)
     return out
@@ -143,7 +163,9 @@ def plan(tickets: list[dict], info: dict[str, dict], log: list[dict], panes: dic
 def handler(item: dict, ctx: dict) -> list[dict]:
     """duty:trains: the queue, each waiting slot's state, then the trains and failed ones."""
     tickets = (mtm_scan.run_json(QUEUE, ctx["main"]) or {}).get("queue", [])
-    return plan(tickets, slot_info(ctx["main"], tickets), ctx.get("log", []), ctx.get("panes", {}), ctx["now"])
+    log = ctx.get("log", [])
+    red = ci_red(ctx["main"], ctx["now"]) if under_way(log, ctx["now"]) else []
+    return plan(tickets, slot_info(ctx["main"], tickets), log, ctx.get("panes", {}), ctx["now"], red)
 
 
 def main() -> int:
