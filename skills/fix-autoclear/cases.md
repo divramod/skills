@@ -3,6 +3,28 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-04 · a scrolled request, its leftover taken for a draft, a job waiting forever (hal2 wt 02)
+
+- **Signature**: job `waiting` for hours, its log ending `a draft in the input box (<n> chars): waiting until it is
+  sent or emptied`; the job before it `failed: typing-mismatch` with `the box showed Some("<the request's later
+  rows>")` and `after emptying Some("<its first rows>")`; the screen's box holds `hal2 stopped this turn: ...` (hal2's
+  own request); the pane is short (119x14); `sweep.log` repeats `skip (a job runs for the pane)` every round, so no
+  `attempts` ever comes. Found by the farmer's autoclear duty as "02: attempts".
+- **Cause**: three links. (1) Claude Code shows only the last rows of a prompt longer than a short pane's box: the
+  4-row request read back as its last 3 rows, which the exact word comparison refused. (2) One C-u removes one row of
+  a wrapped prompt, so the failed job left 3 rows of its request in the box. (3) The sweep's retry took that leftover
+  for the user's draft and waited on it without a time limit. Also the turn before was hard-stopped reading the plan
+  through `| cut -c1-200` (`cut` was no hand-off program).
+- **Fix**: hal2 plan 0136 (`df123bd1`, `5d5a5c99`, `5df961ba`) fix(agents): `shows_typed` accepts a multi-row box
+  showing the typed text's last words; `empty_box` presses C-u until the box reads empty; `own_leftover` (the
+  request's opening or closing) is emptied, not waited on; `Timings::draft_wait` (60 min) fails a real draft
+  `box-not-ready`; `cut`, `tr`, `nl` join `HANDOFF_PROGRAMS` — tests `incident_02_tests::*`,
+  `guard::tests::after_the_soft_stop_text_filters_pass`.
+- **Recovered**: the stuck job cancelled after the landing installed hal2-daemon (the job ran in the daemon); the
+  sweep's next round started a fixed job.
+- **Would have caught it sooner**: a time limit on every wait of a job (a job that waits forever hides itself from
+  the sweep's attempt count); a fake box of limited rows in the job's tests.
+
 ## 2026-10-03 · a hand-off written just before the soft stop did not count (hal2 wt 07)
 
 - **Signature**: job `failed` `ignored-soft-stop` (several jobs, the sweep's retries); the job log's `hand-off check:

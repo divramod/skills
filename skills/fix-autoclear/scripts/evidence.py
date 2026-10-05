@@ -366,6 +366,9 @@ def selfcheck(args):
     skill = SKILL_MD.read_text()
     drift = []
     for rel in sorted(set(re.findall(r"`((?:code|\.hal|docs|research|plans)/[^`\s]+?)`", skill))):
+        # plans/CURRENT_PLAN is per-checkout runtime state: absent while no plan runs.
+        if rel == "plans/CURRENT_PLAN":
+            continue
         if "<" not in rel and "*" not in rel and not (repo / rel).exists():
             drift.append(f"missing path {rel}")
     source = "\n".join(p.read_text() for p in (repo / SRC).glob("*.rs")) if (repo / SRC).exists() else ""

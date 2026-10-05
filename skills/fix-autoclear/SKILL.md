@@ -103,7 +103,7 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
    `<state>/agents/autoclear/<session>.guard` is written (stage `soft`) and the job is started detached with
    `--await-handoff`. After it, **hand-off tools pass** (`handoff_tool`: Read/Grep/Glob, the handoff skill,
    Write/Edit of `HANDOFF.md`, `INTENT.md`, `plans/`, `.adr/`, TaskStop, Bash whose every segment starts with a
-   `HANDOFF_PROGRAMS` entry — git, cat, ls, grep, sed, hal2-cli-agents, ... — or runs a `HANDOFF_SCRIPTS`
+   `HANDOFF_PROGRAMS` entry — git, cat, ls, grep, sed, cut, tr, hal2-cli-agents, ...; never awk — or runs a `HANDOFF_SCRIPTS`
    script). Anything else is a **hard stop**: denied with `continue: false`, the turn ends (stage `hard`). A landing
    (`Skill` mtm, `hal2-cli-git worktree reserve|merge-to-main|...`, a merge-queue ticket) always passes. A cancelled
    job re-arms the guard `REARM_POINTS` (5) higher.
@@ -111,10 +111,14 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
    `<state>/agents/autoclear/<n>.json`, log `<n>.log` (pane `%<n>`, or `<id>` for a terminal host `t:<id>`).
    Phases: `interrupting` (sweep's `--interrupt`: Escape) → `waiting` (turn over: a `Stop` record, or the screen
    reading `hook stopped continuation`/`Interrupted` twice; a session idle before the request: idle twice; box
-   empty; no landing) → `requesting` (with
+   empty; no landing; a user's draft is waited out `Timings::draft_wait` (60 min), then `box-not-ready`; hal2's own
+   request left in the box (begins `hal2 stopped this turn:` or ends `hal2 then clears the session and continues.`)
+   is no draft: emptied, C-u until empty, one row per press) → `requesting` (with
    `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` written since the request, or current: written at most
    `CURRENT_WINDOW` (10 min) before it, not before the newest commit of real work, nothing uncommitted outside
-   `HANDOFF_PATHS`; the log's `hand-off check:` line says which and why) → types the hand-off request, waits for that turn;
+   `HANDOFF_PATHS`; the log's `hand-off check:` line says which and why) → types the hand-off request (read back
+   by words; a multi-row box showing only the request's last rows, a short pane scrolling it, counts as typed; a
+   failed read-back empties the box), waits for that turn;
    a second turn without a hand-off fails `ignored-soft-stop`) → `clearing` (`i` in vim mode, `/clear` typed and
    read back, Enter; confirmed by a `SessionStart` record, source `clear`) → `continuing` (`DEFAULT_PROMPT`
    `/handoff c` typed, read back, sent) → `continued`.
@@ -160,4 +164,6 @@ failures and each session's shot number.
 **Traps**: an old `~/.cargo/bin/hal2-cli-agents` (the hooks run it: check its build time against the fix); a
 Claude Code update that changes the screen (box, `-- INSERT --`, the history box's `─── History n/m ───` rule, the
 stop lines); an old `hal2-api` (the reports and early retries run in it: `hal2-api install` after installing);
-`* Waiting for API response · will retry` is Claude still working, not a failure.
+`* Waiting for API response · will retry` is Claude still working, not a failure; a short pane (hal2 never sizes it:
+`tmux display -p -t %<n> '#{pane_width}x#{pane_height}'`) shows a long prompt's last rows only; a job that waits
+forever keeps the sweep from counting attempts (every round: `skip (a job runs for the pane)`).
