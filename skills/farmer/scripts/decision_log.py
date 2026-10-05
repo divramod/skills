@@ -3,33 +3,51 @@
   farmer.py decision list [--slot <slot>] [--all] [--repo <dir>]
       the current `decision` entries (with --all also the superseded ones, marked), one line each
   farmer.py decision supersede <at>... --by <at> [--why <text>] [--dry-run] [--repo <dir>]
-      mark decisions replaced by a later one: appends a `supersede` entry; `<at>` is a prefix of a decision's `at`
+      mark decisions replaced by a later one: appends a `supersede` entry; `<at>` is a prefix of a decision's id
 
 The log is append-only (the tick writes it too), so a mark is a new entry, never an edit of the old one: any entry's
-`supersedes` key (an `at` or a list of them) marks those decisions as replaced, and a decision check never reports
-them.
+`supersedes` key (an id or a list of them) marks those decisions as replaced, and a decision check never reports
+them. A decision's id is its `at`; decisions sharing an `at` (the farmer logs several at once) are `<at>#1`, `<at>#2`
+in log order, which an append-only log keeps stable.
 """
 
 import mtm_scan
 
 
+def ident(log: list[dict]) -> list[tuple[str, dict]]:
+    """(id, entry) of every `decision` entry, in log order."""
+    ds = [e for e in log if e.get("kind") == "decision"]
+    counts: dict[str, int] = {}
+    for e in ds:
+        counts[e["at"]] = counts.get(e["at"], 0) + 1
+    seen: dict[str, int] = {}
+    out = []
+    for e in ds:
+        seen[e["at"]] = seen.get(e["at"], 0) + 1
+        out.append((e["at"] if counts[e["at"]] == 1 else f"{e['at']}#{seen[e['at']]}", e))
+    return out
+
+
 def superseded(log: list[dict]) -> set[str]:
-    out: set[str] = set()
+    """The ids marked as replaced (a bare `at` marks every decision of that `at`)."""
+    marks: set[str] = set()
     for e in log:
         s = e.get("supersedes")
-        out.update([s] if isinstance(s, str) else s if isinstance(s, list) else [])
-    return out
+        marks.update([s] if isinstance(s, str) else s if isinstance(s, list) else [])
+    return {i for i, e in ident(log) if i in marks or e["at"] in marks}
 
 
 def decisions(log: list[dict], include_superseded: bool = False) -> list[dict]:
     gone = superseded(log)
-    return [e for e in log if e.get("kind") == "decision" and (include_superseded or e["at"] not in gone)]
+    return [{**e, "id": i} for i, e in ident(log) if include_superseded or i not in gone]
 
 
 def find(log: list[dict], prefix: str) -> dict:
-    hits = [e for e in decisions(log, True) if e["at"].startswith(prefix)]
+    hits = [e for e in decisions(log, True) if e["id"].startswith(prefix)]
     if len(hits) != 1:
-        raise ValueError(f"{prefix}: {'no' if not hits else len(hits)} decisions match; give a longer `at` prefix")
+        found = ", ".join(e["id"] for e in hits[:5])
+        raise ValueError(f"{prefix}: {'no' if not hits else len(hits)} decisions match{': ' + found if hits else ''}; "
+                         f"give a longer id")
     return hits[0]
 
 
@@ -37,17 +55,17 @@ def mark(log: list[dict], ats: list[str], by: str, why: str) -> dict:
     """The `supersede` entry for decisions `ats` replaced by the later decision `by`; ValueError when one is wrong."""
     new = find(log, by)
     old = [find(log, a) for a in ats]
-    late = [e["at"] for e in old if e["at"] >= new["at"]]
+    late = [e["id"] for e in old if e["at"] >= new["at"]]
     if late:
-        raise ValueError(f"--by {new['at']} is not later than {', '.join(late)}")
+        raise ValueError(f"--by {new['id']} is not later than {', '.join(late)}")
     slots = ",".join(dict.fromkeys(str(e.get("slot") or "-") for e in old))
-    return {"kind": "supersede", "slot": slots, "what": ", ".join(e["at"] for e in old),
-            "supersedes": [e["at"] for e in old], "note": f"by {new['at']}" + (f": {why}" if why else ""),
+    return {"kind": "supersede", "slot": slots, "what": ", ".join(e["id"] for e in old),
+            "supersedes": [e["id"] for e in old], "note": f"by {new['id']}" + (f": {why}" if why else ""),
             "by": "farmer"}
 
 
 def line(e: dict, gone: set[str] | frozenset = frozenset()) -> str:
-    return (f"{e['at'][:16].replace('T', ' ')} [{e.get('slot') or '-'}]{' (superseded)' if e['at'] in gone else ''} "
+    return (f"{e['id']} [{e.get('slot') or '-'}]{' (superseded)' if e['id'] in gone else ''} "
             f"{e.get('what', '').strip()[:160]}")
 
 

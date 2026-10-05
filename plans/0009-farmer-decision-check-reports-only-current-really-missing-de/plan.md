@@ -29,8 +29,8 @@ starting "after the landing: ...".
 | 1 | Superseded marks: a `supersedes` key (an `at` or a list of them) on any log entry; `farmer.py decision supersede <at>... --by <at> [--why] [--dry-run]` appends a `supersede` entry; `farmer.py decision list [--slot] [--all]`; the check never reports a superseded entry | `python3 -m unittest test_decision_check` in skills/farmer/scripts: a superseded entry is never reported | done |
 | 2 | Short forms count: an entry is present when a list item shares its option-id set (1a/2a/3a) or an ack id (12-33), names its topic (the head before its first colon), holds a 4-word fragment of the user's quote, or names its date with two of its key words; the word overlap stays as the last rule | tests: the farmer's evidence list finds the 1a/2a/3a and version-bump entries present; a real missing one is reported; none missing | done |
 | 3 | One line per missing decision: date, slot, the user's quote (the topic in brackets when the quote is short) | tests assert the line format | done |
-| 4 | hal2's log: list the superseded candidates as a dry run (recorded below), apply only those clearly replaced by a later entry for the same slot (a repo-wide `-` entry covers every slot), then rerun the slot-12 check | `farmer.py decision list --all` in hal2 shows the marks; the slot-12 output recorded in Notes lists only current, really missing decisions | next |
-| 5 | Docs and suites: farmer SKILL.md (decision checks, `decision supersede` when the user replaces a decision), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | |
+| 4 | hal2's log: list the superseded candidates as a dry run (recorded below), apply only those clearly replaced by a later entry for the same slot (a repo-wide `-` entry covers every slot), then rerun the slot-12 check | `farmer.py decision list --all` in hal2 shows the marks; the slot-12 output recorded in Notes lists only current, really missing decisions | done |
+| 5 | Docs and suites: farmer SKILL.md (decision checks, `decision supersede` when the user replaces a decision), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | next |
 | 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
 ## Pre-authorized
@@ -65,3 +65,27 @@ answered before implementation, with the user's words and the date; the run acts
 
 - Steps 1-3 share one commit: they rewrite the same functions of `decision_check.py` (supersede marks in the new
   `decision_log.py`).
+- Step 4 (hal2's log, before any mark): the slot-12 message returned 20 missing (short forms already counted: the
+  1a/2a/3a and version-bump entries were gone); `at` turned out not unique (08:07:38 and 07:12:28 hold two decisions
+  each), so ids became `<at>#<n>` for shared ones.
+- Step 4 dry-run list (`farmer.py decision supersede ... --dry-run` in ~/a/hal2), with the verdict:
+  - applied, by 2026-10-05T16:26:11 ("finish 12 before other things", every other slot pauses until 0131 is
+    finished: the same rule restated anew): 2026-10-04T15:26:14 (02 and 10 land now, then 12),
+    2026-10-04T17:55:32 (others wait until mtm runs on GitHub Actions), 2026-10-05T10:13:42 (only 12 + helper 10)
+  - applied, 2026-10-05T10:46:13 (main.yml cancel-in-progress true) by 2026-10-05T10:48:27 (back to false)
+  - applied, 2026-10-05T08:07:38#2 ("I'm not away from the Mac") by 2026-10-05T09:04:56 ("I'm AFK")
+  - applied, 2026-10-05T10:16:21 (02 lands right after 09) by 2026-10-05T11:02:44 (02 stops its landing, 12 merges it)
+  - applied, 2026-10-03T09:21:36 (slot 11 benchmarks: don't ask again) by 2026-10-05T07:12:28#2 (ask every round
+    whether 11 may measure)
+  - kept, 2026-10-05T09:02:29 (12's effort High): 09:04:30 asks for "a mix", but 09:04:38's note says High effort is
+    fine; a refinement, not a replacement
+  - kept, 2026-10-05T10:17:40 (queue cleanup, requeue 00, 07, 06 after 0131): 16:26 does not restate the requeue order
+  - kept, 2026-10-04T18:23:29 (runner parked whenever nothing merges): 21:00:20 refines when, it does not replace it
+- Step 4 after the marks (7 decisions superseded in hal2's log, `decision list --all` shows them): the farmer's
+  message `decision check 12: I have these decisions: 1a/2a/3a CI redesign, version bumps` returns 16 missing (was 22),
+  every one current and really absent from that two-item list, one line each (date · slot · quote); the same check
+  with all 16 named in short form says "none missing", and `skills/04` with "handoff skill decision check;
+  decision-check tightened" says "none missing".
+- Step 4 tightened two more rules the live data showed: a repo-wide entry concerns a slot only when its `what` names
+  it (a note like "relayed to 12" is bookkeeping), and shared wording counts (4 consecutive words of the decision, or a
+  list item of 3+ words with two key words found verbatim in it).

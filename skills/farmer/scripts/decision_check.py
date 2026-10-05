@@ -45,14 +45,15 @@ def names(text: str, slot: str) -> bool:
 
 
 def concerns(entry: dict, slot: str, repo: str) -> bool:
-    """Is this `decision` entry for the slot (`<slot>` of the farmer's repo `repo`, or `<other repo>/<slot>`)?"""
+    """Is this `decision` entry for the slot (`<slot>` of the farmer's repo `repo`, or `<other repo>/<slot>`)? Its `slot`
+    names it, or it is repo-wide and its `what` names it."""
     own, _, bare = slot.rpartition("/")
     slots = [s.strip() for s in str(entry.get("slot", "")).split(",")]
     if slot in slots or (not own or own == repo) and bare in slots:
         return True
     if not all(s in REPO_WIDE for s in slots):
         return False
-    text = f"{entry.get('what', '')} {entry.get('note', '')}"
+    text = entry.get("what", "")  # the decision itself; a note naming a slot is bookkeeping ("relayed to 12")
     return names(text, bare) and (not own or own == repo or re.search(rf"\b{re.escape(own)}\b", text) is not None)
 
 
@@ -79,15 +80,22 @@ def topic(entry: dict) -> set[str]:
     return words(head) if colon and len(head.split()) <= 6 else set()
 
 
+def flat(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
+
+
 def fragment(entry: dict, have: str) -> bool:
-    """A run of 4 consecutive words of the user's quote (a whole quote of 3) occurs in the list."""
-    flat = " " + " ".join(re.findall(r"[a-z0-9]+", have.lower())) + " "
-    for q in quotes(entry):
-        w = re.findall(r"[a-z0-9]+", q.lower())
+    """Shared wording: 4 consecutive words of the user's quote or the entry's `what` (a whole quote of 3) occur in the
+    list, or a list item of 3+ words with two key words occurs verbatim in the entry."""
+    listed = f" {flat(have)} "
+    sources = quotes(entry) + [entry.get("what", "")]
+    for s in sources:
+        w = flat(s).split()
         n = min(4, len(w))
-        if n >= 3 and any(f" {' '.join(w[i:i + n])} " in flat for i in range(len(w) - n + 1)):
+        if n >= 3 and any(f" {' '.join(w[i:i + n])} " in listed for i in range(len(w) - n + 1)):
             return True
-    return False
+    said = " " + " ".join(flat(s) for s in sources) + " "
+    return any(len(flat(i).split()) >= 3 and len(words(i)) >= 2 and f" {flat(i)} " in said for i in items(have))
 
 
 def present(entry: dict, have: str) -> bool:

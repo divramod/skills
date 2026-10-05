@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import decision_check as dc
+import decision_log
 import farmer
 import mtm_scan
 from test_farmer import Repo, git
@@ -66,6 +67,8 @@ class Check(unittest.TestCase):
         self.assertIn('- 2026-10-05 · - · "can we adapt the handoff" / "1" [handoff skill: after clear-and-continue', text)
         self.assertNotIn("workflow runs", text)  # hal2's slot 12, not skills/04
         self.assertIn("none missing", check("decision check 07: use sqlite")[1])
+        relayed = {**OTHER, "slot": "-", "what": "commit the skills edits", "note": "12 told skills is free"}
+        self.assertFalse(dc.concerns(relayed, "12", "hal2"))  # a note naming a slot is bookkeeping
 
     def test_a_slot_is_a_standalone_token(self):
         self.assertTrue(dc.names("in ~/a/skills (slot 04).", "04"))
@@ -109,6 +112,9 @@ class Tightened(unittest.TestCase):
         code, text, _ = self.run_check("1a/2a/3a CI redesign, version bumps")
         self.assertNotIn(REDESIGN["at"][:10] + " · 12 · \"1a, 2a, 3a\"", text)
         self.assertNotIn("conventional commits", text)
+        self.assertTrue(dc.present(DEPLOY, "runner parked whenever nothing"))  # 4 words of the decision
+        self.assertTrue(dc.present(HANDOFF, "decision check; after clear-and-continue a servant"))  # an item in it
+        self.assertFalse(dc.present(HANDOFF, "the user decided"))  # too few key words
         for have in ("12-33 deploy go", "the old workflow runs, nothing else", "2026-10-05 delete workflow runs"):
             entry = {**RUNS, "note": RUNS["note"] + " relayed as 12-33"}
             self.assertTrue(dc.present(entry, have), have)
@@ -139,6 +145,22 @@ class Tightened(unittest.TestCase):
         have = ("1a/2a/3a CI redesign, version bumps, 1a/2a production deploy and parked runner, finish 12 before "
                 "other things, fast but also high quality, delete the old workflow runs")
         self.assertEqual(self.run_check(have)[1], "farmer: decision check 12: none missing")
+
+
+class SharedAt(unittest.TestCase):
+    """The farmer logs several decisions in one second: they get `<at>#<n>` ids, and a mark hits only its own."""
+
+    def test_decisions_sharing_an_at_are_marked_one_by_one(self):
+        at = "2026-10-05T08:07:38"
+        log = [{**RUNS, "at": at, "what": "commit them"}, {**RUNS, "at": at, "what": "not away from the Mac"},
+               {**RUNS, "at": "2026-10-05T09:04:56", "what": "I'm AFK"}]
+        self.assertEqual([e["id"] for e in decision_log.decisions(log)], [f"{at}#1", f"{at}#2", "2026-10-05T09:04:56"])
+        with self.assertRaisesRegex(ValueError, "2 decisions match"):
+            decision_log.find(log, at)
+        log.append({"at": "2026-10-05T23:00:00", **decision_log.mark(log, [f"{at}#2"], "2026-10-05T09:04", "")})
+        self.assertEqual([e["what"] for e in decision_log.decisions(log)], ["commit them", "I'm AFK"])
+        log.append({"at": "2026-10-05T23:01:00", "kind": "supersede", "supersedes": at})  # a bare `at`: both
+        self.assertEqual([e["what"] for e in decision_log.decisions(log)], ["I'm AFK"])
 
 
 class Cli(Repo):
@@ -177,7 +199,7 @@ class Cli(Repo):
         self.assertEqual((code, "not later" in out), (1, True))
         self.assertEqual(cli("supersede", "2026-10-05", "--by", "2026-10-05T09:04:30")[0], 1)  # matches several
         code, out = cli("supersede", "2026-10-05T09:02", "--by", "2026-10-05T09:04:30", "--why", "a mix, not High")
-        self.assertEqual((code, out.splitlines()[0][:40]), (0, "superseded 2026-10-05 09:02 [12] user se"))
+        self.assertEqual((code, out.splitlines()[0][:46]), (0, "superseded 2026-10-05T09:02:29 [12] user set 1"))
         mark = json.loads(log.read_text().splitlines()[-1])
         self.assertEqual((mark["kind"], mark["supersedes"], mark["note"]),
                          ("supersede", [EFFORT["at"]], "by 2026-10-05T09:04:30: a mix, not High"))
