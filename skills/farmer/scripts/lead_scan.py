@@ -31,8 +31,10 @@ MINUTE = 60
 BLOCKED_AFTER = 5 * MINUTE
 IDLE_IN_PLAN_AFTER = 20 * MINUTE
 CONTEXT_HIGH = 80
+REWAKE = 60 * MINUTE  # a stop handled this long ago and still there counts again (hal2 plan 0137)
 WAITS_FOR_USER = re.compile(
     r"\?\s*$|waiting for (the )?user|asked the user|need(s)? (your|the user's) (answer|decision|go)"
+    r"|wait(ing)? for (your|the user's) (go|answer|decision|ok|okay|confirmation)|your go\b"
     r"|which (one|option)|should I|do you want|let me know|confirm", re.I | re.M)
 
 
@@ -107,18 +109,28 @@ def classify(agent: dict, said: str, now: float) -> tuple[str, str] | None:
     return None
 
 
-def handled(main: str) -> set[tuple[str, int]]:
+def handled(main: str, now: float | None = None) -> set[tuple[str, int]]:
+    """The stops marked handled within the last REWAKE seconds: one still there after that counts again."""
     f = DATA / Path(main).name / "lead.jsonl"
     if not f.exists():
         return set()
-    return {(e["session"], int(e["since"])) for e in map(json.loads, f.read_text().splitlines())}
+    cutoff, out = (now or time.time()) - REWAKE, set()
+    for line in f.read_text().splitlines():
+        try:
+            e = json.loads(line)
+            at = dt.datetime.fromisoformat(e["at"]).timestamp() if e.get("at") else cutoff
+            if at >= cutoff:
+                out.add((e["session"], int(e["since"])))
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+            continue
+    return out
 
 
 def scan(repo: str, show_all: bool) -> dict:
     now, main = time.time(), main_checkout(repo)
     agents = run_json(["hal2-cli-agents", "list", "--json"]) or []
     agents = agents.get("list", []) if isinstance(agents, dict) else agents
-    own, done = os.environ.get("CLAUDE_CODE_SESSION_ID"), handled(main)
+    own, done = os.environ.get("CLAUDE_CODE_SESSION_ID"), handled(main, now)
     out = []
     for a in agents:
         if a.get("project") != main or not a.get("session_id") or a.get("session_id") == own:

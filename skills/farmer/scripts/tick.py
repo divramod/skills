@@ -126,11 +126,15 @@ def read_log(main: str) -> list[dict]:
 WEEK = 7 * 24 * 3600
 
 
+ANSWERS = ("answered", "answer", "decision")  # log kinds that close a slot's open `ask` (plan 0137)
+
+
 def waiting_for_user(log: list[dict]) -> set[str]:
-    """Slots with an open question to the user: their last `ask`/`answered` log entry is an `ask`."""
+    """Slots with an open question to the user: their last `ask` or answer (`answered`, `answer`, `decision`) log
+    entry is an `ask`."""
     state: dict[str, str] = {}
     for e in log:
-        if e.get("kind") in ("ask", "answered"):
+        if e.get("kind") in ("ask",) + ANSWERS:
             for slot in str(e.get("slot", "")).split(","):
                 state[slot.strip()] = e["kind"]
     return {s for s, k in state.items() if k == "ask"}
@@ -148,7 +152,10 @@ def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
         key = a.get("key")
         old = key and key in seen and (now - seen[key]).total_seconds() < a.get("window", WEEK)
         talk = a["do"] in ("send", "relay", "wake")
-        held = (a["slot"] in asked and (talk or a["kind"] == "orphan")) or (a["slot"] == FARMER_SLOT and talk)
+        # An open ask holds what the farmer would type; a lead wake still reaches it: it finds the answer (plan 0137).
+        judge = a["do"] == "wake" and a.get("duty") == "lead"
+        held = (a["slot"] in asked and ((talk and not judge) or a["kind"] == "orphan")) \
+            or (a["slot"] == FARMER_SLOT and talk)
         if old or held or a.get("after") in dropped:
             dropped.add(key)
             continue

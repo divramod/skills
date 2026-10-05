@@ -41,6 +41,8 @@ TRANSIENT = re.compile(r"ECONNRESET|ETIMEDOUT|EAI_AGAIN|Could not resolve host|T
                        r"rate limit|The runner has received a shutdown signal|lost communication with the server|"
                        r"The operation was canceled|toomanyrequests", re.I)
 DAY = dt.timedelta(days=1)
+# A session idle in its plan or waiting for an answer: the wake comes back every hour while it stays (plan 0137).
+REWAKE = {"asks", "idle-in-plan"}
 
 
 def plan_lead(item: dict, ctx: dict, scan: dict | None = None) -> list[dict]:
@@ -63,9 +65,11 @@ def plan_lead(item: dict, ctx: dict, scan: dict | None = None) -> list[dict]:
         elif kind == "failed" and "watch" not in ctx.get("duties", ()):
             text = TEXT["failed"].format(why=n.get("why", "failed"))
         if text is None:
-            out.append(act("lead", kind, "wake", slot, key=key, text=f"{kind}: {n.get('why', '')}", evidence=n))
+            out.append(act("lead", kind, "wake", slot, key=key, text=f"{kind}: {n.get('why', '')}", evidence=n,
+                           **({"window": lead_scan.REWAKE} if kind in REWAKE else {})))
             continue
-        out.append(act("lead", kind, "send", slot, pane=pane, text=text, key=key))
+        out.append(act("lead", kind, "send", slot, pane=pane, text=text, key=key,
+                       **({"window": lead_scan.REWAKE} if kind in REWAKE else {})))
         out.append(act("lead", "handled", "run", slot, argv=done + [kind, "--repo", ctx["top"]], text=f"{kind} handled",
                        after=key))
     return out
