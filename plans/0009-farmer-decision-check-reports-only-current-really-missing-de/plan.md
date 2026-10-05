@@ -30,8 +30,8 @@ starting "after the landing: ...".
 | 2 | Short forms count: an entry is present when a list item shares its option-id set (1a/2a/3a) or an ack id (12-33), names its topic (the head before its first colon), holds a 4-word fragment of the user's quote, or names its date with two of its key words; the word overlap stays as the last rule | tests: the farmer's evidence list finds the 1a/2a/3a and version-bump entries present; a real missing one is reported; none missing | done |
 | 3 | One line per missing decision: date, slot, the user's quote (the topic in brackets when the quote is short) | tests assert the line format | done |
 | 4 | hal2's log: list the superseded candidates as a dry run (recorded below), apply only those clearly replaced by a later entry for the same slot (a repo-wide `-` entry covers every slot), then rerun the slot-12 check | `farmer.py decision list --all` in hal2 shows the marks; the slot-12 output recorded in Notes lists only current, really missing decisions | done |
-| 5 | Docs and suites: farmer SKILL.md (decision checks, `decision supersede` when the user replaces a decision), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | next |
-| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
+| 5 | Docs and suites: farmer SKILL.md (decision checks, `decision supersede` when the user replaces a decision), check-plugins, every scripts suite | `python3 scripts/check-plugins.py` ok; farmer and handoff suites pass | done |
+| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | next |
 
 ## Pre-authorized
 

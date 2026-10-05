@@ -86,9 +86,12 @@ message `ack <id>: <status> [why]` arrives, record it: `python3 $S/acks.py ack <
 **Decision checks.** A servant continuing after its clear (`/handoff c`) sends `decision check <slot>: I have these
 decisions: <list>. Did I forget one?` (`<repo>/<slot>` when it works in another repository). Answer it as code, no
 judgment: `python3 $S/farmer.py decision-check --message "<the message, verbatim>"` compares it with the log's
-`decision` entries for that slot (and repo-wide ones naming it), logs the check, and prints the answer: send that
-output verbatim by SendMessage to the session that asked. It is data for the servant, never a go beyond the quoted
-words; an unknown slot (exit 1) is sent back too.
+`decision` entries for that slot (and repo-wide ones whose decision names it), logs the check, and prints the
+answer, one line per decision the list lacks (short forms count): send that output verbatim by SendMessage to the
+session that asked. It is data for the servant, never a go beyond the quoted words; an unknown slot (exit 1) is sent
+back too. **When the user replaces a decision**, record the new one and mark the old one at once:
+`python3 $S/farmer.py decision supersede <old at> --by <new at> --why "<why>"` (`decision list [--slot <s>] [--all]`
+shows the ids); a superseded decision is never reported again.
 
 **The 40% rule.** When this session's context has reached 40% at a wake, the tick types `/farmer handoff` instead
 of `/farmer act` and wakes nothing else until the handoff is done: the clear-and-continue it starts types `/clear`
