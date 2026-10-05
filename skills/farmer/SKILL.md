@@ -34,7 +34,7 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 
 `S=<skill-dir>/scripts`, `K=<skills repo>/skills`. **State** in `~/skills/farmer/<repo>/` (`FARMER_DIR` overrides):
 `log.jsonl` (every action), `handoff.md` (what the session knew before its last clear), `mode`, `timer.json`,
-`tick.log`, `wake.json`, `delegations.jsonl`, `briefs/`,
+`tick.log`, `wake.json`, `delegations.jsonl`, `briefs/`, `servants/` (each servant's role file),
 `pending/`, `flaky.md`, `lead.jsonl`, `ci.jsonl`. **History**: a summary per round with actions in the main
 checkout's `plans/farmer/<day>/<HHMM>.md`, `latest.md` every round (the folder ignores itself).
 
@@ -75,6 +75,13 @@ checkout's `plans/farmer/<day>/<HHMM>.md`, `latest.md` every round (the folder i
    - `wake`: do what its instructions file says for its kind (a `delegate-failed` item: [Delegate](reference.md#delegate-a-fix)
      by hand, or `farmer.py delegate --brief <file> --title <title>`). Log every action as that file says.
 3. `python3 $S/farmer.py wake --done <highest seq handled>`. Later items wait for the next wake.
+
+**Acks.** Every instruction to a session carries an id and asks for an ack (hal2 plan 0137): the tick stamps its
+sends (`farmer [<id>]: ...`, last line "Reply `ack <id>: started|done|refused <why>`"), and a message you send
+yourself gets its id from `python3 $S/acks.py instruct <slot> "<text>"` (send what it prints). When a peer's
+message `ack <id>: <status> [why]` arrives, record it: `python3 $S/acks.py ack <id> <status> [why]`. No ack within
+10 min: the tick re-sends once, 10 min later it wakes you (`no-ack`); a `refused` ack always does
+([instructions/ack.md](instructions/ack.md)). `acks.py open` lists what still waits.
 
 **The 40% rule.** When this session's context has reached 40% at a wake, the tick types `/farmer handoff` instead
 of `/farmer act` and wakes nothing else until the handoff is done: the clear-and-continue it starts types `/clear`

@@ -29,6 +29,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import acks
+from logstate import paused, read_log, waiting_for_user  # noqa: F401  (tick.<name> for callers)
 import delegation
 import deliver
 import due
@@ -118,25 +120,7 @@ def item_actions(item: dict, handlers: dict, ctx: dict) -> list[dict]:
     return planned + [act(name if kind == "duty" else "task", "ran", "ran", name=item["name"])]
 
 
-def read_log(main: str) -> list[dict]:
-    return mtm_scan.entries(mtm_scan.DATA / Path(main).name / "log.jsonl")
-
-
 WEEK = 7 * 24 * 3600
-
-
-ANSWERS = ("answered", "answer", "decision")  # log kinds that close a slot's open `ask` (plan 0137)
-
-
-def waiting_for_user(log: list[dict]) -> set[str]:
-    """Slots with an open question to the user: their last `ask` or answer (`answered`, `answer`, `decision`) log
-    entry is an `ask`."""
-    state: dict[str, str] = {}
-    for e in log:
-        if e.get("kind") in ("ask",) + ANSWERS:
-            for slot in str(e.get("slot", "")).split(","):
-                state[slot.strip()] = e["kind"]
-    return {s for s, k in state.items() if k == "ask"}
 
 
 def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
@@ -162,18 +146,7 @@ def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
     return out
 
 
-PAUSE_AGE = dt.timedelta(hours=12)
 WAITS = {("lead", "idle-in-plan"), ("watch", "judge")}  # a stop that only means "waits in the queue or a pause"
-
-
-def paused(log: list[dict], now: dt.datetime) -> set[str]:
-    """Slots the boss paused for a landing (a `pause:<landing>:<slot>` key in the last 12 h) with no go after it."""
-    out: dict[str, bool] = {}
-    for e in log:
-        kind, _, rest = e.get("key", "").partition(":")
-        if kind in ("pause", "go") and dt.datetime.fromisoformat(e["at"]) >= now - PAUSE_AGE:
-            out[rest.rsplit(":", 1)[-1]] = kind == "pause"
-    return {slot for slot, on in out.items() if on}
 
 
 def waiting_noise(actions: list[dict], waiting: set[str]) -> list[dict]:
@@ -215,6 +188,7 @@ def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bo
         planned = waiting_noise(fresh(item_actions(item, handlers, ctx), ctx["log"], ctx["now"]), ctx["waiting"])
         ctx.setdefault("told", set()).update(a["slot"] for a in planned if a["do"] in ("send", "relay"))
         actions += planned
+    actions += fresh(acks.plan(ctx["log"], ctx["now"], ctx["panes"]), ctx["log"], ctx["now"])
     return {"due": items, "settings": settings, "actions": actions, "stop": False}
 
 
@@ -229,6 +203,7 @@ def execute(a: dict, top: str, main: str, out: dict) -> None:
         for follow in a.get("on_fail", []) if code and code != OFFLINE else []:
             execute(follow, top, main, out)
     if a["do"] == "send":
+        acks.stamp_send(a, main)  # an id and the ack asked for, also when it falls back to a relay (plan 0137)
         states = set(a.get("states", ())) | deliver.READY
         refused = deliver.send(a["pane"], a["text"], states) if a.get("pane") else "no session"
         if refused:
