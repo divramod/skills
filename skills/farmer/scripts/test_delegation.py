@@ -52,6 +52,19 @@ class Delegation(unittest.TestCase):
         log = [json.loads(x) for x in (self.tmp / "hal2" / "log.jsonl").read_text().splitlines()]
         self.assertEqual([(e["kind"], e["slot"]) for e in log], [("delegate", "18")])
 
+    def test_a_servant_gets_its_role_file_named_first_in_its_prompt(self):
+        """Hal2 plan 0137 (the user's point 6): whom it serves, its task, the rules, how to reach the farmer."""
+        r = delegation.delegate(flaky(), MAIN, 5, False, NOW)
+        role = Path(r["role"])
+        self.assertEqual(role.parent, self.tmp / "hal2" / "servants")
+        text = role.read_text()
+        for part in ("disable the load-flaky test t", r["brief"], "Ack every instruction", "the user decided:",
+                     "Never ask the user", "~/.hal/git/worktree/hal2/farmer", "2026-10-03 10:00"):
+            self.assertIn(part, text)
+        self.assertNotIn("{", text)
+        prompt = self.calls[-1][-1]
+        self.assertLess(prompt.index(str(role)), prompt.index(r["brief"]))
+
     def test_at_the_limit_it_waits_and_starts_once_a_servant_has_landed(self):
         delegation.delegate(flaky(), MAIN, 1, False, NOW)
         second = dict(flaky(), key="flaky:u", text="disable u")
