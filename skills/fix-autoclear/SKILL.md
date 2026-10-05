@@ -111,8 +111,11 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
    `<state>/agents/autoclear/<n>.json`, log `<n>.log` (pane `%<n>`, or `<id>` for a terminal host `t:<id>`).
    Phases: `interrupting` (sweep's `--interrupt`: Escape) → `waiting` (turn over: a `Stop` record, or the screen
    reading `hook stopped continuation`/`Interrupted` twice; a session idle before the request: idle twice; box
-   empty; no landing; a user's draft is waited out `Timings::draft_wait` (60 min), then `box-not-ready`; hal2's own
-   request left in the box (begins `hal2 stopped this turn:` or ends `hal2 then clears the session and continues.`)
+   empty; no landing; a user's draft is waited out `Timings::draft_wait` (60 min), then `box-not-ready`, and past
+   `Timings::draft_alert` (3 min) raises one alert per draft: the record's `waiting_on`/`waiting_since`, a chronicle
+   line with `note: continue-blocked: ...`, a notification (`draft_alert.rs`, plan 0139; `evidence.py doctor` lists
+   it as `blocked`); hal2's own request left in the box (begins `hal2 stopped this turn:` or ends `hal2 then clears
+   the session and continues.`), or text the pane's send log says hal2 typed (`submit::logged`: any source, 24 h),
    is no draft: emptied, C-u until empty, one row per press) → `requesting` (with
    `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` written since the request, or current: written at most
    `CURRENT_WINDOW` (10 min) before it, not before the newest commit of real work, nothing uncommitted outside

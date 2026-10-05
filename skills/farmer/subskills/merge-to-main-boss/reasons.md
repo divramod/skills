@@ -7,6 +7,57 @@ it for good: `none`, `shot <shotfile>/<n>`, `plan <NNNN>` or `landed <plan> <dat
 The first eight cases come from the survey of 2026-10-03 07:30. Nothing had landed on hal2 main since 16:31 the day
 before, while 5 landings were ready and waiting.
 
+## Landings through CI (hal2 plan 0131)
+
+Where the default branch has `.github/workflows/land.yml`, a landing is a candidate on `land/<slot>` that
+GitHub Actions tests on hal2's own runners and fast-forwards on green ([mtm's CI page](../../../mtm/references/ci.md)).
+Nothing holds the queue on red and nothing runs on the Mac, so the local cases change:
+
+- **Gone**: R1 (a red candidate releases the queue at once; its session fixes and lands again), R2 and R3 (the
+  gates run on fixed-resource runners, not under the Mac's load), R4 (`merge-to-main --max-wait` keeps its place),
+  R10 and R11 locally (a job's `timeout-minutes` ends it on GitHub), R12 (`ship.yml` installs after the landing).
+- **Stay**: R6, R7, R8, R9 (a real failure is now a red job: its session reads `gh run view --log-failed` and
+  reproduces it with `gate/main.sh <job>`).
+- **New**, the C cases below. A red job's cause in the runner, its image or the workflow is the ci duty's (one fix
+  for every slot, through a servant), never the slot's.
+
+## C4 · A green candidate is not fast-forwarded
+
+- **Signature**: the `land` run is green but its `merge` job is skipped; the default branch stays; the lander takes
+  it for "main moved" and retests.
+- **Occurrences**:
+  - 2026-10-05 06:07Z · probe 3 (`land/12-probe`): `if:` without a status function, so the implicit `success()`
+    skipped `merge` because the skipped stack and macOS lanes sat before the gate.
+- **Remedy**: the workflow's fix lands first; the waiting candidates retest by themselves.
+- **Lasting fix**: landed with plan 0131 (`merge` checks `needs.<job>.result` with `!cancelled()`).
+
+## C3 · A tool on the runner differs from the Macs'
+
+- **Signature**: a lint job red on the runner only, the same command clean on the Mac ("workspace-hack is stale").
+- **Occurrences**:
+  - 2026-10-05 05:44Z · probe 2: cargo-hakari 0.9.39 on the runner, 0.9.37 on the Macs.
+- **Remedy**: pin the tool's version in the gate script and the runner's image (one value), rebuild the image.
+- **Lasting fix**: landed with plan 0131 (`HAKARI_VERSION` in `gate/jobs-linux.sh`).
+
+## C2 · The runner's image lacks a tool or component
+
+- **Signature**: a job red at once with "not installed" / "command not found" (rustfmt, python, a browser).
+- **Occurrences**:
+  - 2026-10-05 · probe 1: no rustfmt/clippy (rustup's minimal profile on the volume).
+  - 2026-10-05 05:17Z · `re-actors/alls-green` needs `python` (`python-is-python3` added to the cloud-init).
+- **Remedy**: the gate script installs what is missing when it can; the image's cloud-init gets it for good.
+- **Lasting fix**: landed with plan 0131 (image rebuilt by main's `runner-image` job when its inputs change).
+
+## C1 · Jobs wait for a parked runner
+
+- **Signature**: a `land` run's jobs queued for minutes, the Linux runner offline (parked), no wake in the
+  receiver's log.
+- **Occurrences**:
+  - 2026-10-05 · hal9k was deployed from a branch without `hal2-ci-wake`; the farmer's 5-min fallback woke it.
+  - 2026-10-05 ~06:00Z · after the redeploy Caddy kept its old Caddyfile (GitHub's webhook got 502).
+- **Remedy**: the ci duty's wake fallback (`ci-wake/main.sh`); check `hal9k-hal2-ci-wake-1` and Caddy's route.
+- **Lasting fix**: hal9k's deploy restarts what changed even after a failed deploy (plan 0131, `36f33b2d`).
+
 ## R12 · A delivery step fails because a script was committed without +x
 
 - **Signature**: an install or deliver task exits 126 after the merge into main; the old binary stays installed and

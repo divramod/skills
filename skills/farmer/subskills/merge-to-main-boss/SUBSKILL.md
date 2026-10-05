@@ -8,6 +8,14 @@ orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs ju
 [instructions/mtm.md](../../instructions/mtm.md), which links the procedures below. Why landings fail:
 [reasons.md](reasons.md).
 
+**Through CI** (the default branch has `.github/workflows/land.yml`, hal2 plan 0131): landings are candidates on
+`land/<slot>` with a pull request each, tested by GitHub Actions. The scan reads them from GitHub (`ci: true`;
+`gh pr list --head 'land/'`, `gh run list --workflow land.yml`); a red candidate releases the queue at once, so
+there is no held landing to wake or release for it: its session reads the red job, reproduces it with
+`gate/main.sh <job>`, fixes and lands again. A slot that stays red and idle shows as `work-not-queued`. Load
+pauses and flaky disabling are rarely needed (the gates do not run on the Mac). The farmer's own `farmer` branch
+lands like any slot's (an ordinary `/mtm` of the farmer slot), its per-round mfm stays.
+
 ## Disable a flaky test
 
 1. Pick where to change it:

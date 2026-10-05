@@ -22,8 +22,9 @@
   scan.py status [--json]
       the priority, the pause flag, the last scan, the actions of the last 6 h
 
-Reads hal2 (hal2-cli-git worktree queue, hal2-cli-hooks landings, hal2-cli-agents
-list) and git; writes only ~/skills/farmer/<repo>/ and <main>/plans/farmer/. Exit 0 on success,
+Reads hal2 (hal2-cli-git worktree queue, hal2-cli-agents list), git and the recent
+landings: GitHub's land.yml runs (gh) where the default branch has land.yml (mtm_ci.py),
+else `hal2-cli-hooks landings`; writes only ~/skills/farmer/<repo>/ and <main>/plans/farmer/. Exit 0 on success,
 2 when a tool is missing.
 """
 
@@ -38,8 +39,10 @@ import sys
 import time
 from pathlib import Path
 
+import mtm_ci
+
 DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
-TOOLS = ("hal2-cli-git", "hal2-cli-hooks", "hal2-cli-agents", "git")
+TOOLS = ("hal2-cli-git", "hal2-cli-agents", "git")
 
 MINUTE = 60
 HELD_IDLE_AFTER = 15 * MINUTE  # a failed landing nobody reruns
@@ -199,8 +202,11 @@ def findings(snap: dict) -> list[dict]:
                         "tests": failing_tests(hold.get("message") or "")})
     if head and head["state"] == "active":
         if head.get("active_seconds", 0) > ACTIVE_TOO_LONG:
-            out.append({"kind": "active-long", "slot": head["slot"],
-                        "why": f"landing {head.get('landing')} runs for {head['active_seconds'] // 60} min"})
+            f = {"kind": "active-long", "slot": head["slot"],
+                 "why": f"landing {head.get('landing')} runs for {head['active_seconds'] // 60} min"}
+            if snap.get("ci") and (r := mtm_ci.running_run(snap["landings"], head["slot"])):
+                f["run"] = r["url"]
+            out.append(f)
     if snap["load"]["per_core"] >= LOAD_PER_CORE_HIGH and head and head["state"] == "active":
         out.append({"kind": "load-high", "slot": head["slot"],
                     "why": f"load {snap['load']['load1']:.0f} on {snap['load']['cores']} cores during a landing",
@@ -242,8 +248,12 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
     agents_raw = run_json(["hal2-cli-agents", "list", "--json"]) or {}
     agents = agents_raw.get("list", []) if isinstance(agents_raw, dict) else agents_raw
     by_checkout = agents_by_checkout(agents)
-    l_raw = run_json(["hal2-cli-hooks", "landings", "--limit", "100", "--json"], main) or {}
-    recent, tests = landings_summary(l_raw.get("landings", []), now - hours * 3600)
+    ci = mtm_ci.ci_mode(run, main, default)
+    if ci:
+        recent, tests = mtm_ci.landings(run_json, main, now - hours * 3600), {}
+    else:
+        l_raw = run_json(["hal2-cli-hooks", "landings", "--limit", "100", "--json"], main) or {}
+        recent, tests = landings_summary(l_raw.get("landings", []), now - hours * 3600)
     queue = []
     for t in q:
         queue.append({
@@ -272,7 +282,7 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
     cores = os.cpu_count() or 1
     pause_file = state_dir(main) / "paused.json"
     snap = {
-        "now": now, "repo": main, "default": default, "queue": queue, "worktrees": wts,
+        "now": now, "repo": main, "default": default, "ci": ci, "queue": queue, "worktrees": wts,
         "landings": recent, "tests": tests,
         "load": {"load1": load1, "cores": cores, "per_core": round(load1 / cores, 2)},
         "paused": json.loads(pause_file.read_text()) if pause_file.exists() else None,
@@ -372,7 +382,8 @@ def render_summary(snap: dict, actions: list[dict], landings: list[dict], notes:
         lines += ["", "## Development lead", "", lead.strip()]
     lines += ["", "## Landings since the last summary", ""]
     lines += [f"- {l['slot']} {l['outcome']}" + (f": {l['task']}" if l["task"] else "")
-              + (f" ({', '.join(l['tests'])})" if l["tests"] else "") for l in landings] or ["- none"]
+              + (f" ({', '.join(l['tests'])})" if l["tests"] else "")
+              + (f" {l['url']}" if l.get("url") else "") for l in landings] or ["- none"]
     lines += ["", "## Queue", ""]
     lines += [f"{i}. {t['slot']} {t['state']}" + (f" ({(t.get('hold') or {}).get('reason')}, attempt "
               f"{(t.get('hold') or {}).get('attempts')})" if t.get("hold") else "")
@@ -392,7 +403,7 @@ def write_summary(main: str, snap: dict, notes: str, lead: str = "") -> Path:
     d = summary_dir(main)
     latest = d / "latest.md"
     since = latest.stat().st_mtime if latest.exists() else snap["now"] - 3600
-    landings = [l for l in snap["landings"] if (landing_start(l["id"]) or 0) >= since]
+    landings = [l for l in snap["landings"] if (l.get("started") or landing_start(l["id"]) or 0) >= since]
     text = render_summary(snap, actions_since(main, since), landings, notes, lead)
     stamp = dt.datetime.fromtimestamp(snap["now"])
     day = d / stamp.strftime("%Y-%m-%d")

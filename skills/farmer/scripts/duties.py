@@ -150,6 +150,8 @@ def plan_autoclear(item: dict, ctx: dict, problems: list[dict] | None = None) ->
     problems = problems if problems is not None else evidence.doctor_items(1.5)
     out, agents = [], ctx.get("agents_by_pane", {})
     for p in problems:
+        if p.get("what") == "blocked":
+            continue  # a person's draft blocks the job (hal2 plan 0139): sanity-watch's F13 wakes the farmer
         a = agents.get(p.get("pane")) or {}
         slot = a.get("slot") or "-"
         if p.get("session") and a.get("session_id") == p["session"] and a.get("state") in ("idle", "done", "sleeping"):

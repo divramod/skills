@@ -6,7 +6,7 @@ description: Watch every agent session (Claude Code, Codex, OpenCode in tmux pan
 # sanity-watch
 
 A watcher running in its own Claude session over one project's agent sessions. Each round costs one script run
-when nothing is wrong; judgment only goes into real incidents. The design, the failure classes F1–F12 and the
+when nothing is wrong; judgment only goes into real incidents. The design, the failure classes F1–F13 and the
 reasons behind each rule are in hal2's
 [research 0015](https://github.com/divramod/hal2/blob/main/research/0015-agent-sanity-watcher/research.md).
 
@@ -42,7 +42,7 @@ project, never inside a session that does other work.
 ## 1. Scan
 
 `$W scan --json` (default: the last 24 hours, incidents not handled yet). It writes the heartbeat. Each incident
-has the fields `id`, `class` (F1–F12), `name`, `session`, `pane`, `slot`, `checkout`, `plan`, `state`, `action`,
+has the fields `id`, `class` (F1–F13), `name`, `session`, `pane`, `slot`, `checkout`, `plan`, `state`, `action`,
 `reason` and `evidence` (chronicle line, API error, transcript path, the plan's next step, the hook record).
 
 No incidents: print one line (`sanity-watch <time>: <n> agents, all fine`) and end the turn. Keep it that short
@@ -60,7 +60,7 @@ Take the incident's `action`, check it against the evidence, do it, and then rec
 |---|---|
 | `resume` (F1–F3) | [Resume](#resume) with the class's prompt |
 | `restore` (F8) | `hal2-cli-agents terminal restore <id> --json`, then resume once the agent is up |
-| `judge` (F6, F7, F12) | [Judge](#judge), then resume, count or escalate |
+| `judge` (F6, F7, F12, F13) | [Judge](#judge), then resume, count or escalate |
 | `wait` (F4) | Nothing while Claude Code's own auto-continue can still fire. Once the printed reset time is 10 minutes past and the session is still `failed`: resume |
 | `escalate` (F5, F9, F10, spent budget) | `PushNotification`: `sanity-watch: <repo> <slot> <class name>: <reason>`. Never answer a dialog, never top up anything |
 | `handover` (F11) | Leave it to fix-autoclear: notify `sanity-watch: <slot> autoclear failed, run /fix-autoclear` |
@@ -110,6 +110,10 @@ Then:
     escalates it if it hangs again.
 - **F12, unknown.** Read the transcript tail around the stop. Resume only when you can name a transient cause;
   otherwise escalate.
+- **F13, continue blocked.** A clear-and-continue job has waited over 3 minutes on text in the agent's input box
+  that hal2 did not type (hal2 plan 0139: its own text is emptied by the job). `hal2-cli-agents capture <pane>`:
+  never type into, empty or send that text. Escalate with what the box holds (its first words), so the user sends or
+  empties it; the job goes on by itself then.
 
 ## 3. Learn
 

@@ -139,6 +139,14 @@ class FindIncidents(unittest.TestCase):
         [found] = self.find([agent(state="done", autoclear={"state": "failed", "updated_at": NOW})])
         self.assertEqual((found["class"], found["action"]), ("F11", "handover"))
 
+    def test_continue_blocked_by_a_draft(self):
+        job = {"state": "waiting", "waiting_on": "draft", "waiting_since": NOW - 4 * MIN}
+        [found] = self.find([agent(state="done", autoclear=job)])
+        self.assertEqual((found["class"], found["action"], found["name"]), ("F13", "judge", "continue blocked"))
+        self.assertEqual((found["at"], found["evidence"]["waiting_minutes"]), (NOW - 4 * MIN, 4))
+        self.assertEqual(self.find([agent(state="done", autoclear={**job, "waiting_since": NOW - 2 * MIN})]), [])
+        self.assertEqual(self.find([agent(state="done", autoclear={"state": "waiting"})]), [])
+
 
 class Record(unittest.TestCase):
     def test_record_counts_resumes(self):
