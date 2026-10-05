@@ -1,4 +1,5 @@
 import json
+import time
 import sys
 import tempfile
 import unittest
@@ -103,6 +104,26 @@ class Labels(unittest.TestCase):
 
 
 class Capture(unittest.TestCase):
+    def test_doctor_lists_a_job_blocked_by_a_draft(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs = Path(tmp)
+            now = int(time.time() * 1000)
+            (jobs / "12.json").write_text(json.dumps(
+                {"state": "waiting", "pane": "t:abc", "old_session": "s1", "waiting_on": "draft",
+                 "waiting_since": now - 4 * 60_000, "updated_at": now}))
+            (jobs / "13.json").write_text(json.dumps(
+                {"state": "waiting", "pane": "%13", "old_session": "s2", "waiting_on": "draft",
+                 "waiting_since": now - 60_000, "updated_at": now}))
+            saved = (evidence.JOBS, evidence.agents, evidence.markers)
+            try:
+                evidence.JOBS, evidence.agents, evidence.markers = jobs, lambda: [], lambda: []
+                items = evidence.doctor_items(1)
+            finally:
+                evidence.JOBS, evidence.agents, evidence.markers = saved
+            self.assertEqual([(i["what"], i["pane"], i["reason"]) for i in items],
+                             [("blocked", "t:abc", "continue-blocked")])
+            self.assertIn("a draft in the input box since", items[0]["message"])
+
     def test_an_incident_becomes_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

@@ -3,6 +3,19 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-05 · the farmer's order left unsent in the box, taken for a draft (hal2 wt 12)
+
+- **Signature**: job `waiting` 13 min, its log `a draft in the input box (367 chars): waiting until it is sent or
+  emptied`; the box shows a `farmer [<id>]: ...` order that the pane's send log (`sent/<n>.jsonl`) holds as `manual`
+  lines, typed but never submitted (no Enter took it in a session just restored after a reboot).
+- **Cause**: senders typed, then pressed Enter in a separate call without checking the session took it; the job
+  knew only its own hand-off request as hal2's text. The exact trigger (restore timing in a terminal host) was not
+  reproduced (hal2 plan 0139 step 1).
+- **Occurrences**: 2026-10-05 hal2 wt 12, `t:tmuuu8x9vi0ql`, 08:15–08:28, the user sent the text by hand.
+- **Fix plan**: hal2 plan 0139: `send --submit` (verified Enter, the text removed when not taken, exit 4), the job
+  empties text the send log says hal2 typed, a person's draft over 3 min raises an alert (sanity-watch F13).
+- **Would have caught it sooner**: the alert (F13) at 3 min instead of nothing for 13.
+
 ## 2026-10-04 · a scrolled request, its leftover taken for a draft, a job waiting forever (hal2 wt 02)
 
 - **Signature**: job `waiting` for hours, its log ending `a draft in the input box (<n> chars): waiting until it is

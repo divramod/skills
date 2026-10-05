@@ -103,5 +103,16 @@ class Autoclear(unittest.TestCase):
         self.assertEqual(kinds(duties.plan_autoclear({}, ctx(agents_by_pane=moved), [p]), log), [])
 
 
+    def test_a_job_blocked_by_a_draft_is_left_to_sanity_watch(self):
+        p = {"what": "blocked", "pane": "%4", "session": "s1", "who": "hal2 wt 04", "reason": "continue-blocked",
+             "message": "a draft in the input box since 08:15"}
+        agents = {"%4": {"slot": "04", "session_id": "s1", "state": "done"}}
+        self.assertEqual(duties.plan_autoclear({}, ctx(agents_by_pane=agents), [p]), [])
+
+    def test_continue_blocked_wakes_the_farmer(self):
+        i = {"id": "F13:s1:1", "class": "F13", "name": "continue blocked", "action": "judge", "slot": "04",
+             "pane": "%4", "session": "s1", "evidence": {}}
+        self.assertEqual(kinds(duties.plan_watch({}, ctx(), [i])), [("wake", "judge", "04")])
+
 if __name__ == "__main__":
     unittest.main()

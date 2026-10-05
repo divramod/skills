@@ -3,7 +3,7 @@
 
   scan.py scan [--project <dir>] [--hours 24] [--all] [--json]
       the incidents since the last scan (--all: also the handled ones): stopped sessions
-      classified F1-F12 (research 0015 in hal2) with evidence and an action
+      classified F1-F13 (research 0015 in hal2; F13: plan 0139) with evidence and an action
       (resume|restore|judge|wait|escalate|handover|count); writes the heartbeat
   scan.py record <incident-id> <action> [--session <id>] [--note <text>]
       mark an incident handled: appended to log.jsonl; a `resume` counts against the
@@ -42,19 +42,21 @@ EARLY_END_AFTER = 10 * MINUTE
 HANG_AFTER = 20 * MINUTE
 HANG_AFTER_IN_TOOL = 60 * MINUTE
 BLOCKED_TOO_LONG = 30 * MINUTE
+CONTINUE_BLOCKED_AFTER = 3 * MINUTE  # hal2's draft_alert
 AUTOCLEAR_BUSY = {"interrupting", "waiting", "requesting", "clearing", "continuing"}
 
 # What the watcher does per class (research 0015, "Failure taxonomy").
 ACTIONS = {
     "F1": "resume", "F2": "resume", "F3": "resume", "F4": "wait", "F5": "escalate",
     "F6": "judge", "F7": "judge", "F8": "restore", "F9": "escalate", "F10": "escalate",
-    "F11": "handover", "F12": "judge",
+    "F11": "handover", "F12": "judge", "F13": "judge",
 }
 NAMES = {
     "F1": "transient API error", "F2": "network down", "F3": "Mac slept mid-response",
     "F4": "rate or usage limit", "F5": "billing or auth", "F6": "turn ended early in a plan",
     "F7": "hang", "F8": "process gone", "F9": "waiting for the user too long",
     "F10": "tool failure loop", "F11": "autoclear failure", "F12": "unknown stop",
+    "F13": "continue blocked",
 }
 
 
@@ -270,6 +272,12 @@ def find_incidents(project: str, agents: list[dict], events: list[dict], orphans
                                   {"autoclear": agent["autoclear"]}))
             continue
         if auto in AUTOCLEAR_BUSY:
+            # F13: a clear-and-continue job waits on a draft in the input box too long (hal2 plan 0139).
+            job = agent["autoclear"]
+            blocked = job.get("waiting_since")
+            if auto == "waiting" and job.get("waiting_on") and blocked and at - blocked >= CONTINUE_BLOCKED_AFTER:
+                found.append(incident("F13", session, blocked, agent, {
+                    "autoclear": job, "waiting_on": job["waiting_on"], "waiting_minutes": (at - blocked) // MINUTE}))
             continue
         state_ = agent.get("state") or ""
         # F6: the turn ended while the checkout's plan still has a step to run before its landing.

@@ -11,7 +11,8 @@
       agent.json, job.json, job.log, marker-<session>.json, transcript-<session>.txt,
       guard.log, sweep.log (the pane's lines), README.md (what each file is)
   evidence.py doctor [--hours 24] [--json]
-      every pane's failed or stuck autoclear of the last hours (nobody reported)
+      every pane's failed or stuck autoclear of the last hours (nobody reported), and
+      every job blocked over 3 min by text in the input box hal2 did not type (`blocked`)
   evidence.py selfcheck [--repo <hal2 checkout>]
       whether the insider facts in SKILL.md still match hal2's code
 
@@ -35,6 +36,7 @@ API_LOG = HOME / "Library/Logs/hal2-api.log"
 PROJECTS = HOME / ".claude/projects"
 SKILL_MD = Path(__file__).resolve().parent.parent / "SKILL.md"
 SRC = "code/rust/libs/hal2-agents/src"
+BLOCKED_AFTER = 3 * 60  # hal2's draft_alert (plan 0139), seconds
 
 
 def need(tool):
@@ -317,7 +319,8 @@ def capture(args):
 
 def doctor_items(hours):
     """Every pane's failed or stuck autoclear of the last `hours` (nobody reported), as dicts:
-    {what: job|marker, pane, session, who, state, reason, message, attempts, gave_up, at}."""
+    {what: job|blocked|marker, pane, session, who, state, reason, message, attempts, gave_up, at}. A `blocked`
+    job waits on a person's draft (hal2 plan 0139): no autoclear bug, sanity-watch's F13 owns it."""
     since = time.time() - hours * 3600
     by_pane = {a.get("pane_id"): a for a in agents()}
     out = []
@@ -331,6 +334,15 @@ def doctor_items(hours):
     for record in sorted(JOBS.glob("*.json")):
         job = read_json(record)
         if not job or record.stat().st_mtime < since:
+            continue
+        blocked = job.get("waiting_since")
+        if job.get("state") == "waiting" and job.get("waiting_on") and blocked \
+                and time.time() - blocked / 1000 >= BLOCKED_AFTER:
+            out.append({"what": "blocked", "pane": job.get("pane"), "session": job.get("old_session"),
+                        "who": who(job.get("pane"), job.get("old_session")), "state": "waiting",
+                        "reason": "continue-blocked",
+                        "message": f"a {job['waiting_on']} in the input box since {stamp(blocked)}",
+                        "at": stamp(blocked)})
             continue
         if job.get("state") in ("failed",) or (
             job.get("state") in ("waiting", "requesting") and time.time() - record.stat().st_mtime > 1800
@@ -353,7 +365,7 @@ def doctor(args):
         print(json.dumps({"hours": args.hours, "problems": items}, indent=1))
         return
     for i in items:
-        if i["what"] == "job":
+        if i["what"] in ("job", "blocked"):
             print(f"{i['who']}: {i['state']} {i['reason']} {i['message']} ({i['at']})")
         else:
             print(f"{i['who']}: session {i['session']} attempts {i['attempts']}{' gave up' if i['gave_up'] else ''}")
