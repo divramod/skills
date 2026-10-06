@@ -1,5 +1,7 @@
 # Plan 0012: the handoff holds every decision
 
+Finished: 2026-10-06
+
 Grilled: 2026-10-06 (autogrill ×1)
 
 Landing: auto
@@ -36,7 +38,7 @@ starting "after the landing: ...".
 | 4 | Regression replay (C): fixtures trimmed from hal2 slot 04's `HANDOFF.md`, plan 0094, `INTENT.md` rows and the farmer log at the check; 04's exact message reports exactly "stop the 04-train. 12 should finish first"; with that decision in the fixture handoff's Decisions none missing | `python3 -m unittest test_decision_check` in skills/farmer/scripts: the replay tests pass | done |
 | 5 | Live: 04's message through `farmer.py decision-check --dry-run --repo ~/a/hal2` on hal2's real log and 04's real checkout, output recorded in Notes | the recorded output reports only the 04-train stop (or none once 04 holds it) | done |
 | 6 | Docs and suites: farmer SKILL.md "Decision checks" (the checkout's files, subject rule), decision_check docstring, check-plugins, every scripts suite of handoff and farmer | `python3 scripts/check-plugins.py` ok; `python3 -m unittest discover -s skills/farmer/scripts` and the handoff suite pass | done |
-| 7 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | next |
+| 7 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | done |
 
 ## Pre-authorized
 
