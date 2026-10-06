@@ -73,10 +73,18 @@ def summary(runs: list[dict], jobs_of, since: float) -> list[dict]:
     return out
 
 
+LIST = ["gh", "run", "list", "--workflow", "land.yml", "--limit", "100", "--json", FIELDS]
+
+
+def unfinished(run_json, main: str) -> int:
+    """How many land.yml runs are not completed, on any branch: landings under test or shipping and dispatched
+    runs (`gh workflow run land.yml`), queued ones included. The same list as `landings`, once per round."""
+    return sum(1 for r in gh_runs.listed(run_json, LIST, main) or [] if r.get("status") != "completed")
+
+
 def landings(run_json, main: str, since: float) -> list[dict]:
     """The recent landing rows; the not-landed runs' jobs fetched together, once per round (gh_runs)."""
-    runs = gh_runs.listed(run_json, ["gh", "run", "list", "--workflow", "land.yml", "--limit", "100", "--json", FIELDS],
-                          main) or []
+    runs = gh_runs.listed(run_json, LIST, main) or []
     need = [r for r in runs if slot_of(r.get("headBranch") or "") and started(r) >= since and outcome(r) != "landed"]
     jobs = gh_runs.jobs([r["databaseId"] for r in need],
                         {r["databaseId"] for r in need if r.get("status") == "completed"},

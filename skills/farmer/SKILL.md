@@ -33,7 +33,7 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 | `sync` | `role_sync.py` (main's roles/farmer/ROLE.md differs from the farmer branch's: one servant merges the latest main, then the farmer branch, and lands it; no plan) | | |
 | `watch` | `duties.plan_watch` (sanity-watch's scan) | [instructions/watch.md](instructions/watch.md) | sanity-watch's |
 | `autoclear` | `duties.plan_autoclear` (fix-autoclear's doctor) | [instructions/autoclear.md](instructions/autoclear.md) | fix-autoclear's |
-| `trains` | `trains.py` (merge trains: finished, non-overlapping waiters land as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
+| `trains` | `trains.py` (merge trains: every waiter behind the current run whose trial merge is clean lands as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
 | `prune` | `prune.py` (landed slots: 00-09 cleaned once per landing, one 10-99 slot removed per round with its branch; a subservant's slot 30-99 (`plans/LEAD`) once its work is in `origin/<lead>` and it has been idle an hour; free disk and the biggest worktrees every 6 h, a notice under 100 GB) | [instructions/prune.md](instructions/prune.md) | [cleanup](../cleanup/SKILL.md), [delete-worktree-session](../delete-worktree-session/SKILL.md) |
 | tasks | `tasks.py` (machine form) | [instructions/task.md](instructions/task.md) | |
 

@@ -54,6 +54,7 @@ IDLE_WITH_WORK_AFTER = 30 * MINUTE  # finished work nobody queues
 RESERVATION_WAITS_AFTER = 60 * MINUTE  # the queue waits at the front for a reserved slot without progress
 LOAD_PER_CORE_HIGH = 2.0  # load average per core that breaks timing tests
 BUSY = {"working", "starting"}
+WORKING_TASKS = {"shell", "subagent", "workflow"}  # background tasks that mean a session still works
 
 # Failing test names in a landing's message: Swift Testing, XCTest, cargo test, nextest.
 TEST_PATTERNS = (
@@ -212,6 +213,15 @@ def reservation_waits(head: dict, w: dict, now: float) -> dict | None:
                    f"{agent or 'none'}{idle}"}
 
 
+def holder_works(w: dict, snap: dict) -> bool:
+    """The reserved queue's holder is not idle (hal2 plan 0169, the incident of 2026-10-06: `reserved-idle` made
+    slot 05 land in the middle of its measurement turn): its agent is busy or was within HELD_IDLE_AFTER, runs a
+    background shell, subagent or workflow, or a land.yml run (a dispatch of it, a landing that ships) is unfinished."""
+    agent = w.get("agent_state")
+    return bool(agent in BUSY or (agent and w.get("agent_idle_seconds", 0) < HELD_IDLE_AFTER)
+                or w.get("agent_tasks") or snap.get("runs_unfinished"))
+
+
 def orphaned_subservant(w: dict) -> dict:
     """A marked slot without a session whose work its lead's branch lacks: restarted only with /handoff c, never
     /mtm (boss.orphan); a slot whose work is all in origin/<lead> is done (prune removes it), never restarted."""
@@ -249,8 +259,8 @@ def findings(snap: dict) -> list[dict]:
         agent = by_slot.get(head["slot"], {}).get("agent_state")
         hold = head.get("hold") or {}
         # A CI landing holds the queue as its reservation while its run is tested: its process lives.
-        if hold.get("reason") == "reserved" and not head.get("process_alive") and agent not in BUSY \
-                and age > HELD_IDLE_AFTER:
+        if hold.get("reason") == "reserved" and not head.get("process_alive") and age > HELD_IDLE_AFTER \
+                and not holder_works(by_slot.get(head["slot"], {}), snap):
             out.append({"kind": "reserved-idle", "slot": head["slot"],
                         "why": f"reserved the queue, its agent is {agent}, nothing lands"})
         elif hold.get("reason") != "reserved" and not head.get("process_alive") and agent not in BUSY:
@@ -314,6 +324,7 @@ def worktree_entry(w: dict, a: dict, default: str, now: float) -> dict:
         "agent_state": a.get("state"), "pane": a.get("pane_id"),
         "agent_idle_seconds": int(now - since) if since and a.get("state") not in BUSY else 0,
         "context_percent": a.get("context_percent"),
+        "agent_tasks": sum(1 for t in a.get("background_tasks") or [] if t.get("type") in WORKING_TASKS),
     }
 
 
@@ -329,9 +340,11 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
     agents_raw = run_json(["hal2-cli-agents", "list", "--json"]) or {}
     agents = agents_raw.get("list", []) if isinstance(agents_raw, dict) else agents_raw
     by_checkout = agents_by_checkout(agents)
+    unfinished = 0
     ci = mtm_ci.ci_mode(run, main, default)
     if ci:
         recent, tests = mtm_ci.landings(run_json, main, now - hours * 3600), {}
+        unfinished = mtm_ci.unfinished(run_json, main)
     else:
         l_raw = run_json(["hal2-cli-git", "worktree", "landings", "--limit", "100", "--json"], main) or {}
         recent, tests = landings_summary(l_raw.get("landings", []), now - hours * 3600)
@@ -354,7 +367,7 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
     cores = os.cpu_count() or 1
     pause_file = state_dir(main) / "paused.json"
     snap = {
-        "now": now, "repo": main, "default": default, "ci": ci, "queue": queue, "worktrees": wts,
+        "now": now, "repo": main, "default": default, "ci": ci, "runs_unfinished": unfinished, "queue": queue, "worktrees": wts,
         "landings": recent, "tests": tests,
         "load": {"load1": load1, "cores": cores, "per_core": round(load1 / cores, 2)},
         "paused": json.loads(pause_file.read_text()) if pause_file.exists() else None,
