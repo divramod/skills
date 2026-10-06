@@ -28,8 +28,6 @@ TEXT = {
     "released": BOSS + ": your held landing has no session, so I released the merge queue. Fix it, then /mtm "
                        "again to requeue.",
     "moves": BOSS + ": the merge queue moves again ({slot} was released).",
-    "priority": "merge-to-main boss: land now. The user wants slot {slot} on main first ({note}). What is "
-                "committed lands; unfinished steps land after it.",
     "pause": BOSS + ": a landing runs ({slot}) and the load is high. Pause builds, tests, Docker builds and "
                     "benchmarks (/pause) until I say go.",
     "go": BOSS + ": go: /continue",
@@ -61,22 +59,21 @@ class Planner:
         return next((t for t in self.queue if t["slot"] == slot), {})
 
     def priority(self, f: dict) -> None:
-        slot, note = f["slot"], (self.snap.get("priority") or {}).get("note") or "no reason given"
+        """hal2 orders the queue and keeps a listed slot's place (`worktree queue order`, set by adapt-merge-queue or
+        `/farmer first`): the tick never re-ranks, it only takes a landed slot off priority.json and tells the user."""
+        slot = f["slot"]
         landed = any(x["slot"] == slot and x["outcome"] == "landed" for x in self.snap["landings"])
         if landed and not self.ticket(slot) and not self.wt.get(slot, {}).get("ahead"):
             self.add("priority-done", "run", slot, argv=[sys.executable, str(HERE / "mtm_scan.py"), "priority",
-                                                          "--clear", "--repo", self.ctx["main"]],
-                     text=f"priority {slot} landed: cleared")
+                                                          "--done", slot, "--repo", self.ctx["main"]],
+                     text=f"priority {slot} landed: done")
             self.add("priority-done", "notify", slot, text=f"farmer: your priority slot {slot} has landed",
                      key=f"priority-done:{slot}", window=dt.timedelta(hours=1))
-            return
-        waiting = [t["slot"] for t in self.queue if t["state"] == "waiting"]
-        if slot in waiting and waiting[0] != slot:
-            self.add("front", "run", slot, argv=[sys.executable, str(HERE / "mtm_scan.py"), "front", slot,
-                                                 "--repo", self.ctx["main"]], text=f"{slot} to the queue's front")
-        if not self.ticket(slot):
-            self.tell(slot, "priority", TEXT["priority"].format(slot=slot, note=note), f"priority:{slot}",
-                      dt.timedelta(hours=6))
+
+    def reservation(self, f: dict) -> None:
+        """The queue waits at the front for a reservation without progress: the user decides, nothing is released."""
+        self.add(f["kind"], "notify", f["slot"], text=f"farmer: {f['why']}",
+                 key=f"reservation-waits:{f['slot']}:{f.get('seq')}", window=dt.timedelta(hours=6))
 
     def held(self, f: dict) -> None:
         """A held queue nobody moves. A holder with a live session is woken (again every hour) and never released:
@@ -118,8 +115,8 @@ class Planner:
                 self.tell(slot, "go", TEXT["go"], f"go:{landing}:{slot}", dt.timedelta(days=1))
 
     def flaky(self, f: dict) -> None:
-        test, ledger = f["test"], Path(self.ctx["main"]).name
-        flaky_md = mtm_scan.DATA / ledger / "flaky.md"
+        test = f["test"]
+        flaky_md = mtm_scan.state_dir(self.ctx["main"]) / "flaky.md"
         if flaky_md.exists() and test in flaky_md.read_text():
             return
         load = any(test in x["tests"] and x["load_hint"] for x in self.snap["landings"])
@@ -146,6 +143,8 @@ class Planner:
             kind = f["kind"]
             if kind == "priority":
                 self.priority(f)
+            elif kind == "reservation-waits":
+                self.reservation(f)
             elif kind in ("held-idle", "reserved-idle"):
                 self.held(f)
             elif kind == "load-high":

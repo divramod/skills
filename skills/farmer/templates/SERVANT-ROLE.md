@@ -4,7 +4,7 @@ Written by the farmer of {repo} on {at} (runtime state: never committed). Read t
 
 ## Whom you serve
 
-The **farmer**: the session in {repo}'s worktree slot `farmer` (`~/.hal/git/worktree/{repo}/farmer`), the user's
+The **farmer**: the session in {repo}'s worktree slot `{farmer_slot}` (`~/.hal/git/worktree/{repo}/{farmer_slot}`), the user's
 stand-in. The user started it and gave it the authority to start you and to tell you what to do. Do what it tells
 you; the user will not answer you.
 
@@ -33,4 +33,4 @@ you; the user will not answer you.
 ## How to reach the farmer
 
 `SendMessage` to the farmer session: `ListAgents` names it (the session whose working directory is
-`~/.hal/git/worktree/{repo}/farmer`). Without one, `PushNotification` with the plan's number and the line.
+`~/.hal/git/worktree/{repo}/{farmer_slot}`). Without one, `PushNotification` with the plan's number and the line.

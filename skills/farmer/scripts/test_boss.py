@@ -59,13 +59,23 @@ class Held(unittest.TestCase):
 
 
 class Queue(unittest.TestCase):
-    def test_priority_front_land_now_and_cleared_when_landed(self):
+    def test_priority_never_reranks_and_is_done_when_landed(self):
         q = [{"slot": "01", "state": "waiting", "seq": 1}, {"slot": "04", "state": "waiting", "seq": 2}]
         f = {"kind": "priority", "slot": "04", "why": ""}
-        self.assertEqual(plan(snap([f], q, [wt("04")], priority={"slots": ["04"]})), [("run", "front", "04")])
-        self.assertEqual(plan(snap([f], [], [wt("04")], priority={"slots": ["04"]})), [("send", "priority", "04")])
+        self.assertEqual(plan(snap([f], q, [wt("04")], priority={"slots": ["04"]})), [], "hal2 keeps the order")
+        self.assertEqual(plan(snap([f], [], [wt("04")], priority={"slots": ["04"]})), [], "no land-now tell")
         done = snap([f], [], [wt("04", ahead=0)], [{"slot": "04", "outcome": "landed", "tests": []}])
-        self.assertEqual(plan(done), [("run", "priority-done", "04"), ("notify", "priority-done", "04")])
+        planned = boss.plan(done, {"now": NOW, "log": [], "main": "/x/hal2"})
+        self.assertEqual([(a["do"], a["kind"]) for a in planned], [("run", "priority-done"), ("notify", "priority-done")])
+        self.assertEqual(planned[0]["argv"][2:5], ["priority", "--done", "04"])
+
+    def test_a_waiting_reservation_tells_the_user_every_six_hours(self):
+        f = {"kind": "reservation-waits", "slot": "18", "seq": 9, "why": "the queue waits"}
+        s = snap([f], [{"slot": "18", "state": "waiting", "seq": 9}], [wt("18")])
+        self.assertEqual(plan(s), [("notify", "reservation-waits", "18")])
+        self.assertEqual(plan(s, [{"at": at(120), "key": "reservation-waits:18:9"}]), [])
+        self.assertEqual(plan(s, [{"at": at(7 * 60), "key": "reservation-waits:18:9"}]),
+                         [("notify", "reservation-waits", "18")])
 
     def test_pause_busy_slots_during_a_landing_and_go_after_it(self):
         q = [{"slot": "04", "state": "active", "seq": 7, "landing": "L1"}]
@@ -96,7 +106,7 @@ class Work(unittest.TestCase):
         self.assertEqual(plan(snap([f], landings=hinted)), [("delegate", "flaky", "08")])
         plain = [dict(hinted[0], load_hint=False)]
         self.assertEqual(plan(snap([f], landings=plain)), [("wake", "flaky", "08")])
-        (self.tmp / "hal2").mkdir()
+        (self.tmp / "hal2").mkdir(exist_ok=True)
         (self.tmp / "hal2" / "flaky.md").write_text("- 2026-10-03 t disabled\n")
         self.assertEqual(plan(snap([f], landings=hinted)), [])
 

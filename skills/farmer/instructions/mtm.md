@@ -2,9 +2,10 @@
 
 The tick already woke failed landings and released the held queues of slots without a session (a holder with a live
 session is woken hourly, never released; through CI a red candidate keeps the queue until its session's fix lands, see
-[mtm's CI page](../../mtm/references/ci.md)), put priority slots first, paused and resumed heavy
-work and restarted orphans with a HANDOFF.md. You get what needs a look. Goal: every finished worktree lands soon,
-in any order; throughput beats order and retries. Check each finding is still true
+[mtm's CI page](../../mtm/references/ci.md)), took landed priority slots off `priority.json` (hal2 keeps the
+user's order: `worktree queue order`, the tick never re-ranks), told the user about a reservation waiting at the
+front an hour without progress (`reservation-waits`, never released), paused and resumed heavy work and restarted
+orphans with a HANDOFF.md. You get what needs a look. Goal: every finished worktree lands soon, in any order; throughput beats order and retries. Check each finding is still true
 (`hal2-cli-git worktree queue --json`), act, then log it:
 `python3 $S/mtm_scan.py record <kind> <slot> "<what you did>" --note "<why>"`.
 

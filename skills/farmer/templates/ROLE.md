@@ -11,6 +11,7 @@ duties:
   watch: "*/15 * * * *"       # sanity-watch: resume abnormal stops
   autoclear: "0 * * * *"      # fix-autoclear: autoclear failures
   trains: "*/15 * * * *"      # merge trains: finished branches that touch different files land as one
+  prune: "*/15 * * * *"       # landed slots: 00-09 cleaned, 10-99 removed with their branch; free disk
 servant_limit: auto            # farmer-started servants: auto (by load) or a number at once
 notify: every-round           # every-round | hourly | daily | never (required)
 ---

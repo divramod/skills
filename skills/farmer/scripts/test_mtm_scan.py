@@ -147,33 +147,93 @@ class Summary(unittest.TestCase):
             finally:
                 scan.DATA = old
 
-    def test_the_summary_folder_ignores_itself(self):
+    def test_the_summaries_live_in_the_state_folder(self):
         import tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual((scan.summary_dir(d) / ".gitignore").read_text(), "*\n")
-            self.assertTrue((Path(d) / "plans/farmer").is_dir())
-
-
-class Front(unittest.TestCase):
-    def test_named_slots_go_first_and_the_head_never_moves(self):
-        import json
-        import tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as d:
-            q = Path(d)
-            (q / ".lock").touch()
-            for seq, slot, state in ((329, "12", "active"), (339, "01", "waiting"), (343, "15", "waiting"),
-                                     (350, "04", "waiting")):
-                (q / f"{seq:020}.json").write_text(json.dumps({"slot": slot, "state": state}))
-            orig, scan.queue_dir = scan.queue_dir, lambda main: q
-            try:
-                self.assertEqual(scan.front("/x/hal2", ["04"]), ["04", "01", "15"])
+            old, scan.DATA = scan.DATA, Path(d) / "state"
+            try:  # the summaries live in the state folder, ignored with the rest of roles/farmer/
+                self.assertEqual(scan.summary_dir(str(Path(d) / "hal2")), Path(d) / "state/hal2/summaries")
+                self.assertTrue(scan.summary_dir(str(Path(d) / "hal2")).is_dir())
             finally:
-                scan.queue_dir = orig
-            rank = {json.loads(f.read_text())["slot"]: json.loads(f.read_text()).get("rank")
-                    for f in q.glob("*.json")}
-            self.assertEqual(rank, {"12": None, "04": 339, "01": 343, "15": 350})
+                scan.DATA = old
+
+
+def iso(seconds_ago: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - seconds_ago))
+
+
+class Reservations(unittest.TestCase):
+    HEAD = {"slot": "18", "state": "waiting", "seq": 9, "process_alive": False, "awaiting_slot": True}
+
+    def kinds(self, reserved_ago: float, **agent):
+        q = [dict(self.HEAD, reserved={"by": "the user", "since": iso(reserved_ago)})]
+        w = [{"slot": "18", "ahead": 3, **agent}]
+        return [(f["kind"], f["slot"]) for f in scan.findings(snap(queue=q, worktrees=w))]
+
+    def test_a_reservation_waiting_an_hour_at_the_front_without_progress_is_found(self):
+        self.assertIn(("reservation-waits", "18"), self.kinds(2 * 3600))
+        self.assertIn(("reservation-waits", "18"), self.kinds(2 * 3600, agent_state="done",
+                                                                agent_idle_seconds=4000))
+
+    def test_a_young_reservation_or_a_working_slot_is_left_alone(self):
+        self.assertNotIn(("reservation-waits", "18"), self.kinds(600))
+        self.assertNotIn(("reservation-waits", "18"), self.kinds(2 * 3600, agent_state="working"))
+        self.assertNotIn(("reservation-waits", "18"), self.kinds(2 * 3600, agent_state="done",
+                                                                   agent_idle_seconds=300))
+
+    def test_a_reserved_waiter_without_a_process_is_not_gone(self):
+        q = [{"slot": "12", "state": "active", "process_alive": True},
+             dict(self.HEAD, reserved={"by": "the user", "since": iso(60)})]
+        kinds = [f["kind"] for f in scan.findings(snap(queue=q))]
+        self.assertNotIn("waiter-gone", kinds)
+
+
+class Priority(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        old, scan.DATA = scan.DATA, Path(self.tmp.name)
+        self.addCleanup(setattr, scan, "DATA", old)
+        self.file = scan.state_dir("/x/hal2") / "priority.json"
+
+    def order(self, *args, stdout="", code=0, **kw):
+        import subprocess
+        from unittest import mock
+        real, hal2 = subprocess.run, []
+
+        def run(argv, **opts):  # only hal2 is faked: roles' git calls stay real
+            if argv[0] != "hal2-cli-git":
+                return real(argv, **opts)
+            hal2.append(argv)
+            return subprocess.CompletedProcess(argv, code, stdout=stdout, stderr="refused" if code else "")
+        with mock.patch.object(scan.subprocess, "run", side_effect=run), \
+                mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+            rc = scan.priority("/x/hal2", list(args), **kw)
+        return rc, hal2[0] if hal2 else None
+
+    def test_hal2_orders_the_queue_and_its_resolved_order_is_kept_with_the_note(self):
+        import json
+        out = json.dumps({"queue": [], "priority": {"slots": ["12", "18"], "by": "the user", "at": "A"}})
+        rc, argv = self.order("12", "18", stdout=out, note="n8n first")
+        self.assertEqual((rc, argv), (0, ["hal2-cli-git", "worktree", "queue", "order", "12", "18", "--json"]))
+        self.assertEqual(json.loads(self.file.read_text()), {"slots": ["12", "18"], "note": "n8n first"})
+        self.assertEqual(self.order(done="12")[1], None, "--done asks hal2 nothing")
+        self.assertEqual(json.loads(self.file.read_text())["slots"], ["18"])
+        self.order(done="18")
+        self.assertFalse(self.file.exists(), "the last landed slot clears it")
+
+    def test_clear_and_a_refusal(self):
+        import json
+        self.file.write_text(json.dumps({"slots": ["04"], "note": ""}))
+        rc, _ = self.order("99", code=1)
+        self.assertEqual(rc, 1)
+        self.assertTrue(self.file.exists(), "a refused order changes nothing")
+        rc, argv = self.order(clear=True, stdout=json.dumps({"queue": [], "priority": None}))
+        self.assertEqual((rc, argv[-2:]), (0, ["--clear", "--json"]))
+        self.assertFalse(self.file.exists())
 
 
 if __name__ == "__main__":

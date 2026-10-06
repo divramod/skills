@@ -16,6 +16,7 @@ from pathlib import Path
 
 import deliver
 import mtm_scan
+import roles
 
 SKILLS = Path(__file__).resolve().parents[2]
 FREE = [sys.executable, str(SKILLS / "list-free-worktrees/scripts/free.py")]
@@ -86,7 +87,7 @@ def write_role(main: str, brief: Path, title: str, now: dt.datetime, task: str |
     d = mtm_scan.state_dir(main) / "servants"
     d.mkdir(exist_ok=True)
     path = d / f"{slug(title)}.md"
-    path.write_text(ROLE.read_text().format(repo=Path(main).name, brief=brief, title=title,
+    path.write_text(ROLE.read_text().format(repo=Path(main).name, farmer_slot=roles.slot_name(main), brief=brief, title=title,
                                             at=f"{now:%Y-%m-%d %H:%M}", task=task or PLAN_TASK.format(title=title)))
     return path
 
@@ -142,7 +143,7 @@ def delegate(a: dict, main: str, limit: int | str, dry: bool, now: dt.datetime) 
         result = {"key": a["key"], "state": "waiting", "brief": str(brief), "title": a["text"], **own}
     else:
         role = write_role(main, brief, a["text"][:80], now, a.get("role_task")) if not dry else Path("<role>")
-        prompt = a.get("prompt", PROMPT).format(repo=Path(main).name, brief=brief, title=a["text"][:80], role=role)
+        prompt = a.get("prompt", PROMPT).format(repo=Path(main).name, farmer_slot=roles.slot_name(main), brief=brief, title=a["text"][:80], role=role)
         started = start(prompt, main, dry)
         state = "error" if "error" in started else "planned" if dry else "running"
         result = {"key": a["key"], "state": state, "brief": str(brief), "role": str(role), "title": a["text"],

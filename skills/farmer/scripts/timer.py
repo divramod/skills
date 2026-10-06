@@ -3,7 +3,7 @@
 macOS: a launchd agent `local.farmer.<repo>` (~/Library/LaunchAgents), one StartCalendarInterval entry per minute of
 the loop's cron. Linux: a systemd user timer + service of the same name. Installing writes the mode `timer`,
 removing it `claude`, so a tick and the Claude loop never both run. `timer.json` in the state folder keeps the
-installed cron; a tick reinstalls when FARMER-ROLE.md changed the loop's cron.
+installed cron; a tick reinstalls when roles/farmer/ROLE.md changed the loop's cron.
 
 The tick's output goes to `tick.log` in the state folder (rotated at 1 MB to `tick.log.1`).
 """

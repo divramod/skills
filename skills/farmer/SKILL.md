@@ -1,6 +1,6 @@
 ---
 name: farmer
-description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, a clean pull-request list, the farmer branch synced with main, sanity-watch, fix-autoclear, merge trains, FARMER-ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "keep the pull requests clean", "dependabot", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
+description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, a clean pull-request list, the farmer branch synced with main, sanity-watch, fix-autoclear, merge trains, landed worktrees cleaned and removed, roles/farmer/ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer-<repo>` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "keep the pull requests clean", "dependabot", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
 ---
 
 # farmer
@@ -11,16 +11,18 @@ Only what really needs the user reaches them, batched.
 
 **Only the user starts the farmer** (`/farmer start` in the farmer slot's session). No other session, skill, hook or
 job starts or restarts it; its timer and its `/farmer handoff` + `/clear` continuation are the user's start carried on.
-It runs in **its own worktree slot `farmer`** (`~/.hal/git/worktree/<repo>/farmer`, branch `farmer`; start the
-session with `hal2-cli-git worktree run farmer --agent claude`), one per repository, never in the main checkout or
-a numbered slot. **It never changes its own branch except committing the user's `FARMER-ROLE.md`**: every change is
+It runs in **its own worktree slot `farmer-<repo>`** (`~/.hal/git/worktree/<repo>/farmer-<repo>`, branch
+`farmer-<repo>`, `<repo>` being origin's repository name, else the main checkout's folder: hal2's
+`.adr/roles-folder.md`; start the session with `hal2-cli-git worktree run farmer --agent claude`, the short name finds
+the slot), one per repository, never in the main checkout or a numbered slot; a slot still named `farmer` is moved
+with `python3 $S/farmer.py migrate`. **It never changes its own branch except committing the user's `roles/farmer/ROLE.md`**: every change is
 made by a servant it starts or by the session whose work it concerns.
 
 **Everything deterministic runs as code** (`.adr/deterministic-first.md`): the timer's `farmer.py tick` does the
-round (stay current, the user's FARMER-ROLE.md edit, what is due, each duty's rule-based actions, delegations, log,
+round (stay current, the user's roles/farmer/ROLE.md edit, what is due, each duty's rule-based actions, delegations, log,
 summary). Judgment items, relays for busy sessions and notices go into `wake.json`, and it types `/farmer act` here.
 
-**Nothing is implicit.** Only what the repository's `FARMER-ROLE.md` opts in to runs ([reference](reference.md#farmer-rolemd)):
+**Nothing is implicit.** Only what the repository's `roles/farmer/ROLE.md` opts in to runs ([reference](reference.md#rolesfarmerrolemd)):
 
 | Duty | Code (the tick) | Woken for | Library |
 |---|---|---|---|
@@ -28,17 +30,19 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 | `lead` | `duties.plan_lead` | [instructions/lead.md](instructions/lead.md) | [cases.md](subskills/development-lead/cases.md) |
 | `ci` | `duties.plan_ci` | [instructions/ci.md](instructions/ci.md) | |
 | `prs` | `duties.plan_prs` (`pr_scan.py`: the open Dependabot PRs to one servant per batch, PRs main holds and leftover landing PRs closed, any other PR to the user) | [instructions/prs.md](instructions/prs.md) | |
-| `sync` | `role_sync.py` (main's FARMER-ROLE.md differs from the farmer branch's: one servant merges the latest main, then `farmer`, and lands it; no plan) | | |
+| `sync` | `role_sync.py` (main's roles/farmer/ROLE.md differs from the farmer branch's: one servant merges the latest main, then the farmer branch, and lands it; no plan) | | |
 | `watch` | `duties.plan_watch` (sanity-watch's scan) | [instructions/watch.md](instructions/watch.md) | sanity-watch's |
 | `autoclear` | `duties.plan_autoclear` (fix-autoclear's doctor) | [instructions/autoclear.md](instructions/autoclear.md) | fix-autoclear's |
 | `trains` | `trains.py` (merge trains: finished, non-overlapping waiters land as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
+| `prune` | `prune.py` (landed slots: 00-09 cleaned once per landing, one 10-99 slot removed per round with its branch; free disk and the biggest worktrees every 6 h, a notice under 100 GB) | [instructions/prune.md](instructions/prune.md) | [cleanup](../cleanup/SKILL.md), [delete-worktree-session](../delete-worktree-session/SKILL.md) |
 | tasks | `tasks.py` (machine form) | [instructions/task.md](instructions/task.md) | |
 
-`S=<skill-dir>/scripts`, `K=<skills repo>/skills`. **State** in `~/skills/farmer/<repo>/` (`FARMER_DIR` overrides):
-`log.jsonl` (every action), `handoff.md` (what the session knew before its last clear), `mode`, `timer.json`,
-`tick.log`, `wake.json`, `delegations.jsonl`, `briefs/`, `servants/` (each servant's role file),
-`pending/`, `flaky.md`, `lead.jsonl`, `ci.jsonl`. **History**: a summary per round with actions in the main
-checkout's `plans/farmer/<day>/<HHMM>.md`, `latest.md` every round (the folder ignores itself).
+`S=<skill-dir>/scripts`, `K=<skills repo>/skills`. **State** in the role folder `roles/farmer/` of the farmer slot, beside `ROLE.md` (`FARMER_DIR` overrides it with
+`$FARMER_DIR/<repo>/`): `log.jsonl` (every action), `handoff.md` (what the session knew before its last clear), `mode`,
+`timer.json`, `tick.log`, `wake.json`, `delegations.jsonl`, `briefs/`, `servants/` (each servant's role file),
+`pending/`, `flaky.md`, `lead.jsonl`, `ci.jsonl`. **History**: a summary per round with actions in
+`summaries/<day>/<HHMM>.md`, `latest.md` every round. The folder's own `.gitignore` ignores all of it but `ROLE.md`
+and itself, so the slot's `git status` stays clean ([reference](reference.md#the-role-folder)).
 
 | Call | Does |
 |---|---|
@@ -47,19 +51,20 @@ checkout's `plans/farmer/<day>/<HHMM>.md`, `latest.md` every round (the folder i
 | `/farmer act` | [handle what the tick woke you for](#act); typed by the tick, not the user |
 | `/farmer handoff` | [hand off, then clear](#handoff): typed by the tick once the context reaches 40% |
 | `/farmer` | one tick now: `python3 $S/farmer.py tick` |
-| `/farmer check` | `python3 $S/due.py check`: FARMER-ROLE.md valid? Each duty and task with its cron and mode (machine or prose) |
-| `/farmer first <slot>... [why]` | the user's priority: these slots land first (`python3 $S/mtm_scan.py priority ...`; `first clear` ends it) |
+| `/farmer check` | `python3 $S/due.py check`: roles/farmer/ROLE.md valid? Each duty and task with its cron and mode (machine or prose) |
+| `/farmer first <slot>... [why]` | the user's priority: these slots land first, each place reserved (`python3 $S/mtm_scan.py priority <slot>... --note <why>` wraps `hal2-cli-git worktree queue order`; `first clear` ends it: `priority --clear`); to tell the slots their places too, use the skill `adapt-merge-queue` |
 | `/farmer status [<hours>]` | `farmer.py timer status`, `mtm_scan.py status`, the log's last hours (default 6), delegations, `latest.md` |
 | `/farmer h`, `/farmer help` | print this table and stop |
 
 ## Start
 
-1. This must be the `farmer` slot (`git rev-parse --show-toplevel` ends in `/farmer`); anywhere else say "start me in
-   my own slot: `hal2-cli-git worktree run farmer --agent claude`" and stop. Write `farmer` into `plans/CURRENT_PLAN`.
+1. This must be the farmer slot (`git rev-parse --show-toplevel` ends in `/farmer-<repo>`); anywhere else say "start
+   me in my own slot: `hal2-cli-git worktree run farmer --agent claude`" and stop (a slot still named `farmer`: "run
+   `farmer.py migrate` first"; start-check's exit 4 says which). Write `farmer` into `plans/CURRENT_PLAN`.
    Read `handoff.md` (`python3 $S/farmer.py handoff` names it) when there is one.
 2. `python3 $S/farmer.py start-check`. Exit 2: `bash $S/install-prerequisites.sh` once, then again. Exit 3 (no
-   FARMER-ROLE.md) or 1 (invalid): tell the user what is missing, point to [the template](templates/FARMER-ROLE.md),
-   stop. Exit 4 (the slot holds more than FARMER-ROLE.md): change nothing, tell the user what is there.
+   roles/farmer/ROLE.md) or 1 (invalid): tell the user what is missing, point to [the template](templates/ROLE.md),
+   stop. Exit 4 (the slot holds more than roles/farmer/ROLE.md): change nothing, tell the user what is there.
 3. `python3 $S/farmer.py timer install`: launchd `local.farmer.<repo>` (macOS) or a systemd user timer (Linux) at
    the loop's cron, mode `timer`; a changed cron is followed on its own. When this session holds a farmer or
    `/sanity-watch` cron job from before (`CronList`), delete it: the two never run together.
@@ -108,12 +113,12 @@ the log as well. A peer's message after a clear: read `handoff.md` and the log's
 
 `/farmer handoff` (typed by the tick at 40%; the user may type it too). Handle no wake items in this turn.
 
-1. `python3 $S/farmer.py handoff` names `~/skills/farmer/<repo>/handoff.md` (and its sections when it is missing).
+1. `python3 $S/farmer.py handoff` names `roles/farmer/handoff.md` of the farmer slot (and its sections when it is missing).
 2. Rewrite it whole from this session: the user's decisions (do not ask again), the merge queue and its holds, merge
    trains, open threads (questions to peers, messages promised, what each waits for), pauses and priorities with
    their reasons, what comes next. Facts and pointers (slots, tickets, commits, log entries), no narrative. Durable
    decisions also go where they go today: `log.jsonl`, `priority.json`, `paused.json`. Never a HANDOFF.md in the
-   branch: the farmer commits nothing but `FARMER-ROLE.md`.
+   branch: the farmer commits nothing but `roles/farmer/ROLE.md`.
 3. `python3 $S/farmer.py handoff --clear`: refuses a handoff.md not written for this handoff; else starts hal2's
    `clear-and-continue --without-plan --prompt "/farmer act" --detach` (it waits for this turn to end, types
    `/clear`, then `/farmer act`) and logs it. Then end the turn with one line, doing nothing after it. Refused
@@ -138,7 +143,7 @@ The user gave the farmer this authority on 2026-10-03 (hal2 INTENT.md). The farm
 
 It **never**:
 
-- changes, commits or lands anything in its own branch (except committing the user's `FARMER-ROLE.md`);
+- changes, commits or lands anything in its own branch (except committing the user's `roles/farmer/ROLE.md`);
 - decides product questions (they go to the user, batched);
 - deploys to production unless the user asked;
 - force-pushes, or deletes a slot's work or branch;

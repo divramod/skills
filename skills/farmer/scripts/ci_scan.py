@@ -7,9 +7,9 @@
       a slot's branch, a run queued too long (a runner offline?) or running too long.
       Runs already handled are left out (--all: shown too). No workflows: nothing to do
   ci_scan.py record <run-id> <what> [--note <text>] [--repo <dir>]
-      mark a run handled (log: ~/skills/farmer/<repo>/ci.jsonl)
+      mark a run handled (log: ci.jsonl in the farmer's state folder)
 
-Reads gh (gh run list, gh run view) and git; writes only ~/skills/farmer/<repo>/.
+Reads gh (gh run list, gh run view) and git; writes only the farmer's state folder (roles/farmer/ of its slot).
 Exit 0 on success, 2 when a tool is missing.
 """
 
@@ -24,7 +24,9 @@ import sys
 import time
 from pathlib import Path
 
-DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
+import roles
+
+DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
 MINUTE = 60
 QUEUED_TOO_LONG = 20 * MINUTE
 # A job queued this long wakes the repository's parked runner, when it has a wake tool (hal2's webhook missed it).
@@ -119,7 +121,7 @@ def failed_jobs(rid: int, cwd: str) -> list[str]:
 
 
 def handled(main: str) -> set[int]:
-    f = DATA / Path(main).name / "ci.jsonl"
+    f = roles.state_dir(main, DATA) / "ci.jsonl"
     if not f.exists():
         return set()
     return {int(e["run"]) for e in map(json.loads, f.read_text().splitlines())}
@@ -174,8 +176,7 @@ def main(argv: list[str]) -> int:
             if not result["findings"]:
                 print("CI green")
     else:
-        d = DATA / Path(main_checkout(args.repo)).name
-        d.mkdir(parents=True, exist_ok=True)
+        d = roles.state_dir(args.repo, DATA)
         with (d / "ci.jsonl").open("a") as f:
             f.write(json.dumps({"at": dt.datetime.now().isoformat(timespec="seconds"), "run": args.run,
                                 "what": args.what, "note": args.note}) + "\n")

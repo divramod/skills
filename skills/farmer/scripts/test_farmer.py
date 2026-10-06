@@ -37,22 +37,23 @@ def git(cwd, *args):
 
 
 class Repo(unittest.TestCase):
-    """A main checkout `hal2` with an origin and a farmer slot (a worktree named `farmer`)."""
+    """A main checkout `hal2` with an origin `hal2.git` and the farmer slot (a worktree and branch `farmer-hal2`)."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
-        origin, self.main = self.tmp / "origin.git", self.tmp / "hal2"
+        origin, self.main = self.tmp / "hal2.git", self.tmp / "hal2"
         git(self.tmp, "init", "-q", "--bare", "-b", "main", str(origin))
         git(self.tmp, "clone", "-q", str(origin), str(self.main))
         for k, v in (("user.email", "t@t"), ("user.name", "t")):
             git(self.main, "config", k, v)
+        (self.main / tick.ROLE).parent.mkdir(parents=True)
         (self.main / tick.ROLE).write_text(ROLE)
         git(self.main, "add", ".")
         git(self.main, "commit", "-qm", "init")
         git(self.main, "push", "-q", "origin", "main")
         git(self.main, "remote", "set-head", "origin", "main")
-        self.slot = self.tmp / "wt" / "farmer"
-        git(self.main, "worktree", "add", "-q", "-b", "farmer", str(self.slot))
+        self.slot = self.tmp / ".hal/git/worktree/hal2/farmer-hal2"  # roles.slot_dir with the home at tmp
+        git(self.main, "worktree", "add", "-q", "-b", "farmer-hal2", str(self.slot))
         self.data = self.tmp / "state"
         patches = [mock.patch.object(m, "DATA", self.data) for m in (due, mtm_scan)]
         patches += [mock.patch.object(tick.deliver, "cli", return_value=(0, "[]")),
@@ -80,7 +81,7 @@ class Slot(Repo):
         (self.slot / tick.ROLE).write_text(ROLE.replace("servant_limit: 2", "servant_limit: 3"))
         actions, go_on = tick.role_edit(str(self.slot))
         self.assertTrue(go_on)
-        self.assertEqual([a["kind"] for a in actions], ["role-commit"])
+        self.assertEqual([a["kind"] for a in actions], ["role-add", "role-commit"])
         (self.slot / tick.ROLE).write_text(ROLE.replace("notify: every-round", ""))
         actions, go_on = tick.role_edit(str(self.slot))
         self.assertFalse(go_on)
@@ -102,7 +103,7 @@ class Round(Repo):
             r = tick.run(str(self.slot), True, {}, NOW)
         self.assertFalse(any(c.args[0][0] != "git" for c in sh.call_args_list))
         self.assertEqual(r["done"], [])
-        self.assertEqual([a["kind"] for a in r["planned"]][:2], ["stay-current", "role-commit"])
+        self.assertEqual([a["kind"] for a in r["planned"]][:3], ["stay-current", "role-add", "role-commit"])
         self.assertFalse(self.data.exists() and any(self.data.rglob("*.jsonl")))
         self.assertIn(tick.ROLE, subprocess.run(["git", "status", "--porcelain"], cwd=self.slot,
                                                 capture_output=True, text=True).stdout)
@@ -126,7 +127,7 @@ class Round(Repo):
         self.assertEqual(set(due.last_runs(str(self.slot))), {"duty:mtm", "task:probe"})
         self.assertEqual([a["kind"] for a in r["wake"]], ["no-handler", "no-handler"])
         self.assertTrue(all(e["by"] == "tick" for e in self.log()))
-        self.assertEqual([e["kind"] for e in self.log()][:2], ["stay-current", "role-commit"])
+        self.assertEqual([e["kind"] for e in self.log()][:3], ["stay-current", "role-add", "role-commit"])
         self.assertEqual(tick.plan_round(str(self.slot), {}, NOW)["due"], [])
 
     def test_a_failed_merge_from_main_wakes_the_model_and_the_round_goes_on(self):
@@ -141,11 +142,36 @@ class Round(Repo):
         with mock.patch.object(mtm_scan, "snapshot", return_value=snap):
             quiet = {"done": [tick.act("mtm", "ran", "ran", name="duty:mtm")]}
             tick.summarize(str(self.main), str(self.slot), quiet)
-            self.assertTrue(quiet["summary"].endswith("plans/farmer/latest.md"))
+            self.assertTrue(quiet["summary"].endswith("hal2/summaries/latest.md"))
             self.assertIn("quiet", Path(quiet["summary"]).read_text())
             busy = {"done": [tick.act("frame", "role-commit", "run", text="committed")]}
             tick.summarize(str(self.main), str(self.slot), busy)
-            self.assertIn("/plans/farmer/2026-10-03/", busy["summary"])
+            self.assertIn("hal2/summaries/2026-10-03/", busy["summary"])
+
+    def test_every_file_a_round_writes_in_the_slot_is_ignored_but_the_role_files(self):
+        """Without FARMER_DIR the state lives in the slot's roles/farmer/: a round leaves `git status` clean (its
+        new roles/farmer/.gitignore committed with the role file, everything else ignored)."""
+        snap = {"now": NOW.timestamp(), "queue": [], "findings": [], "landings": [], "worktrees": [],
+                "load": {"load1": 1.0, "cores": 8}}
+        patches = [mock.patch.object(m, "DATA", None) for m in (due, mtm_scan)]
+        patches += [mock.patch.object(Path, "home", return_value=self.tmp),
+                    mock.patch.object(mtm_scan, "snapshot", return_value=snap)]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        real = tick.sh
+        def sh(argv, cwd, timeout=900):
+            return (0, json.dumps({"status": "ok"})) if argv[0] == "hal2-cli-git" else real(argv, cwd, timeout)
+        with mock.patch.object(tick, "sh", sh):
+            r = tick.run(str(self.slot), False, {}, NOW)
+        state = self.slot / "roles/farmer"
+        self.assertTrue((state / "log.jsonl").exists() and (state / "runs.jsonl").exists())
+        self.assertTrue(Path(r["summary"]).is_relative_to(state / "summaries"))
+        status = subprocess.run(["git", "status", "--porcelain", "-uall", "--ignored=no"], cwd=self.slot,
+                                capture_output=True, text=True).stdout
+        self.assertEqual(status, "")
+        tracked = subprocess.run(["git", "ls-files", "roles"], cwd=self.slot, capture_output=True, text=True).stdout
+        self.assertEqual(tracked.split(), ["roles/farmer/.gitignore", "roles/farmer/ROLE.md"])
 
 
 class Waiting(unittest.TestCase):
