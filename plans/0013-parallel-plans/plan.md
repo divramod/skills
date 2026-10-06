@@ -35,7 +35,7 @@ starting "after the landing: ...".
 
 | # | Step | Done when | Status |
 |---|---|---|---|
-| 1 | plan.py parallel table: `split_row` honours `\|` (and writes it back escaped) with a clean error on short rows; Needs, Touches, Who read; `new --parallel`; problems for bad ids, unknown Needs and cycles; `ready [--json]`, `assign <n> <who>`; `current` lists running and ready; writes refused in a slot with `plans/LEAD` | `python3 -m unittest discover -s skills/plan/scripts` green, the new tests among them, the old ones unchanged | next |
+| 1 | plan.py parallel table: `split_row` honours `\|` (and writes it back escaped) with a clean error on short rows; Needs, Touches, Who read; `new --parallel`; problems for bad ids, unknown Needs and cycles; `ready [--json]`, `assign <n> <who>`; `current` lists running and ready; writes refused in a slot with `plans/LEAD` | `python3 -m unittest discover -s skills/plan/scripts` green, the new tests among them, the old ones unchanged | done |
 | 2 | plan.py `brief <n>` (templates/step-brief.md, with the subservant's exact first prompt), `report <n>` (templates/report.md) and `reports [--json]` / `watch` (the lead's Monitor: reports arrived on origin/NN) | the same unittest run green with tests for brief, report, reports | |
 | 3 | plan SKILL.md: the parallel table, "Run a parallel plan" (the lead's loop as code, subagent vs subservant, a subservant's life, shared files, milestones, limits, hand-off), the subservant's rules; the help table | `grep -c "Run a parallel plan" skills/plan/SKILL.md` ≥ 2 and every D 1-12 point has its paragraph (checked against the design) | |
 | 4 | create-worktree-session: `--from <NN>`, `--base <rev>` (`git branch -f NN <rev>`, a reused clean slot reset), `--lead "<slot> <plan> <step>"` writes `plans/LEAD` and `CURRENT_PLAN` (ignored through info/exclude when the repo does not ignore it), free disk checked before a new slot, `--exact` documented | `python3 -m unittest discover -s skills/create-worktree-session/scripts` green with tests for each flag | |
@@ -112,4 +112,8 @@ answered before implementation, with the user's words and the date; the run acts
 
 ## Notes
 
-- <anything learned along the way that changes the plan>
+- 2026-10-06 step 1: the parallel logic lives in `skills/plan/scripts/parallel.py` (plan.py would pass 750 lines);
+  plan.py wires it (`split_row`/`join_row` with `\|`, `set_cells`, `describe_safe` for `list`, `parallel_table` for
+  `new --parallel`, `refuse_subservant`, `run_parallel`, `watch`). Steps 1 and 2's code and both templates
+  (`templates/step-brief.md`, `templates/report.md`) are in the WIP commit `74e09f1`; their tests
+  (`skills/plan/scripts/test_parallel.py`) are not written yet: the context guard cut the write off.
