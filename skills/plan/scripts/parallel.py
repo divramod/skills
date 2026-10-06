@@ -5,11 +5,15 @@
 - Touches: comma-separated resources (`rust:<crate>`, `ts:<package>`, `proto:<package>`, `docs`, `@hub-stack`, ...);
   two steps sharing one never run at once. Each resource has room for one step, `@vm` for two; a `Capacity:` line
   under the title (`Capacity: @vm=2, @x=3`) overrides. A row whose Step starts with `Milestone <n>` touches `@land`.
+  Resources compare without backticks, whitespace and case.
 - Who: `lead`, `subagent`, `user` or `slot NN` (a subservant in worktree slot 30-99).
-- Status: `done...`, `running`, `blocked <why>`, anything else (blank, `next`) is open.
+- Status: `done...`, `running`, `blocked <why>`, anything else (blank, `next`) is open. A running step, and a blocked
+  one with a Who, holds its Touches and its slot.
 
 A subservant's slot holds the gitignored marker `plans/LEAD`, one line `<lead-slot> <plan-slug> <step>`.
 """
+import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -46,8 +50,16 @@ def parse_needs(text: str) -> tuple[list[str], list[str]]:
     return ids, bad
 
 
+def resource(token: str) -> str:
+    """One Touches resource as compared: no backticks, no whitespace, case-folded (`` `@VM ` `` is `@vm`)."""
+    return "".join(token.replace("`", "").split()).casefold()
+
+
 def parse_touches(text: str, step: str = "") -> list[str]:
-    touches = [t.strip() for t in text.split(",") if t.strip() not in ("", "-", "—")]
+    touches = []
+    for t in map(resource, text.split(",")):
+        if t not in ("", "-", "—") and t not in touches:
+            touches.append(t)
     if MILESTONE.match(step) and "@land" not in touches:
         touches.append("@land")
     return touches
@@ -70,8 +82,9 @@ def capacity(text: str) -> dict[str, int]:
         if line.startswith("Capacity:"):
             for part in line.split(":", 1)[1].split(","):
                 name, _, n = part.partition("=")
-                if name.strip() and n.strip().isdigit():
-                    room[name.strip()] = int(n)
+                n = n.replace("`", "").strip()
+                if resource(name) and n.isdigit():
+                    room[resource(name)] = int(n)
     return room
 
 
@@ -118,12 +131,18 @@ def problems(steps: list[dict]) -> list[str]:
     return out
 
 
+def holds(step: dict) -> bool:
+    """A step that holds its Touches and its Who: running, or blocked after it was assigned."""
+    k = kind(step["status"])
+    return k == "running" or (k == "blocked" and bool(step.get("who", "").strip()))
+
+
 def schedule(steps: list[dict], room: dict[str, int], limit: int | None = None) -> tuple[list[dict], list[dict]]:
     """(ready, waiting): ready steps picked greedily in table order, each open one left over with why it waits."""
     done = {s["number"] for s in steps if kind(s["status"]) == "done"}
     used: dict[str, int] = {}
     for s in steps:
-        if kind(s["status"]) == "running":
+        if holds(s):
             for t in s["touches"]:
                 used[t] = used.get(t, 0) + 1
     ready, waiting = [], []
@@ -175,6 +194,20 @@ def read_marker(root: Path) -> dict | None:
     return {"slot": parts[0], "plan": parts[1], "step": parts[2]}
 
 
+def worktree_of(path: Path) -> Path | None:
+    """The checkout `path` lies in (`git rev-parse --show-toplevel`), None outside git."""
+    out = git(path, "rev-parse", "--show-toplevel")
+    return Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
+
+
+def subservant_marker(root: Path, cwd: Path) -> dict | None:
+    """The marker of the `--root` checkout, else of the cwd's: a subservant passing --root <lead> is one too."""
+    if marker := read_marker(root):
+        return marker
+    top = worktree_of(cwd)
+    return read_marker(top) if top and top.resolve() != root.resolve() else None
+
+
 def write_marker(worktree: Path, lead: str, plan: str, step: str) -> Path:
     """The marker and CURRENT_PLAN, both ignored (the clone's info/exclude when the repo does not ignore them)."""
     (worktree / "plans").mkdir(exist_ok=True)
@@ -200,6 +233,62 @@ def slot_worktree(root: Path, slot: str) -> Path | None:
     for line in out.splitlines():
         if line.startswith("worktree ") and Path(line[9:]).name == slot:
             return Path(line[9:])
+    return None
+
+
+def main_checkout(root: Path) -> Path:
+    """The repository's main checkout (the farmer's state is named by its folder)."""
+    common = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+    return Path(common).parent if common else root
+
+
+def farmer_ledgers(root: Path) -> list[Path]:
+    """The farmer's delegation ledgers of this repository (skills/farmer: `$FARMER_DIR/<main>/`, else the farmer
+    slot's `roles/farmer/`, before plan 0143 `~/skills/farmer/<main>/`); a missing one reads as no servant."""
+    name = main_checkout(root).name
+    if os.environ.get("FARMER_DIR"):
+        return [Path(os.environ["FARMER_DIR"]) / name / "delegations.jsonl"]
+    home = Path.home()
+    found = sorted((home / ".hal/git/worktree" / name).glob("farmer-*/roles/farmer/delegations.jsonl"))
+    return found + [home / "skills" / "farmer" / name / "delegations.jsonl"]
+
+
+def farmer_servant(root: Path, slot: str) -> str | None:
+    """The farmer delegation running in `slot` (its ledger key), None when there is none or no readable ledger."""
+    for f in farmer_ledgers(root):
+        latest: dict[str, dict] = {}
+        try:
+            for line in f.read_text().splitlines():
+                e = json.loads(line) if line.strip() else {}
+                if isinstance(e, dict) and e.get("key"):
+                    latest[e["key"]] = {**latest.get(e["key"], {}), **e}
+        except (OSError, ValueError):
+            continue
+        for key, e in latest.items():
+            if e.get("state") == "running" and str(e.get("slot")) == slot:
+                return key
+    return None
+
+
+def slot_taken(root: Path, slug: str, steps: list[dict], number: str, slot: str) -> str | None:
+    """Why slot NN cannot take step `number`: another step holds it, its plans/LEAD names other work, or a farmer
+    servant runs there. None when it is free (a reused slot whose marked step is done is free)."""
+    for s in steps:
+        if s["number"] != number and holds(s) and slot_of(" ".join(s.get("who", "").split()).lower()) == slot:
+            return f"slot {slot} still holds step {s['number']} ({s['status']})"
+    worktree = slot_worktree(root, slot)
+    if worktree and worktree.resolve() != root.resolve():
+        try:
+            marker = read_marker(worktree)
+        except ParallelError:
+            return f"slot {slot}'s plans/LEAD is malformed"
+        done = {s["number"] for s in steps if kind(s["status"]) == "done"}
+        if marker and (marker["slot"], marker["plan"]) != (root.name, slug):
+            return f"slot {slot} is a subservant of slot {marker['slot']} (plan {marker['plan']} step {marker['step']})"
+        if marker and marker["step"] not in (number, *done):
+            return f"slot {slot}'s plans/LEAD names step {marker['step']}, which is not done"
+    if key := farmer_servant(root, slot):
+        return f"slot {slot} runs the farmer's servant '{key}'"
     return None
 
 

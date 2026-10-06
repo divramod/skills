@@ -234,10 +234,12 @@ plan's first table with `#`, `Step` and `Status`. A plan without the Needs colum
   `ts:<package>`, `proto:<package>`, `docs`) and pseudo-resources a machine has once (`@hub-stack`, `@vault-test`,
   `@stripe-mock`, `@vm`, `@quiet-mac`, `@ci`, `@deploy`, `@land`). Two steps that share one never run at once. Each
   has room for one step, `@vm` for two; a `Capacity: @vm=3, @x=2` line under the title changes that. A row whose
-  Step starts with `Milestone <n>` touches `@land`, so one land run goes at a time.
+  Step starts with `Milestone <n>` touches `@land`, so one land run goes at a time. Resources compare without
+  backticks, spaces and case (`` `@VM` `` is `@vm`), the Capacity line's too.
 - **Who**: `lead`, `subagent`, `user` (a batched physical action) or `slot NN` (a subservant, NN 30-99).
 - **Status**: blank (open), `running`, `blocked <why>`, `done`; a step another plan absorbed is
-  `done (absorbed into <NNNN> step <n>)`.
+  `done (absorbed into <NNNN> step <n>)`. A `blocked` step with a Who keeps its Touches and its slot like a running
+  one.
 
 `problems` names ids that are no integer or used twice, Needs no row has, bad Needs tokens and cycles; fix them
 before dispatching.
@@ -246,7 +248,7 @@ before dispatching.
 
 ```bash
 python3 $S/plan.py ready [--limit <n>] [--json]   # what can start now (open, Needs done, Touches free; greedy in table order); --json: why the others wait
-python3 $S/plan.py assign <n> <who> [--force]     # set Who and `running`; refuses a step that is not ready; `slot NN` only 30-99
+python3 $S/plan.py assign <n> <who> [--force]     # set Who and `running`; refuses a step that is not ready and a taken slot; `slot NN` only 30-99
 python3 $S/plan.py brief <n>                      # scaffold steps/<n>.md (templates/step-brief.md, never overwritten), print the subservant's first prompt
 python3 $S/plan.py reports [--no-fetch]           # the running subservants' reports that arrived on origin/NN
 python3 $S/plan.py watch [--interval 60]          # one line per newly arrived report: the lead's background Monitor
@@ -264,16 +266,22 @@ build or test cycle, or longer than about 30 minutes. It runs in slot 30-99, nev
 
 1. `plan.py ready --json`. For each ready step up to the limits below: detail its brief (`plan.py brief <n>`, then
    fill in the task, files and approach in `steps/<n>.md`), commit and push the brief to `origin/<lead>`, then
-   `plan.py assign <n> <who>`:
-   - a subagent: start it with the brief as its prompt;
-   - a subservant: **reuse before create**: a slot 30+ whose last step is merged gets the next one (its session is
-     told to `git reset --hard origin/<lead>` and read the new brief; `assign` rewrites its `plans/LEAD`), so its
-     build cache stays warm. Only when none is free start one:
+   assign it:
+   - a subagent: `plan.py assign <n> subagent`, then start it with the brief as its prompt;
+   - a subservant: **reuse before create**: a slot 30+ whose last step is merged (and marked done) gets the next one:
+     `plan.py assign <n> slot <NN>` rewrites its `plans/LEAD`, then its session is told to `git reset --hard
+     origin/<lead>` and read the new brief, so its build cache stays warm. Only when none is free start one first,
+     then assign the step to the slot create.py's JSON names (`"slot"`):
      ```bash
      python3 <create-worktree-session>/scripts/create.py --from 30 --base origin/<lead> \
        --lead "<lead-slot> <plan-slug> <n>" --exact --prompt "<the prompt plan.py brief printed>"
+     python3 $S/plan.py assign <n> slot <NN>   # NN: the "slot" of create.py's JSON
      ```
-   - `lead` or `user`: do it yourself, or batch it for the user (F of the design: physical actions only).
+     `assign` refuses a slot another running or blocked step holds, whose `plans/LEAD` names other work (another
+     lead or plan, or a step not done) or where a farmer servant runs (a `running` entry of the farmer's
+     `delegations.jsonl`); `--force` only after checking the slot by hand;
+   - `lead` or `user`: `plan.py assign <n> lead|user`, then do it yourself, or batch it for the user (F of the
+     design: physical actions only).
 2. Run `plan.py watch` as a background Monitor; it prints a line when a subservant's report arrives on its branch.
 3. For each report, one branch at a time: `git fetch`, `git merge --no-ff origin/NN`, resolve the shared files
    (below), regenerate what is generated (Cargo.lock, the workspace-hack, openapi.json), run the build check, the

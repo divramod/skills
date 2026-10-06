@@ -1,5 +1,6 @@
 """plan.py on a parallel plan (skills plan 0013): Needs, Touches, Who, ready, assign, brief, report, reports, watch."""
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -36,9 +37,9 @@ SEQUENTIAL = """# Plan 0001: old plan
 """
 
 
-def git(cwd: Path, *args: str) -> str:
+def git(cwd: Path, *args: str, check: bool = True) -> str:
     out = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd,
-                         capture_output=True, text=True, check=True)
+                         capture_output=True, text=True, check=check)
     return out.stdout
 
 
@@ -62,17 +63,18 @@ class ParallelTest(unittest.TestCase):
         path.write_text(text)
         return path
 
-    def run_plan(self, *args, root=None) -> subprocess.CompletedProcess:
+    def run_plan(self, *args, root=None, cwd=None, env=None) -> subprocess.CompletedProcess:
+        env = {**os.environ, "FARMER_DIR": str(self.base / "farmer"), **(env or {})}
         return subprocess.run([sys.executable, str(SCRIPT), "--root", str(root or self.root), *args],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, cwd=cwd or self.base, env=env)
 
     def plan(self, *args, root=None) -> dict:
         result = self.run_plan(*args, root=root)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
-    def refused(self, *args, root=None) -> str:
-        result = self.run_plan(*args, root=root)
+    def refused(self, *args, root=None, cwd=None) -> str:
+        result = self.run_plan(*args, root=root, cwd=cwd)
         self.assertEqual(result.returncode, 1, result.stdout)
         return result.stderr
 
@@ -204,23 +206,128 @@ class ParallelTest(unittest.TestCase):
         self.assertNotIn("marker", info)  # no worktree 33 exists
         self.assertEqual(self.numbers(info["running"]), ["2", "3"])
 
+    def add_slot(self, slot: str) -> Path:
+        if not git(self.root, "log", "--oneline", "-1", check=False):
+            git(self.root, "commit", "-q", "--allow-empty", "-m", "init")
+        git(self.root, "worktree", "add", "-q", "-b", slot, str(self.base / slot))
+        return self.base / slot
+
     def test_assign_to_an_existing_slot_writes_its_marker(self):
-        git(self.root, "commit", "-q", "--allow-empty", "-m", "init")
-        git(self.root, "worktree", "add", "-q", "-b", "31", str(self.base / "31"))
+        slot = self.add_slot("32")
 
-        info = self.plan("assign", "3", "slot", "31")
+        info = self.plan("assign", "3", "slot", "32")
 
-        slot = self.base / "31"
         self.assertEqual(Path(info["marker"]).resolve(), (slot / "plans" / "LEAD").resolve())
         self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 3\n")
         self.assertEqual((slot / "plans" / "CURRENT_PLAN").read_text(), SLUG + "\n")
         self.assertEqual(git(slot, "status", "--porcelain"), "")  # both ignored through info/exclude
-        self.plan("assign", "5", "slot", "31")  # a reused slot: the exclude is written once
+        self.plan("status", "3", "done")
+        self.plan("assign", "5", "slot", "32")  # a reused slot: the exclude is written once
         self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 5\n")
         exclude = Path(git(self.root, "rev-parse", "--git-common-dir").strip())
         self.assertEqual((self.root / exclude / "info" / "exclude").read_text().count("plans/LEAD"), 1)
 
+    def test_assign_refuses_a_slot_another_step_holds_unless_forced(self):
+        self.assertIn("slot 31 still holds step 2 (running)", self.refused("assign", "3", "slot", "31"))
+        self.path.write_text(PARALLEL.replace("| slot 31 | cargo test | running |",
+                                              "| slot 31 | cargo test | blocked on the proto |"))
+        self.assertIn("slot 31 still holds step 2 (blocked on the proto)", self.refused("assign", "3", "slot", "31"))
+
+        info = self.plan("assign", "3", "slot", "31", "--force")
+
+        self.assertEqual(info["steps"][2]["who"], "slot 31")
+
+    def test_assign_refuses_a_slot_whose_marker_names_other_work(self):
+        slot = self.add_slot("32")
+        (slot / "plans").mkdir()
+        before = self.path.read_text()
+        for marker, why in ((f"03 {SLUG} 3", f"slot 32 is a subservant of slot 03 (plan {SLUG} step 3)"),
+                            ("02 0007-other 1", "slot 32 is a subservant of slot 02 (plan 0007-other step 1)"),
+                            (f"02 {SLUG} 4", "slot 32's plans/LEAD names step 4, which is not done"),
+                            ("02", "slot 32's plans/LEAD is malformed")):
+            (slot / "plans" / "LEAD").write_text(marker + "\n")
+            self.assertIn(why, self.refused("assign", "3", "slot", "32"), marker)
+        self.assertEqual(self.path.read_text(), before)
+
+        (slot / "plans" / "LEAD").write_text(f"02 {SLUG} 1\n")  # its step 1 is done: the slot is reused
+        self.plan("assign", "3", "slot", "32")
+        self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 3\n")
+        self.plan("assign", "5", "slot", "32", "--force")  # step 3 still runs there: only forced
+        self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 5\n")
+
+    def test_assign_accepts_the_marker_create_py_wrote_for_the_step(self):
+        slot = self.add_slot("32")
+        (slot / "plans").mkdir()
+        (slot / "plans" / "LEAD").write_text(f"02 {SLUG} 3\n")
+
+        self.assertEqual(self.plan("assign", "3", "slot", "32")["steps"][2]["status"], "running")
+
+    def write_ledger(self, folder: Path, *entries: dict) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "delegations.jsonl").write_text("".join(json.dumps(e) + "\n" for e in entries))
+
+    def test_assign_refuses_a_farmer_servants_slot(self):
+        ledger = self.base / "farmer" / "02"  # FARMER_DIR/<main checkout>
+        self.write_ledger(ledger, {"at": "t", "key": "brief:fix-ci", "state": "running", "slot": "33"},
+                          {"at": "t", "key": "brief:old", "state": "running", "slot": "34"},
+                          {"at": "t", "key": "brief:old", "state": "landed", "slot": "34"})
+
+        self.assertIn("slot 33 runs the farmer's servant 'brief:fix-ci'", self.refused("assign", "3", "slot", "33"))
+        self.assertEqual(self.plan("assign", "3", "slot", "34")["steps"][2]["who"], "slot 34")  # it has landed
+        self.plan("assign", "5", "slot", "33", "--force")
+
+    def test_assign_reads_the_farmer_slots_ledger_and_survives_a_broken_one(self):
+        home = self.base / "home"
+        ledger = home / ".hal/git/worktree/02/farmer-02/roles/farmer"
+        self.write_ledger(ledger, {"at": "t", "key": "brief:fix", "state": "running", "slot": "33"})
+        env = {"FARMER_DIR": "", "HOME": str(home)}
+
+        result = self.run_plan("assign", "3", "slot", "33", env=env)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("runs the farmer's servant 'brief:fix'", result.stderr)
+        (ledger / "delegations.jsonl").write_text("{not json\n")
+        self.assertEqual(self.run_plan("assign", "3", "slot", "33", env=env).returncode, 0)
+        self.assertEqual(self.run_plan("assign", "5", "slot", "35", env={"FARMER_DIR": "",
+                                       "HOME": str(self.base / "nobody")}).returncode, 0)  # no farmer at all
+
+    # Touches
+
+    def test_blocked_assigned_step_keeps_its_touches(self):
+        self.path.write_text(PARALLEL.replace("| slot 31 | cargo test | running |",
+                                              "| slot 31 | cargo test | blocked on the proto |"))
+        self.assertEqual({w["number"]: w["why"] for w in self.ready()["waiting"]}["4"], "touches rust:server, in use")
+
+        self.path.write_text(PARALLEL.replace("| slot 31 | cargo test | running |", "| | cargo test | blocked |"))
+        self.assertIn("4", self.numbers(self.ready()["ready"]))  # never assigned: holds nothing
+
+    def test_touches_compare_without_backticks_spaces_and_case(self):
+        self.path.write_text(PARALLEL.replace("| 1 | @vm |", "| 1 | ` @VM ` |", 1)
+                             .replace("| 6 | vm two | 1 | @vm |", "| 6 | vm two | 1 | `@vm`, @Vm |")
+                             .replace("| 1 | rust:server | |", "| 1 | Rust: Server | |"))
+
+        info = self.ready()
+        self.assertEqual(self.numbers(info["ready"]), ["3", "5", "6"])
+        self.assertEqual(info["ready"][1]["touches"], ["@vm"])
+        self.assertEqual(info["ready"][2]["touches"], ["@vm"])
+        self.assertEqual({w["number"]: w["why"] for w in info["waiting"]}["4"], "touches rust:server, in use")
+        capacity = "Landing: auto\n\nCapacity: `@VM` = 3\n"
+        self.path.write_text(self.path.read_text().replace("Landing: auto\n", capacity))
+        self.assertIn("7", self.numbers(self.ready()["ready"]))
+
     # the subservant's slot
+
+    def test_a_marked_cwd_refuses_writes_to_the_lead_plan_given_by_root(self):
+        slot = self.add_slot("32")
+        (slot / "plans").mkdir()
+        (slot / "plans" / "LEAD").write_text(f"02 {SLUG} 3\n")
+        (slot / "sub").mkdir()
+        before = self.path.read_text()
+
+        for args in (("status", "3", "done"), ("assign", "3", "lead"), ("brief", "3")):
+            self.assertIn("is a subservant of slot 02", self.refused(*args, cwd=slot / "sub"), args)
+        self.assertEqual(self.path.read_text(), before)
+        self.assertEqual(self.plan("current")["slug"], SLUG)  # reading works
+        self.plan("status", "3", "done")  # from outside the slot the lead writes
 
     def test_a_marked_slot_refuses_writes_to_the_plan(self):
         before = self.path.read_text()
@@ -258,6 +365,8 @@ class ParallelTest(unittest.TestCase):
         self.assertIn("subservant of plan 0005-big-plan, step 3 only, for the lead in slot 02", info["prompt"])
         self.assertIn(f"plans/{SLUG}/steps/3.md", info["prompt"])
         self.assertIn("never land", info["prompt"])
+        self.assertIn("each message ending `(plan 0005 step 3)`", text)
+        self.assertIn("(plan 0005 step 3)", info["prompt"])
 
         brief.write_text("edited by the lead")
         self.plan("brief", "3")

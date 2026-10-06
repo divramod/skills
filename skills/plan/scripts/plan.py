@@ -41,14 +41,17 @@ Status |`, parallel.py) adds `parallel`, `running` and `ready` to the JSON, and 
                                                            why each other open step waits
   plan.py assign <step> <who> [--force]                    who: lead, subagent, user or slot NN (30-99); sets Who
                                                            and `running` (a step not ready only with --force); a
-                                                           slot NN that exists gets its plans/LEAD marker
+                                                           slot NN that exists gets its plans/LEAD marker; a slot
+                                                           another step holds, whose marker names other work or
+                                                           that runs a farmer servant only with --force
   plan.py brief <step>                                     scaffold steps/<step>.md (templates/step-brief.md) and
                                                            print the subservant's exact first prompt
   plan.py report <step>                                    scaffold reports/<step>.md (templates/report.md)
   plan.py reports [--no-fetch]                             the running subservants' reports arrived on origin/NN
   plan.py watch [--interval 60] [--rounds n]               one line per newly arrived report (the lead's Monitor)
 A cell holds a literal `|` written `\\|`. In a subservant's slot (plans/LEAD: `<lead-slot> <plan> <step>`, `lead` in
-the JSON) new, status, assign, grilled, landing, uat and brief are refused: plan.md is the lead's.
+the JSON) new, status, assign, grilled, landing, uat and brief are refused: plan.md is the lead's (also with
+--root <lead's checkout> when the current directory is in a marked slot).
 
 Run from anywhere inside the repo, or pass --root. Prints JSON on stdout; exits 1 with a message on stderr.
 
@@ -538,7 +541,8 @@ def main(argv: list[str]) -> int:
     p_assign.add_argument("step")
     p_assign.add_argument("who", nargs="+")
     p_assign.add_argument("--plan")
-    p_assign.add_argument("--force", action="store_true", help="assign a step that is not ready")
+    p_assign.add_argument("--force", action="store_true",
+                          help="assign a step that is not ready, or to a slot that is taken")
     for name in ("brief", "report"):
         p = sub.add_parser(name)
         p.add_argument("step")
@@ -601,7 +605,7 @@ PARALLEL_COMMANDS = ("ready", "assign", "brief", "report", "reports", "watch")
 
 
 def refuse_subservant(root: Path, command: str) -> None:
-    marker = parallel.read_marker(root)
+    marker = parallel.subservant_marker(root, Path.cwd())
     if marker and command in SUBSERVANT_REFUSES:
         raise PlanError(f"this slot is a subservant of slot {marker['slot']} (plan {marker['plan']} step "
                         f"{marker['step']}, plans/LEAD): it never edits plan.md; write your report with "
@@ -636,9 +640,11 @@ def run_parallel(root: Path, path: Path, args) -> int:
         if step not in ready and not args.force:
             why = next((w["why"] for w in waiting if w["number"] == args.step), f"it is {step['status'] or 'open'}")
             raise PlanError(f"step {args.step} is not ready ({why}); --force assigns it anyway")
+        slot = parallel.slot_of(who)
+        if slot and not args.force and (why := parallel.slot_taken(root, slug, steps, args.step, slot)):
+            raise PlanError(f"{why}; --force assigns it anyway")
         set_cells(path, args.step, {"who": who, "status": "running"})
         result = describe(root, path)
-        slot = parallel.slot_of(who)
         worktree = parallel.slot_worktree(root, slot) if slot else None
         if worktree and worktree.resolve() != root.resolve():
             result["marker"] = str(parallel.write_marker(worktree, root.name, slug, args.step))
@@ -650,8 +656,8 @@ def run_parallel(root: Path, path: Path, args) -> int:
         if not brief.exists():
             brief.parent.mkdir(exist_ok=True)
             brief.write_text(parallel.fill(
-                "step-brief.md", number=args.step, slug=slug, title=step["step"], lead=root.name,
-                needs=", ".join(step["needs"]) or "none", touches=", ".join(step["touches"]) or "none",
+                "step-brief.md", number=args.step, slug=slug, plan_number=slug[:4], title=step["step"],
+                lead=root.name, needs=", ".join(step["needs"]) or "none", touches=", ".join(step["touches"]) or "none",
                 done_when=step["done_when"] or "<the check that proves the step>", who=step["who"] or "<who>"))
         result = {"plan": slug, "step": args.step, "brief": str(brief.relative_to(root)),
                   "prompt": parallel.brief_prompt(slug, args.step, root.name)}

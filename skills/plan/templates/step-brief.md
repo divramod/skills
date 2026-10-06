@@ -24,8 +24,8 @@ hal2's gates, else the repo's own tests for what you changed).
 1. **Start**: `git fetch origin`. When your branch is already in `origin/{lead}` (a slot reused for its next step),
    `git reset --hard origin/{lead}`; else `git merge origin/{lead}`. `plans/LEAD` names your lead, plan and step;
    `plans/CURRENT_PLAN` names the plan.
-2. **Only this step.** Commit as you go, each message ending `(plan {slug} step {number})`. Never edit `plan.md`, its
-   `steps/` or another step's report; never run another step.
+2. **Only this step.** Commit as you go, each message ending `(plan {plan_number} step {number})`. Never edit
+   `plan.md`, its `steps/` or another step's report; never run another step.
 3. **Shared files are the lead's**: `INTENT.md`, `AGENTS.md`, lockfiles and generated files (Cargo.lock, the
    workspace-hack, openapi.json), CI and gate config. Put the lines you want there into your report. You may append to
    budgets and workspace member lists; the lead resolves them.
