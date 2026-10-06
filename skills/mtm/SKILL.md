@@ -203,20 +203,23 @@ When it was deleted, delete `HANDOFF.md` too (the session state of the finished 
 
 ## 7. Clean up
 
-Only when the worktree is fully landed: the queue was released at step 5 and `git log --oneline <default>..HEAD`
-is empty. After a stop, a cancel, a held queue or commits left over, skip it (the rerun would rebuild everything)
-and say so. Run the [cleanup](../cleanup/SKILL.md) skill's steps in the worktree (`python3
-<cleanup-skill-dir>/scripts/cleanup.py busy`, then `delete`, no question): it deletes the build artifacts the
-repo's `.hal/cleanup` lists (generic build folders without the file) and keeps what it marks `!` (e.g. fetched
-dependencies). A busy worktree (a build or test still runs in it) is not cleaned: name the process. Note the space
-freed and any `unknown` rows for the report.
+Run `bash <skill-dir>/scripts/after-landing.sh` in the worktree (no question). It acts only when the worktree is fully
+landed (`git log <default>..HEAD` empty, no change) and its plan is finished (step 6 deleted `plans/CURRENT_PLAN`), in
+a numbered slot 00-99, and runs the [cleanup](../cleanup/SKILL.md) skill's `busy` then `delete` there: the build
+artifacts the repo's `.hal/cleanup` lists go (generic build folders without the file), what it marks `!` stays (e.g.
+fetched dependencies). It prints `status: cleaned`, `skipped` (with why: after a stop, a cancel, a held queue,
+commits left over or an open plan the rerun would rebuild everything) or `busy` (a build or test still runs: name the
+process). In a slot 10-99 it also prints a `farmer: slot NN done: ...` line: send it to the repository's farmer
+(SendMessage to the session in its slot `farmer-<repo>`, `ListAgents`; none running: skip it). This session cannot
+delete the worktree it runs in; the farmer's `prune` duty removes it with its branches (the user, 2026-10-06: "after a
+successful merge and a finished plan"). Note the space freed and any `unknown` rows for the report.
 
 ## 8. Report
 
 One short block: the queue released (or, after a stop, cancel or release, that it no longer holds it), commits landed (`commits`, of every landing of this `/mtm`) and the merge commit(s) (`git -C <main checkout> log --oneline -2`), the plan steps finished after the landing (and any left open, with why),
 `git log --oneline <default>..HEAD` empty and the worktree clean (say so; if not, what is left and why),
 `pushed`, the `tasks` that ran (row and verb; skip `unchanged` and `cached` ones, say how many were cached) and the `hooks`, `warnings` (a failed install, deploy or
-`main-post-commit` hook does not undo the landing: show its output; an allowed failure is a warning, not a fix), whether `plans/CURRENT_PLAN` was deleted (and what it named) and `HANDOFF.md` with it, the cleanup (space freed, or why it was skipped; `unknown` rows to add to `.hal/cleanup`), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
+`main-post-commit` hook does not undo the landing: show its output; an allowed failure is a warning, not a fix), whether `plans/CURRENT_PLAN` was deleted (and what it named) and `HANDOFF.md` with it, the cleanup (space freed, or why it was skipped; `unknown` rows to add to `.hal/cleanup`; the farmer told, from 10-99), what was gitignored (secrets named), unclear files and what was decided, conflicts resolved, fixes
 committed. the side branches the landing deleted (`branches_deleted`) and those it kept because they are not merged
 (`branches_kept`: say so, they are left for the user). The worktree now equals the new default branch, without build artifacts, and is ready for the next task. End the report with
 the durations table from the result's `steps` (after a failure or stop too, when it has them): a markdown table
