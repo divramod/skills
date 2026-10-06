@@ -68,6 +68,7 @@ HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned 
     "duty:mtm": boss.handler,
     "duty:lead": duties.plan_lead,
     "duty:ci": duties.plan_ci,
+    "duty:prs": duties.plan_prs,
     "duty:watch": duties.plan_watch,
     "duty:autoclear": duties.plan_autoclear,
     "duty:trains": trains.handler,

@@ -1,4 +1,4 @@
-"""The development lead's, ci's, watch's and autoclear's rules as code (plan 0007 step 3).
+"""The development lead's, ci's, prs', watch's and autoclear's rules as code (plan 0007 step 3).
 
 Each `<duty>(item, ctx)` scans read-only and plans actions (see tick.py). Templated help is typed into idle
 sessions; what needs judgment (a question, a permission prompt, a real CI failure, an unclear stop) becomes a
@@ -11,7 +11,9 @@ import sys
 from pathlib import Path
 
 import ci_scan
+import delegation
 import lead_scan
+import pr_scan
 from tick import act
 
 HERE = Path(__file__).resolve().parent
@@ -162,4 +164,46 @@ def plan_autoclear(item: dict, ctx: dict, problems: list[dict] | None = None) ->
         reason = p.get("reason") or "attempts"
         out.append(act("autoclear", "fix", "delegate", slot, key=f"autoclear-fix:{reason}",
                        text=f"/fix-autoclear {slot}: {p.get('message') or reason}", brief={"problem": p}))
+    return out
+
+
+DEPENDABOT_TASK = (
+    "Apply these Dependabot updates in your slot and land them together as one plan:\n\n"
+    "- Merge each PR's branch into your slot branch as it is, oldest first (`git fetch origin <head>` then "
+    "`git merge --no-ff origin/<head>`), resolving conflicts in the merge. Never rewrite Dependabot's commits: GitHub "
+    "marks a PR merged once its head commit reaches main.\n"
+    "- Fix what each update breaks (build, tests, lint, a major version's migration) in commits of your own, and "
+    "regenerate what the repository derives from its dependencies (its CLAUDE.md names it, e.g. `cargo hakari`).\n"
+    "- An update that cannot be done now (it needs a product decision or an upstream fix): leave its branch out, close "
+    "its PR with `gh pr close <n> --comment \"<why>\"` and record why in the plan.\n"
+    "- Never merge a PR on GitHub and never push to a `dependabot/` branch: main moves only by your landing.")
+DEPENDABOT_DONE = ("Every PR listed is merged by your landing (GitHub shows it merged, or Dependabot closes it as up to "
+                   "date) or closed by you with its reason, and the landing's gates were green.")
+CLOSE = {"superseded": "Closed by the farmer: main already holds this update.",
+         "land-stale": "Closed by the farmer: this landing's slot has no ticket in the merge queue and nothing beyond "
+                       "main; a new landing opens its own PR."}
+
+
+def plan_prs(item: dict, ctx: dict, scan: dict | None = None, held: dict | None = None) -> list[dict]:
+    """The open PRs kept clean: Dependabot's applied by one servant per batch, PRs main holds closed, a leftover
+    landing PR closed (its slot holds nothing) or judged, any other PR the user's."""
+    scan = scan if scan is not None else pr_scan.scan(ctx["top"])
+    held = held if held is not None else delegation.ledger(ctx["main"])
+    busy = any(k.startswith("prs:dependabot") and e.get("state") in ("running", "waiting") for k, e in held.items())
+    out = []
+    for f in scan.get("findings", []):
+        kind = f["kind"]
+        if kind == "dependabot" and not busy:
+            nums = f["numbers"]
+            out.append(act("prs", kind, "delegate", "-", key="prs:dependabot:" + "-".join(map(str, nums)),
+                           text="Apply the open Dependabot PRs " + ", ".join(f"#{n}" for n in nums),
+                           task=DEPENDABOT_TASK, done=DEPENDABOT_DONE, brief={"prs": f["prs"]}))
+        elif kind == "superseded" or (kind == "land-stale" and not f.get("ahead")):
+            out.append(act("prs", kind, "run", f.get("slot") or "-", key=f"prs:close:{f['number']}", text=f["why"],
+                           argv=["gh", "pr", "close", str(f["number"]), "--comment", CLOSE[kind]]))
+        elif kind == "land-stale":
+            out.append(act("prs", kind, "wake", f["slot"], key=f"prs:{kind}:{f['number']}", text=f["why"], evidence=f))
+        elif kind == "other":
+            out.append(act("prs", kind, "notify", "-", key=f"prs:other:{f['number']}",
+                           text=f"open PR {f['why']}: {f['url']}"))
     return out
