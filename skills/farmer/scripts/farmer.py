@@ -29,6 +29,9 @@
   farmer.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]
       the external timer that runs `tick` at the loop's cron (launchd on macOS, a systemd user timer on Linux;
       timer.py); install switches the mode to `timer`, remove back to `claude`
+  farmer.py migrate [--role <role>] [--repo <dir>] [--dry-run] [--json]
+      move a role's slot `<role>` to `<role>-<project>` with its files in roles/<role>/ (migrate.py, hal2 plan 0143):
+      refuses while the timer is installed or a session sits in the slot; idempotent
   farmer.py mode [claude|timer] [--repo <dir>]
       who runs the rounds: the farmer's Claude session (`claude`, the default) or the external
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
@@ -57,6 +60,7 @@ import duties
 import role_sync
 import roles
 import handoff
+import migrate
 import tasks
 import tick
 import timer
@@ -274,6 +278,11 @@ def parser() -> argparse.ArgumentParser:
     tm.add_argument("--repo", default=os.getcwd())
     tm.add_argument("--dry-run", action="store_true")
     tm.add_argument("--json", action="store_true")
+    mg = sub.add_parser("migrate")
+    mg.add_argument("--role", default="farmer", choices=roles.ROLES)
+    mg.add_argument("--repo", default=os.getcwd())
+    mg.add_argument("--dry-run", action="store_true")
+    mg.add_argument("--json", action="store_true")
     m = sub.add_parser("mode")
     m.add_argument("set", nargs="?", choices=MODES)
     m.add_argument("--repo", default=os.getcwd())
@@ -307,6 +316,8 @@ def main(argv: list[str]) -> int:
         return run_handoff(args)
     if args.cmd == "timer":
         return run_timer(args)
+    if args.cmd == "migrate":
+        return migrate.run(args)
     if args.cmd == "decision":
         if args.action == "supersede" and not (args.at and args.by):
             print("farmer.py decision supersede: give the replaced decisions' <at> and --by <at>", file=sys.stderr)
