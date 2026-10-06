@@ -32,7 +32,8 @@ shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 720000
 (`gh run view <run> --json jobs`) for as long as the landing waits. A job that concluded `failure` or `timed_out`
 while others still run: start on [Red](#red) at once (read its log, reproduce, fix, commit, push) instead of waiting
 for the landing to end; the landing keeps its place meanwhile, and when it ends with `gate_failed` the fix is ready
-for the next [Land](#land) at once. A red outside the code (runner offline, full disk, network): tell the farmer
+for the next [Land](#land) at once. Never cancel the run: the whole workflow finishes, so every red job of it is
+known and fixed in that one next landing (the user, 2026-10-06: "that way we save time"). A red outside the code (runner offline, full disk, network): tell the farmer
 right away.
 
 ## Red
