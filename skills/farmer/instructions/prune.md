@@ -13,7 +13,8 @@ never touched.
   `hal2-cli-git worktree remove NN --remote` (the local branch, and `origin/NN` once merged). The user allowed
   stopping any idle session there holding no work, also their own (2026-10-06, answer 2a).
 - **Disk**: every 6 hours a log line with the free disk and the 5 biggest worktrees (in the round summary), a notice
-  for the user under 100 GB free.
+  for the user under 100 GB free. `du` over every worktree takes minutes, so the round starts it detached
+  (`prune.py sizes`, one at a time, into `disk.json`) and the next round reports it.
 
 `python3 $S/prune.py scan` lists every slot and why it is not free. A `run` of the duty that failed (its exit in the
 log) needs a look: read its output, run `prune.py scan`, and leave a slot that holds anything alone. Log what you

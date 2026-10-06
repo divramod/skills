@@ -40,7 +40,8 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 `S=<skill-dir>/scripts`, `K=<skills repo>/skills`. **State** in the role folder `roles/farmer/` of the farmer slot, beside `ROLE.md` (`FARMER_DIR` overrides it with
 `$FARMER_DIR/<repo>/`): `log.jsonl` (every action), `handoff.md` (what the session knew before its last clear), `mode`,
 `timer.json`, `tick.log`, `wake.json`, `delegations.jsonl`, `briefs/`, `servants/` (each servant's role file),
-`pending/`, `flaky.md`, `lead.jsonl`, `ci.jsonl`. **History**: a summary per round with actions in
+`pending/`, `flaky.md`, `lead.jsonl`, `ci.jsonl`, `disk.json` (prune's sizes), `cache/run-jobs/` (completed CI runs'
+jobs). Every round ends its `tick.log` output with a `timing:` line (see [Timing](reference.md#timing)). **History**: a summary per round with actions in
 `summaries/<day>/<HHMM>.md`, `latest.md` every round. The folder's own `.gitignore` ignores all of it but `ROLE.md`
 and itself, so the slot's `git status` stays clean ([reference](reference.md#the-role-folder)).
 
@@ -51,6 +52,7 @@ and itself, so the slot's `git status` stays clean ([reference](reference.md#the
 | `/farmer act` | [handle what the tick woke you for](#act); typed by the tick, not the user |
 | `/farmer handoff` | [hand off, then clear](#handoff): typed by the tick once the context reaches 40% |
 | `/farmer` | one tick now: `python3 $S/farmer.py tick` |
+| `/farmer measure` | a full dry round with every duty and task due, where its time goes: `python3 $S/farmer.py tick --dry-run --all-due` (the `timing:` line) |
 | `/farmer check` | `python3 $S/due.py check`: roles/farmer/ROLE.md valid? Each duty and task with its cron and mode (machine or prose) |
 | `/farmer first <slot>... [why]` | the user's priority: these slots land first, each place reserved (`python3 $S/mtm_scan.py priority <slot>... --note <why>` wraps `hal2-cli-git worktree queue order`; `first clear` ends it: `priority --clear`); to tell the slots their places too, use the skill `adapt-merge-queue` |
 | `/farmer status [<hours>]` | `farmer.py timer status`, `mtm_scan.py status`, the log's last hours (default 6), delegations, `latest.md` |
