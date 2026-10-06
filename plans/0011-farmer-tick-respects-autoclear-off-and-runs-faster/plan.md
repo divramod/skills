@@ -1,5 +1,7 @@
 # Plan 0011: farmer tick respects autoclear off and runs faster
 
+Finished: 2026-10-06
+
 Grilled: 2026-10-06 (autogrill ×1)
 
 Landing: auto
@@ -38,7 +40,7 @@ starting "after the landing: ...".
 | 3 | Each run's jobs fetched once per round: `gh_runs.py` memoizes `gh run list`/`gh run view --json jobs` per process, caches a completed run's jobs on disk by run id (state folder, pruned after 7 days) and fetches the uncached ones in parallel; `mtm_ci.landings`, `ci_scan.failed_jobs` and `trains.ci_red` use it; the round summary's snapshot reuses the round's fetch | tests for the cache (memo, disk hit for completed runs, a running run refetched, parallel prefetch); farmer tests green; a second `--all-due` dry tick's `timing:` line ends `gh <n> list, <m> view, <k> cached` with views only for running runs | done |
 | 4 | Measure the full tick with every duty due and cut what still dominates (by the step-2 timing, e.g. prune's every-6-hours `du` over every worktree, a repeated snapshot); before/after recorded under Notes | `farmer.py tick --dry-run --all-due --repo ~/.hal/git/worktree/hal2/farmer-hal2` total well under 60 s, or Notes name what still dominates and why it stays | done |
 | 5 | Docs: farmer's SKILL.md/reference.md (the timing line, `--all-due`, the run-jobs cache), fix-autoclear's SKILL.md (autoclear off is no failure) | `grep -n "timing:" skills/farmer/SKILL.md skills/farmer/reference.md` and `grep -n "autoclear off" skills/fix-autoclear/SKILL.md` both hit | done |
-| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | next |
+| 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | done |
 
 ## Pre-authorized
 
