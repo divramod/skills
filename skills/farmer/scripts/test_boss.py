@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -56,6 +57,30 @@ class Held(unittest.TestCase):
     def test_a_holder_without_session_is_released_at_once(self):
         s = snap([dict(HELD, kind="reserved-idle")], Q, [wt("04", state=None), wt("05")])
         self.assertEqual(plan(s)[0], ("run", "release", "04"))
+
+
+LEAD = {"slot": "02", "plan": "0149-hal9k", "step": "7"}
+
+
+class Subservant(unittest.TestCase):
+    """Skills plan 0013: a slot with plans/LEAD never lands, so it never gets the /mtm text."""
+
+    def test_a_subservant_holding_the_queue_wakes_the_farmer(self):
+        f = {"kind": "subservant-holds", "slot": "31", "seq": 7, "lead": LEAD, "why": "subservant of slot 02"}
+        s = snap([f], [{"slot": "31", "state": "held", "seq": 7}], [wt("31", lead=LEAD)])
+        self.assertEqual(plan(s), [("wake", "subservant-holds", "31")])
+        self.assertEqual(plan(s, [{"at": at(30), "key": "subservant-holds:31"}]), [], "at most hourly")
+
+    def test_a_landing_finding_for_a_marked_slot_never_sends_mtm_or_releases(self):
+        q = [{"slot": "31", "state": "held", "seq": 7}, {"slot": "32", "state": "waiting", "seq": 8}]
+        for state in ("sleeping", "ended", None):
+            found = [dict(HELD, slot="31"), dict(HELD, slot="31", kind="reserved-idle"),
+                     {"kind": "waiter-gone", "slot": "32", "why": ""}]
+            s = snap(found, q, [wt("31", state=state, lead=LEAD), wt("32", lead=LEAD)])
+            planned = boss.plan(s, {"now": NOW, "log": [], "main": "/x/hal2"})
+            self.assertEqual({(a["do"], a["kind"]) for a in planned}, {("wake", "subservant-holds")}, state)
+            self.assertNotIn("/mtm", json.dumps(planned))
+            self.assertIn("subservant of slot 02 (plan 0149-hal9k step 7)", planned[0]["text"])
 
 
 class Queue(unittest.TestCase):
@@ -121,6 +146,19 @@ class Work(unittest.TestCase):
         self.assertEqual(plan(snap([f], [], [w]), asked), [])
         answered = asked + [{"at": at(5), "kind": "answered", "slot": "11"}]
         self.assertEqual(plan(snap([f], [], [w]), answered), [("run", "orphan", "11")])
+
+    def test_a_marked_orphan_is_restarted_only_with_handoff_c_else_wakes(self):
+        # Skills plan 0013: a subservant (plans/LEAD) continues its one step, never lands.
+        (self.tmp / "31").mkdir()
+        (self.tmp / "31" / "HANDOFF.md").write_text("x")
+        f = {"kind": "work-without-agent", "slot": "31", "why": "", "lead": LEAD}
+        w = wt("31", state=None, lead=LEAD, path=str(self.tmp / "31"))
+        planned = boss.plan(snap([f], [], [w]), {"now": NOW, "log": [], "main": "/x/hal2"})
+        self.assertEqual([(a["do"], a["kind"]) for a in planned], [("run", "orphan")])
+        self.assertEqual(planned[0]["argv"][-2:], ["--prompt", "/handoff c"])
+        bare = boss.plan(snap([f], [], [dict(w, path="/nowhere")]), {"now": NOW, "log": [], "main": "/x/hal2"})
+        self.assertEqual([(a["do"], a["kind"]) for a in bare], [("wake", "orphan")])
+        self.assertNotIn("/mtm", json.dumps(planned + bare))
 
     def test_judgment_kinds_wake_at_most_hourly(self):
         f = {"kind": "long-queue", "slot": "01,02,03", "why": "3 waiting"}

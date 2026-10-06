@@ -16,7 +16,16 @@ orphans with a HANDOFF.md. You get what needs a look. Goal: every finished workt
 | `long-queue` | With the duty `trains` opted in the tick forms the trains itself: leave it. Else try one by hand: [merge-to-main-boss › Merge trains](../subskills/merge-to-main-boss/SUBSKILL.md#merge-trains) |
 | `paused` | Lift the pause when its reason is fixed (`python3 $S/mtm_scan.py resume`), tell the waiters "go" |
 | `flaky` | Flaky or real? Load-sensitive (the [reasons](../subskills/merge-to-main-boss/reasons.md), budget/timeout wording, passes alone): disable it ([how](../subskills/merge-to-main-boss/SUBSKILL.md#disable-a-flaky-test), through a servant: `python3 $S/farmer.py delegate --brief <file> --title <title>`). A real assertion failure: leave it to the slot |
-| `orphan` | Work without a session and no HANDOFF.md. Plan steps left: `hal2-cli-git worktree run <NN> --agent claude --detach --prompt "/handoff c"`; the plan looks done: `--prompt "/mtm"`; unclear: notify the user |
+| `orphan` | Work without a session and no HANDOFF.md. Plan steps left: `hal2-cli-git worktree run <NN> --agent claude --detach --prompt "/handoff c"`; the plan looks done: `--prompt "/mtm"` (never in a subservant's slot, below); unclear: notify the user |
+
+**Subservants** (skills plan 0013): a slot whose worktree holds `plans/LEAD` (`<lead-slot> <plan> <step>`, the
+scan's `lead`) runs one step of its lead's plan and never lands; the lead merges its branch. Skip it for every
+landing: no `work-not-queued`, never `/mtm` or "land now", never an okay to land. An orphan there is restarted only
+with `--prompt "/handoff c"` (it continues that one step); its step reported: leave it (prune removes the slot);
+unclear: notify the user. `subservant-holds`
+(its ticket is in the merge queue): tell the session in one line that a subservant never lands and to report to its
+lead instead; when it holds the queue and no landing runs, release it (`hal2-cli-git worktree release <NN>`).
+A landing of it that has merged into main stays: notify the user.
 
 A slot the boss paused (a `pause` entry in `log.jsonl` with no `go` after it) waits for that go, which the tick
 sends when the landing ends: leave it, record nothing. A slot with an open `ask` waits for the user: leave it too.

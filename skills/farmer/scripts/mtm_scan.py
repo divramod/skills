@@ -141,6 +141,21 @@ def worktrees(main: str) -> list[dict]:
     return items
 
 
+def lead_of(path: str | Path) -> dict | None:
+    """A parallel plan's subservant marker (skills plan 0013): <worktree>/plans/LEAD, one line `<lead-slot> <plan>
+    <step>`, as {slot, plan, step}; None without one (or a broken one). A marked slot never lands."""
+    f = Path(path) / "plans" / "LEAD"
+    try:
+        parts = f.read_text().split() if f.is_file() else []
+    except OSError:
+        parts = []
+    return {"slot": parts[0], "plan": parts[1], "step": parts[2]} if len(parts) >= 3 else None
+
+
+def subservant(lead: dict) -> str:
+    return f"subservant of slot {lead['slot']} (plan {lead['plan']} step {lead['step']})"
+
+
 def unmerged(path: str, default: str) -> int:
     out = run(["git", "rev-list", "--count", f"origin/{default}..HEAD"], path).strip()
     return int(out) if out.isdigit() else 0
@@ -197,7 +212,9 @@ def findings(snap: dict) -> list[dict]:
     """What the boss acts on, most urgent first."""
     out, now = [], snap["now"]
     queue, by_slot = snap["queue"], {w["slot"]: w for w in snap["worktrees"]}
-    head = queue[0] if queue else None
+    # A subservant never lands (plans/LEAD): its ticket wakes the farmer, the landing findings skip it.
+    marked = {s: w["lead"] for s, w in by_slot.items() if w.get("lead")}
+    head = queue[0] if queue and queue[0]["slot"] not in marked else None
     for slot in (snap.get("priority") or {}).get("slots", []):
         w, t = by_slot.get(slot, {}), next((t for t in queue if t["slot"] == slot), None)
         state = "reserved, waits for its landing" if t and t.get("awaiting_slot") else (t or {}).get("state")
@@ -207,6 +224,11 @@ def findings(snap: dict) -> list[dict]:
                            f"{w.get('ahead', '?')} commits not on main, agent {w.get('agent_state') or 'none'}"})
     if snap.get("paused"):
         out.append({"kind": "paused", "slot": "", "why": f"the boss paused the queue: {snap['paused'].get('note', '')}"})
+    for i, t in enumerate(queue):
+        if lead := marked.get(t["slot"]):
+            out.append({"kind": "subservant-holds", "slot": t["slot"], "seq": t.get("seq"), "lead": lead,
+                        "why": f"{subservant(lead)} has a merge-queue ticket (#{i}, {t['state']}): a subservant "
+                               f"never lands, its lead in slot {lead['slot']} merges it"})
     if head and head.get("awaiting_slot"):
         if f := reservation_waits(head, by_slot.get(head["slot"], {}), now):
             out.append(f)
@@ -237,7 +259,7 @@ def findings(snap: dict) -> list[dict]:
                     "why": f"load {snap['load']['load1']:.0f} on {snap['load']['cores']} cores during a landing",
                     "busy_slots": [w["slot"] for w in snap["worktrees"]
                                    if w.get("agent_state") in BUSY and w["slot"] != head["slot"]]})
-    waiting = [t for t in queue if t["state"] == "waiting"]
+    waiting = [t for t in queue if t["state"] == "waiting" and t["slot"] not in marked]
     for t in waiting:
         if not t.get("process_alive") and not t.get("parked") and not t.get("reserved"):
             out.append({"kind": "waiter-gone", "slot": t["slot"], "why": "ticket without a live reserve process"})
@@ -248,10 +270,13 @@ def findings(snap: dict) -> list[dict]:
     queued = {t["slot"] for t in queue}
     for w in snap["worktrees"]:
         if w["ahead"] and w["slot"] not in queued and w.get("agent_state") is None:
-            out.append({"kind": "work-without-agent", "slot": w["slot"],
-                        "why": f"{w['ahead']} commits not on main, plan {w.get('plan') or '-'}, no agent session"})
+            f = {"kind": "work-without-agent", "slot": w["slot"],
+                 "why": f"{w['ahead']} commits not on main, plan {w.get('plan') or '-'}, no agent session"}
+            if w.get("lead"):  # restarted only with /handoff c, never /mtm (boss.orphan)
+                f.update(lead=w["lead"], why=f"{subservant(w['lead'])}: {f['why']}")
+            out.append(f)
             continue
-        if w["ahead"] and w["slot"] not in queued and w.get("agent_state") not in BUSY \
+        if w["ahead"] and not w.get("lead") and w["slot"] not in queued and w.get("agent_state") not in BUSY \
                 and w.get("agent_idle_seconds", 0) > IDLE_WITH_WORK_AFTER:
             out.append({"kind": "work-not-queued", "slot": w["slot"],
                         "why": f"{w['ahead']} commits not on main, plan {w.get('plan') or '-'}, "
@@ -300,7 +325,7 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
         since = (a.get("since") or 0) / 1000
         wts.append({
             "slot": slot, "path": path, "branch": w.get("branch"), "ahead": unmerged(path, default),
-            "plan": plan_file.read_text().strip() if plan_file.exists() else "",
+            "plan": plan_file.read_text().strip() if plan_file.exists() else "", "lead": lead_of(path),
             "agent_state": a.get("state"), "pane": a.get("pane_id"),
             "agent_idle_seconds": int(now - since) if since and a.get("state") not in BUSY else 0,
             "context_percent": a.get("context_percent"),

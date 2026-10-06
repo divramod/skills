@@ -34,6 +34,20 @@ class Lead(unittest.TestCase):
         waiting = helper("idle-in-plan", "Next I'll continue once the queue returns.")
         self.assertEqual(kinds(self.plan(waiting)), [("wake", "idle-in-plan", "04")])
 
+    def test_a_subservant_stopped_mid_step_continues_its_step_never_lands(self):
+        # Skills plan 0013: a slot with plans/LEAD runs one step of its lead's plan; the plan's end is a landing.
+        lead = {"slot": "02", "plan": "0149-hal9k", "step": "7"}
+        going = helper("idle-in-plan", "Tests written.\n\nNext I'll run the gate.", slot="31", lead=lead)
+        planned = self.plan(going)
+        self.assertEqual(kinds(planned), [("send", "idle-in-plan", "31"), ("run", "handled", "31")])
+        text = planned[0]["text"]
+        for part in ("step 7 of plan 0149-hal9k", "slot 02", "plan.py report 7", "never land"):
+            self.assertIn(part, text)
+        self.assertNotIn("/mtm", text)
+        self.assertNotIn("plan to its end", text)
+        waiting = helper("idle-in-plan", "Next I'll continue once the lead answers.", slot="31", lead=lead)
+        self.assertEqual(kinds(self.plan(waiting)), [("wake", "idle-in-plan", "31")])
+
     def test_the_farmers_own_session_is_never_told_or_woken_about(self):
         self.assertEqual(kinds(self.plan(helper("asks", slot="farmer"), helper("no-plan", slot="farmer"))),
                          [])

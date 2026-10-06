@@ -159,6 +159,67 @@ class Summary(unittest.TestCase):
                 scan.DATA = old
 
 
+LEAD = {"slot": "02", "plan": "0149-hal9k", "step": "7"}
+
+
+class Subservants(unittest.TestCase):
+    """Skills plan 0013: a slot with plans/LEAD is a parallel plan's subservant and never lands."""
+
+    def test_the_marker_is_read_and_a_missing_or_broken_one_is_none(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(scan.lead_of(d))
+            (Path(d) / "plans").mkdir()
+            (Path(d) / "plans/LEAD").write_text("02 0149-hal9k\n")
+            self.assertIsNone(scan.lead_of(d))
+            (Path(d) / "plans/LEAD").write_text("02 0149-hal9k 7\n")
+            self.assertEqual(scan.lead_of(d), LEAD)
+
+    def test_every_worktree_of_the_snapshot_carries_its_lead(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "31/plans").mkdir(parents=True)
+            (Path(d) / "31/plans/LEAD").write_text("02 0149-hal9k 7\n")
+            (Path(d) / "04").mkdir()
+            wts = [{"path": str(Path(d) / s), "branch": s} for s in ("31", "04")]
+            with mock.patch.object(scan, "run", return_value=""), \
+                    mock.patch.object(scan, "run_json", return_value=None), \
+                    mock.patch.object(scan, "worktrees", return_value=wts), \
+                    mock.patch.object(scan, "unmerged", return_value=3), \
+                    mock.patch.object(scan.mtm_ci, "ci_mode", return_value=False), \
+                    mock.patch.object(scan, "state_dir", return_value=Path(d) / "state"):
+                got = scan.snapshot(d, 24, fetch=False)
+        self.assertEqual({w["slot"]: w["lead"] for w in got["worktrees"]}, {"31": LEAD, "04": None})
+
+    def test_a_marked_slot_with_finished_work_is_not_told_to_queue(self):
+        w = [{"slot": "31", "ahead": 5, "agent_state": "done", "agent_idle_seconds": 3600, "plan": "x", "lead": LEAD},
+             {"slot": "04", "ahead": 5, "agent_state": "done", "agent_idle_seconds": 3600, "plan": "y", "lead": None}]
+        self.assertEqual([(f["kind"], f["slot"]) for f in scan.findings(snap(worktrees=w))],
+                         [("work-not-queued", "04")])
+
+    def test_a_marked_orphan_names_its_lead(self):
+        w = [{"slot": "31", "ahead": 2, "agent_state": None, "agent_idle_seconds": 0, "plan": "x", "lead": LEAD}]
+        f = scan.findings(snap(worktrees=w))
+        self.assertEqual([(x["kind"], x["slot"], x["lead"]) for x in f], [("work-without-agent", "31", LEAD)])
+        self.assertIn("subservant of slot 02 (plan 0149-hal9k step 7)", f[0]["why"])
+
+    def test_a_marked_slot_holding_or_waiting_in_the_queue_is_subservant_holds_only(self):
+        q = [{"slot": "31", "state": "held", "seq": 4, "process_alive": False, "enqueued": iso(3600),
+              "hold": {"reason": "failed", "message": "x failed"}},
+             {"slot": "32", "state": "waiting", "seq": 5, "process_alive": False}]
+        w = [{"slot": s, "ahead": 2, "agent_state": "idle", "agent_idle_seconds": 9000, "lead": LEAD}
+             for s in ("31", "32")]
+        f = scan.findings(snap(queue=q, worktrees=w))
+        self.assertEqual([(x["kind"], x["slot"]) for x in f], [("subservant-holds", "31"), ("subservant-holds", "32")])
+        self.assertEqual(f[0]["lead"], LEAD)
+        unmarked = [dict(x, lead=None) for x in w]
+        self.assertEqual([x["kind"] for x in scan.findings(snap(queue=q, worktrees=unmarked))],
+                         ["held-idle", "waiter-gone"])
+
+
 def iso(seconds_ago: float) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - seconds_ago))
 

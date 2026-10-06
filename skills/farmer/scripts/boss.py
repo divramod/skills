@@ -20,6 +20,7 @@ BOSS = "farmer (merge-to-main boss)"
 REWAKE = dt.timedelta(hours=1)  # the same judgment item wakes the model at most hourly
 ORPHAN = dt.timedelta(hours=3)
 JUDGE = ("active-long", "work-not-queued", "long-queue", "paused")
+LANDS = ("held-idle", "reserved-idle", "waiter-gone")  # the kinds whose text tells a slot to land or queue
 TEXT = {
     "held-idle": BOSS + ": your failed landing holds the merge queue ({failure}). Fix the cause and rerun the "
                         "landing now (/mtm). A test that fails only under load: say so in one line.",
@@ -128,9 +129,19 @@ class Planner:
             self.add("flaky", "wake", f["slot"], REWAKE, key=f"flaky:{test}", text=f"flaky or real? {f['why']}",
                      evidence=f)
 
+    def subservant(self, f: dict) -> None:
+        """A parallel plan's subservant (plans/LEAD) never lands: its merge-queue ticket wakes the farmer, the slot
+        never gets the /mtm text and is never released by rule."""
+        lead = f.get("lead") or self.wt.get(f["slot"], {}).get("lead")
+        why = f["why"] if f["kind"] == "subservant-holds" else f"{mtm_scan.subservant(lead)}: {f['why']}"
+        self.add("subservant-holds", "wake", f["slot"], REWAKE, key=f"subservant-holds:{f['slot']}", text=why,
+                 evidence={**f, "lead": lead})
+
     def orphan(self, f: dict) -> None:
+        """Orphaned work with a HANDOFF.md gets a session with /handoff c, else the farmer is woken. A subservant's
+        (plans/LEAD) restart is the same /handoff c, which continues its one step; never /mtm."""
         slot, w = f["slot"], self.wt.get(f["slot"], {})
-        if w.get("plan") and (Path(w.get("path", "")) / "HANDOFF.md").exists():
+        if (w.get("plan") or w.get("lead")) and (Path(w.get("path", "")) / "HANDOFF.md").exists():
             self.add("orphan", "run", slot, ORPHAN, key=f"orphan:{slot}",
                      argv=["hal2-cli-git", "worktree", "run", slot, "--agent", "claude", "--detach", "--prompt",
                            "/handoff c"], text=f"started a session in {slot} with /handoff c")
@@ -141,7 +152,9 @@ class Planner:
     def run(self) -> list[dict]:
         for f in self.snap["findings"]:
             kind = f["kind"]
-            if kind == "priority":
+            if kind == "subservant-holds" or (kind in LANDS and self.wt.get(f["slot"], {}).get("lead")):
+                self.subservant(f)
+            elif kind == "priority":
                 self.priority(f)
             elif kind == "reservation-waits":
                 self.reservation(f)

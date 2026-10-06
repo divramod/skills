@@ -40,6 +40,36 @@ class Classify(unittest.TestCase):
         self.assertIsNone(lead.classify(agent(state="working", slot="main"), "", time.time()))
 
 
+LEAD = {"slot": "02", "plan": "0149-hal9k", "step": "7"}
+
+
+class Subservant(unittest.TestCase):
+    """Skills plan 0013: a slot with plans/LEAD runs one step of its lead's plan and never lands."""
+
+    def test_a_marked_slot_idle_mid_step_is_idle_in_plan_even_without_a_plan(self):
+        kind, why = lead.classify(agent(slot="31", lead=LEAD), "Step done.", time.time())
+        self.assertEqual(kind, "idle-in-plan")
+        self.assertIn("subservant of slot 02 (plan 0149-hal9k step 7)", why)
+        self.assertEqual(lead.classify(agent(slot="31", lead=LEAD), "Should I?", time.time())[0], "asks")
+        fresh = agent(slot="31", lead=LEAD, since=int(time.time() * 1000))
+        self.assertIsNone(lead.classify(fresh, "Step done.", time.time()))
+
+    def test_the_scan_reads_each_sessions_marker(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "31/plans").mkdir(parents=True)
+            (Path(d) / "31/plans/LEAD").write_text("02 0149-hal9k 7\n")
+            (Path(d) / "04").mkdir()
+            agents = [agent(project="/x/hal2", session_id=f"s{s}", slot=s, checkout=str(Path(d) / s), pane_id=f"%{s}")
+                      for s in ("31", "04")]
+            with mock.patch.object(lead, "run_json", return_value=agents), \
+                    mock.patch.object(lead, "main_checkout", return_value="/x/hal2"), \
+                    mock.patch.object(lead, "handled", return_value=set()), \
+                    mock.patch.object(lead, "PROJECTS", Path(d) / "projects"):
+                got = lead.scan(d, False)["needs_help"]
+        self.assertEqual([(h["slot"], h["kind"], h["lead"]) for h in got], [("31", "idle-in-plan", LEAD)])
+
+
 class Transcript(unittest.TestCase):
     def test_the_last_assistant_text_or_question_is_read(self):
         with tempfile.TemporaryDirectory() as d:
