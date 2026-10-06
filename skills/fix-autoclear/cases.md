@@ -3,6 +3,29 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-06 · a /clear from outside the job taken for the session ending (hal2 wt 35)
+
+- **Signature**: job `failed` `session-ended` ("the session ended") within a second of the turn's end; its log has
+  `record: SessionEnd, state ended` and no `/clear sent`; the pane's send log (`sent/<n>.jsonl`) holds a `manual`
+  `/clear` typed while the session worked (Claude Code queues it for the turn's end); a new session's `SessionStart`,
+  source `clear`, in the same pane and process right after the old one's `SessionEnd`; the new session idle at 0 %.
+- **Cause**: `Job::wait_for_turn_end` failed `session-ended` on the old session's `SessionEnd` record, whatever
+  ended it. A `/clear` the job did not type ends the old session the same way: the job gave up at the moment its
+  clear was done and only the prompt was missing.
+- **Occurrences**: 2026-10-06 hal2 wt 35, `t:tmuwu7x8sr5le`, session 4b96811b: the farmer's scratch script typed
+  `/clear` with `hal2-cli-agents send` at 20:51:20 into a working session, the guard's soft stop came at 21:27:37,
+  the queued `/clear` ran at 21:28:15 and the job failed 0.3 s later; hal2 wt 02 typed `/handoff c` by hand at 21:29.
+- **Fix**: hal2 plan 0174 step 2, commit `c770fc75`: the job looks for the pane's new session for `clear_confirm`
+  and adopts the clear (`autoclear/outside.rs`); tests `incident_35_tests::*` (the incident and every branch).
+- **Would have caught it sooner**: never `/clear` a working session with `send` (it is queued, and whatever was
+  to follow it is lost): clear a session only with `hal2-cli-agents clear-and-continue`.
+- **Benign look-alike** (hal2 wt 02, 2026-10-06 17:55, `%171`, session 5f157c8c): the weekly usage limit ended the
+  turn (`StopFailure`), the session's process ended (`SessionEnd`, then a tmux restart), no new session in the pane.
+  `session-ended` was right and hal2 reports no such reason, but the doctor listed every failed job, so the farmer's
+  autoclear duty delegated it. Since plan 0174 step 4 the doctor lists hal2's unreported reasons apart
+  (`evidence.QUIET`, `quiet`; test_evidence.py `Quiet`); its message now reads `the session ended (reason ...), no new
+  session in the pane`.
+
 ## 2026-10-06 · autoclear switched off by the user, taken for a give-up and cleared (hal2 wt 02)
 
 - **Signature**: a marker `gave_up: true` with no `attempts` (or below `MAX_ATTEMPTS`) and `rearm_percent: 1000`,

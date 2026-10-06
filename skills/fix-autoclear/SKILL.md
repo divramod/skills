@@ -33,7 +33,10 @@ rule (background first; ~/.claude/CLAUDE.md), recommended option first.
    switched it off) is no failure: the doctor lists it apart (`off`) and the farmer's `duty:autoclear` never touches it
    (`evidence.autoclear_off`: a marker `gave_up` without the sweep's `MAX_ATTEMPTS` attempts, a `rearm_percent` no
    context reaches (>= 100), or an agent's `autoclear_off: true` once hal2's per-session switch exists, shot
-   plugin-agents #31). Never "fix" or clear-and-continue such a session.
+   plugin-agents #31). Never "fix" or clear-and-continue such a session. A job that failed for a reason hal2 itself
+   does not report (`evidence.QUIET`: the session or its agent ended on its own, the request never became a job) is
+   no failure either: the doctor lists it apart (`quiet`, "ended on their own") and the farmer's duty never sees it.
+   Look at one only when the user says its session should have gone on.
 4. Build the **timeline**: soft stop → what the model did → hard stop? → job phases → sweep ticks → where it
    stopped. The failure is the first step that did not do what the insider knowledge below says it does.
 
@@ -96,7 +99,8 @@ the case added and what changed in this skill.
 
 ## Insider knowledge
 
-As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and plan 0077 (reports, early retries). Keep this true: `$E selfcheck`.
+As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep), plan 0077 (reports, early retries) and
+plan 0174 (a clear from outside, the effort level). Keep this true: `$E selfcheck`.
 
 **Three parts, one flow.**
 
@@ -127,8 +131,26 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
    by words; a multi-row box showing only the request's last rows, a short pane scrolling it, counts as typed; a
    failed read-back empties the box), waits for that turn;
    a second turn without a hand-off fails `ignored-soft-stop`) → `clearing` (`i` in vim mode, `/clear` typed and
-   read back, Enter; confirmed by a `SessionStart` record, source `clear`) → `continuing` (`DEFAULT_PROMPT`
-   `/handoff c` typed, read back, sent) → `continued`.
+   read back, Enter; confirmed by a `SessionStart` record, source `clear`) → `continuing` (the effort level, see
+   below; then `DEFAULT_PROMPT` `/handoff c` typed, read back, sent) → `continued`.
+   **A clear from outside** (`code/rust/libs/hal2-agents/src/autoclear/outside.rs`, plan 0174): when the old
+   session's `SessionEnd` record comes while the job waits (a `/clear` someone else typed, or one Claude Code had
+   queued), the job looks `Timings::clear_confirm` (30 s) for the pane's new session (`SessionStart`, source
+   `clear`, since that end). Found: the log says `cleared from outside (this job typed no /clear): new session
+   <id>`, the record gets `new_session`, and the job waits `Timings::outside_prompt_wait` (20 s) for whoever cleared
+   to send their own prompt: the new session past `SessionStart` ends the job `cancelled` with `resolved: cleared and
+   continued from outside`, a draft in its box `cancelled` with `... left to its writer`, a checkout without an open
+   plan `cancelled` with `cleared from outside, no prompt typed: ...`; otherwise the job goes on with `continuing`
+   (no hand-off before the clear is only logged). Not found, a `SessionStart` with source `resume`, or the agent's
+   process gone: `session-ended`, message `the session ended (reason <SessionEnd's reason>), no new session in the
+   pane`.
+   **The effort level** (`code/rust/libs/hal2-agents/src/autoclear/effort.rs`, the screen read by
+   `code/rust/libs/hal2-agents/src/scrape/effort.rs`): with `[autoclear] effort` set, after the clear (the job's own
+   or one from outside) and before the prompt the job reads the level from the screen (the box's corner `◐ medium ·
+   /effort`, else the banner's `with medium effort`) and types `/effort <level>` only when it differs; a dialog
+   `Change effort level?` is answered with Enter while it stands on `Yes, switch`, else closed with Escape. Best
+   effort: `effort: not set to <level> (<why>): the prompt goes out anyway`, never a fail reason; every step is an
+   `effort: ...` line in the job log. `/effort` also rewrites the user's default in `~/.claude/settings.json`.
 3. **The sweep** (`sweep.rs`, run by hal2-api every `sweep_minutes`, log `~/Library/Logs/hal2-api.log`, lines
    `hal2_api::sweep`): S1 a turn ended above the threshold without a running job → starts the job; S13 a soft stop
    older than `grace_minutes` still working without a hand-off → the job with `--interrupt`. After `MAX_ATTEMPTS`
@@ -137,9 +159,9 @@ As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep) and p
    hal2-api looks for job records failed in the last 24 h and not yet in `autoclear/reported.json`. Each runs a
    sweep round early: the first retry at once, the next 1 and 5 minutes after the previous failure
    (`RETRY_BACKOFF`; the sweep skips with `backing off after a failure` until then). All but `agent-gone`,
-   `session-ended`, `already-running`, `invalid-request` go into the global shotfile `fix-autoclear`, one shot per
-   session (`<repo> wt <NN>: <reason>`, the job's facts, `/fix-autoclear <NN>`); later failures of the session are
-   appended while the shot is open. `sweep.log` gets a `failure ...: reported in fix-autoclear shot <n>` line.
+   `session-ended`, `already-running`, `invalid-request` (`evidence.QUIET`) go into the global shotfile
+   `fix-autoclear`, one shot per session (`<repo> wt <NN>: <reason>`, the job's facts, `/fix-autoclear <NN>`); later
+   failures of the session are appended while the shot is open. `sweep.log` gets a `failure ...: reported in fix-autoclear shot <n>` line.
 
 **Names** (job states and fail reasons, as the records write them):
 <!-- names -->
@@ -152,8 +174,8 @@ hand-off's own tool, or the model answered "already done" for a hand-off the che
 <!-- /names -->
 
 **Settings**: `~/.config/hal2/agents.toml` `[autoclear] enabled, percent (35), sweep_minutes (5), grace_minutes
-(15)`; `hal2-cli-agents settings` prints them. The statusline's percent and the guard's come from the same
-transcript (`context.rs`).
+(15), effort (unset: nothing typed; `low`, `medium`, `high`, `xhigh`, `max`)`; `hal2-cli-agents settings` prints
+them. The statusline's percent and the guard's come from the same transcript (`context.rs`).
 
 **Logs** (all in `<state>/agents/autoclear/`, each moved to `<name>.1` past 2 MB): `<n>.log` the job (phases, its
 request's flags, every change of the session's hook record, each hand-off and plan check, the screen's tail when it

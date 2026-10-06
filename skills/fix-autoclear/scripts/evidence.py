@@ -12,7 +12,9 @@
       guard.log, sweep.log (the pane's lines), README.md (what each file is)
   evidence.py doctor [--hours 24] [--json]
       every pane's failed or stuck autoclear of the last hours (nobody reported), and
-      every job blocked over 3 min by text in the input box hal2 did not type (`blocked`)
+      every job blocked over 3 min by text in the input box hal2 did not type (`blocked`);
+      jobs that failed for a reason hal2 itself does not report (the session or agent ended:
+      `QUIET`) are listed apart, never as problems
   evidence.py selfcheck [--repo <hal2 checkout>]
       whether the insider facts in SKILL.md still match hal2's code
 
@@ -40,6 +42,9 @@ BLOCKED_AFTER = 3 * 60  # hal2's draft_alert (plan 0139), seconds
 # hal2's sweep.rs MAX_ATTEMPTS: its give-up always writes `attempts >= MAX_ATTEMPTS` with `gave_up` (selfcheck compares)
 MAX_ATTEMPTS = 3
 OFF_REARM = 100  # a rearm_percent no context reaches: hal2's cancel_marker writes at most max(percent, threshold) + 5
+# The fail reasons hal2's report.rs keeps out of the fix-autoclear shotfile: the session or its agent ended on its
+# own, or the request never became a job. No autoclear failure (selfcheck compares with report.rs).
+QUIET = {"agent-gone", "session-ended", "already-running", "invalid-request"}
 
 
 def need(tool):
@@ -337,11 +342,13 @@ def off_sessions(hours=None):
     return {m["session_id"]: m for p, m in markers() if p.stat().st_mtime >= since and autoclear_off(m)}
 
 
-def doctor_items(hours, off=None):
+def doctor_items(hours, off=None, quiet=None):
     """Every pane's failed or stuck autoclear of the last `hours` (nobody reported), as dicts:
     {what: job|blocked|marker, pane, session, who, state, reason, message, attempts, gave_up, at}. A `blocked`
     job waits on a person's draft (hal2 plan 0139): no autoclear bug, sanity-watch's F13 owns it. A session whose
-    autoclear the user switched off (`autoclear_off`) is left out; `off`, when a list, collects those sessions."""
+    autoclear the user switched off (`autoclear_off`) is left out; `off`, when a list, collects those sessions.
+    A job failed for a `QUIET` reason is left out too (hal2 does not report it either); `quiet`, when a list,
+    collects those jobs."""
     since = time.time() - hours * 3600
     by_pane = {a.get("pane_id"): a for a in agents()}
     switched = set(off_sessions()) | {a.get("session_id") for a in by_pane.values() if autoclear_off(agent=a)}
@@ -371,10 +378,15 @@ def doctor_items(hours, off=None):
         if job.get("state") in ("failed",) or (
             job.get("state") in ("waiting", "requesting") and time.time() - record.stat().st_mtime > 1800
         ):
-            out.append({"what": "job", "pane": job.get("pane"), "session": job.get("old_session"),
-                        "who": who(job.get("pane"), job.get("old_session")), "state": job.get("state"),
-                        "reason": job.get("reason") or "", "message": job.get("message") or "",
-                        "at": stamp(job.get("updated_at"))})
+            item = {"what": "job", "pane": job.get("pane"), "session": job.get("old_session"),
+                    "who": who(job.get("pane"), job.get("old_session")), "state": job.get("state"),
+                    "reason": job.get("reason") or "", "message": job.get("message") or "",
+                    "at": stamp(job.get("updated_at"))}
+            if job.get("state") == "failed" and item["reason"] in QUIET:
+                if quiet is not None:
+                    quiet.append(item)
+                continue
+            out.append(item)
     for path, m in markers():
         if path.stat().st_mtime < since:
             continue
@@ -391,10 +403,10 @@ def doctor_items(hours, off=None):
 
 
 def doctor(args):
-    off = []
-    items = doctor_items(args.hours, off)
+    off, quiet = [], []
+    items = doctor_items(args.hours, off, quiet)
     if args.json:
-        print(json.dumps({"hours": args.hours, "problems": items, "off": off}, indent=1))
+        print(json.dumps({"hours": args.hours, "problems": items, "off": off, "quiet": quiet}, indent=1))
         return
     for i in items:
         if i["what"] in ("job", "blocked"):
@@ -402,7 +414,9 @@ def doctor(args):
         else:
             print(f"{i['who']}: session {i['session']} attempts {i['attempts']}{' gave up' if i['gave_up'] else ''}")
     print(f"{len(items)} problem(s) in the last {args.hours} h"
-          + (f"; autoclear off (skipped): {', '.join(o['who'] for o in off)}" if off else ""))
+          + (f"; autoclear off (skipped): {', '.join(o['who'] for o in off)}" if off else "")
+          + ("; ended on their own (not reported by hal2): "
+             + ", ".join(f"{q['who']} {q['reason']}" for q in quiet) if quiet else ""))
 
 
 def selfcheck(args):
@@ -424,6 +438,12 @@ def selfcheck(args):
     attempts = re.search(r"MAX_ATTEMPTS: u32 = (\d+)", source)
     if attempts and int(attempts.group(1)) != MAX_ATTEMPTS:
         drift.append(f"MAX_ATTEMPTS is {attempts.group(1)} in {SRC}/sweep.rs, evidence.py assumes {MAX_ATTEMPTS}")
+    report = repo / SRC / "report.rs"
+    reported = report.read_text() if report.exists() else ""
+    for name in sorted(QUIET):
+        variant = "".join(part.capitalize() for part in name.split("-"))
+        if f"FailReason::{variant}" not in reported:
+            drift.append(f"`{name}` is in evidence.py's QUIET, but {SRC}/report.rs no longer names FailReason::{variant}")
     for fact in re.findall(r"`(REARM_POINTS|MAX_ATTEMPTS|DEFAULT_PROMPT|HANDOFF_PROGRAMS|HANDOFF_SCRIPTS|RETRY_BACKOFF|CHECK)`", skill):
         if fact not in source:
             drift.append(f"constant {fact} no longer in {SRC}")
