@@ -36,8 +36,8 @@ starting "after the landing: ...".
 | 1 | Autoclear off is skipped: `evidence.autoclear_off(marker, agent)` (a `gave_up` marker the sweep never wrote: `attempts` below hal2's `MAX_ATTEMPTS` 3, or `rearm_percent >= 100`, or the agent's `autoclear_off: true`); `doctor_items` leaves those sessions out (listed apart as `off`), `duties.plan_autoclear` skips any problem whose session is off; regression tests replay 227f49f1's marker in test_evidence.py and test_duties.py; fix-autoclear's cases.md and SKILL.md record the case | `python3 -m unittest discover -s skills/fix-autoclear/scripts && python3 -m unittest discover -s skills/farmer/scripts` green; `python3 skills/fix-autoclear/scripts/evidence.py doctor --hours 24 --json` names neither 227f49f1 nor da8d4b47 as a problem | done |
 | 2 | Per-duty timing: `tick.run` times the frame (merge-from-main, role edit), each due item (its planning plus its actions' execution), acks, delegations, wake and summary; `print_round` writes one `timing:` line (tick.log gets it), `--json` a `timing` object; `farmer.py tick --dry-run --all-due` counts every opted-in item due (measurement only, refused without --dry-run); baseline measured on hal2's farmer slot and recorded under Notes | a test asserts the timing line; `python3 skills/farmer/scripts/farmer.py tick --dry-run --all-due --repo ~/.hal/git/worktree/hal2/farmer-hal2` prints a `timing:` line with every duty, its numbers under Notes as "before" | done |
 | 3 | Each run's jobs fetched once per round: `gh_runs.py` memoizes `gh run list`/`gh run view --json jobs` per process, caches a completed run's jobs on disk by run id (state folder, pruned after 7 days) and fetches the uncached ones in parallel; `mtm_ci.landings`, `ci_scan.failed_jobs` and `trains.ci_red` use it; the round summary's snapshot reuses the round's fetch | tests for the cache (memo, disk hit for completed runs, a running run refetched, parallel prefetch); farmer tests green; a second `--all-due` dry tick's `timing:` line ends `gh <n> list, <m> view, <k> cached` with views only for running runs | done |
-| 4 | Measure the full tick with every duty due and cut what still dominates (by the step-2 timing, e.g. prune's every-6-hours `du` over every worktree, a repeated snapshot); before/after recorded under Notes | `farmer.py tick --dry-run --all-due --repo ~/.hal/git/worktree/hal2/farmer-hal2` total well under 60 s, or Notes name what still dominates and why it stays | next |
-| 5 | Docs: farmer's SKILL.md/reference.md (the timing line, `--all-due`, the run-jobs cache), fix-autoclear's SKILL.md (autoclear off is no failure) | `grep -n "timing:" skills/farmer/SKILL.md skills/farmer/reference.md` and `grep -n "autoclear off" skills/fix-autoclear/SKILL.md` both hit | |
+| 4 | Measure the full tick with every duty due and cut what still dominates (by the step-2 timing, e.g. prune's every-6-hours `du` over every worktree, a repeated snapshot); before/after recorded under Notes | `farmer.py tick --dry-run --all-due --repo ~/.hal/git/worktree/hal2/farmer-hal2` total well under 60 s, or Notes name what still dominates and why it stays | done |
+| 5 | Docs: farmer's SKILL.md/reference.md (the timing line, `--all-due`, the run-jobs cache), fix-autoclear's SKILL.md (autoclear off is no failure) | `grep -n "timing:" skills/farmer/SKILL.md skills/farmer/reference.md` and `grep -n "autoclear off" skills/fix-autoclear/SKILL.md` both hit | next |
 | 6 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
 ## Pre-authorized
@@ -97,3 +97,15 @@ All 2026-10-06, autogrill 1 (decided by the skills repo's rules, deterministic-f
   gh calls (`gh <list> list, <view> view, <cached> cached`) instead of a debug variable. Left for step 4: the orphans
   task (9 s with no gh view), prune 6-7 s, `task:hal9k production healthy` (5-14 s: an ssh status check, the
   task's own work), prs 3-4 s.
+- Step 4, **after** (same command, 2026-10-06 ~10:45): `frame 0.1s, context 0.4s, duty:mtm 4.5s, duty:lead 0.3s,
+  duty:ci 1.8s, duty:sync 0.1s, duty:prs 3.3s, duty:watch 2.7s, duty:autoclear 1.9s, duty:trains 0.1s, duty:prune 3.3s,
+  task:n8n 0.2s, task:hal9k production healthy 5.8s, task:Disabled tests come back 0.5s, task:Orphaned slots finished
+  2.5s, delegations 0.7s, total 28.6s; gh 2 list, 1 view, 8 cached` (74.5 s before). Cut in this step: the ROLE.md
+  checks `farmer check flaky|orphans` run in the tick's process (a second python with its own fetch and snapshot cost
+  ~8 s), and prune's every-6-hours `du` over every worktree (timeout 300 s, blocking the round: the likely bulk of the
+  brief's unexplained ~3 minutes, the first round after the migrate had no `prune:disk:` key) runs detached as
+  `prune.py sizes`, reported the round after. What remains is spread out: the hal9k status task's own ssh check
+  (5-7 s), 5 `hal2-cli-agents list` reads (~0.8 s each, kept: each planner reads live state), 2 `gh run list`
+  (~1.7 s each), git per worktree. A real round adds its merge-from-main, the executions and the summary snapshot
+  (no fetch now); a real round with every duty due was not run (it would act: sends, delegations, a deploy), the
+  timing line in tick.log shows it from the first round after the landing.

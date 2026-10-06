@@ -111,10 +111,36 @@ class Plan(Slots):
             self.assertEqual(prune.disk_actions(str(self.main), ctx, None), [])
             du.assert_not_called()
 
+    def test_the_sizes_are_measured_in_the_background_and_reported_the_round_after(self):
+        # plan 0011: du over every worktree takes minutes; a round never waits for it.
+        ctx = {"main": str(self.main), "now": NOW, "log": [], "dry": False}
+        with mock.patch.object(prune, "measured", return_value=None), \
+                mock.patch.object(prune, "measure_later") as later:
+            self.assertEqual(prune.disk_actions(str(self.main), ctx, None), [])
+            later.assert_called_once_with(str(self.main))
+            later.reset_mock()
+            self.assertEqual(prune.disk_actions(str(self.main), {**ctx, "dry": True}, None), [])
+            later.assert_not_called()
+        state = prune.mtm_scan.state_dir(str(self.main))
+        with mock.patch.object(prune, "disk", return_value=INFO):
+            (state / prune.SIZES_LOCK).write_text("1")
+            prune.measure(str(self.main))
+        self.assertFalse((state / prune.SIZES_LOCK).exists())
+        self.assertEqual(prune.measured(str(self.main), dt.datetime.now())["free_gb"], INFO["free_gb"])
+        self.assertIsNone(prune.measured(str(self.main), dt.datetime.now() + dt.timedelta(hours=7)))
+        with mock.patch.object(prune, "measured", return_value=INFO):
+            self.assertEqual([a["kind"] for a in prune.disk_actions(str(self.main), ctx, None)], ["disk"])
+        popen = mock.Mock()
+        (state / prune.SIZES_LOCK).write_text("1")
+        self.assertFalse(prune.measure_later(str(self.main), popen))  # one at a time
+        (state / prune.SIZES_LOCK).unlink()
+        self.assertTrue(prune.measure_later(str(self.main), popen))
+        self.assertEqual(popen.call_args.args[0][-3:], ["sizes", "--repo", str(self.main)])
+
     def test_a_dry_round_of_the_farmer_plans_the_prune_actions(self):
         (self.slot / tick.ROLE).write_text(ROLE)
         git(self.slot, "commit", "-qam", "prune")
-        with mock.patch.object(prune, "disk", return_value=INFO), mock.patch.object(prune, "build_running",
+        with mock.patch.object(prune, "measured", return_value=INFO), mock.patch.object(prune, "build_running",
                                                                                     return_value=False):
             r = tick.run(str(self.slot), True, farmer.HANDLERS, NOW)
         self.assertEqual([(a["kind"], a["slot"]) for a in r["planned"] if a["duty"] == "prune"],

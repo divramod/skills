@@ -6,7 +6,8 @@ A task is **machine-run** when its lines are in the strict form:
   - **Act**: `<command>`, ..., notify, delegate        run in order, then the Check again
   - **Still failing**: notify, delegate                after the Act's recheck (default: notify)
 
-Commands run with `sh -c` in the main checkout; `farmer <args>` runs this skill's farmer.py. Act's keywords are
+Commands run with `sh -c` in the main checkout; `farmer <args>` runs this skill's farmer.py (`farmer check flaky` and
+`farmer check orphans` run inside the tick's process, sharing its round). Act's keywords are
 `notify` (tell the user, batched), `delegate` (a servant fixes it, the failing check's output as evidence) and `wake`
 (the farmer's model decides). Anything else on those lines, any prose, makes the task the model's: it wakes the
 farmer with the task's text. So a task written before this form never runs a command by accident.
@@ -99,8 +100,18 @@ def argv(cmd: str, top: str) -> list[str]:
     return FARMER + cmd.split()[1:] + ["--repo", top] if cmd.split()[0] == "farmer" else ["sh", "-c", cmd]
 
 
+BUILTIN = ("flaky", "orphans")  # `farmer check <what>` the tick runs in its own process (plan 0011)
+
+
 def run_check(cmds: list[str], top: str, main: str) -> tuple[bool, str]:
     for cmd in cmds:
+        words = cmd.split()
+        if words[:2] == ["farmer", "check"] and len(words) == 3 and words[2] in BUILTIN:
+            # In-process: the round's snapshot calls are shared (gh_runs), no second python and fetch.
+            code, text = builtin(words[2], top)
+            if code:
+                return False, f"{cmd}: exit {code}\n{text[-1500:]}"
+            continue
         try:
             p = subprocess.run(argv(cmd, top), cwd=main, capture_output=True, text=True, timeout=120)
         except subprocess.TimeoutExpired:
