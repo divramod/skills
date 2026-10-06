@@ -18,7 +18,7 @@ today.
 - The farmer's brief: `~/.hal/git/worktree/hal2/farmer-hal2/roles/farmer/briefs/2026-10-06-parallel-plans.md`
   (runtime state, never committed), the user's words of 2026-10-06 quoted there.
 - The design, agreed by the farmer and hal2's 02 and approved by the user: hal2 02's
-  `plans/0145-app-electron-desktop-1-refactore-repositories-to-projects-sw/one-plan-answer.md` (on `origin/02`),
+  `plans/0149-hal9k-the-whole-roadmap-in-one-plan/one-plan-answer.md` (on `origin/02`; first written under plan 0145),
   sections **D** (parallel plans 1-12), **G** (slots 30+) and **(3)** (this plan's scope).
 - [.adr/deterministic-first.md](../../.adr/deterministic-first.md): the lead's loop is code, the model only judges.
 - Code: [plan.py](../../skills/plan/scripts/plan.py), [create.py](../../skills/create-worktree-session/scripts/create.py),
@@ -37,8 +37,8 @@ starting "after the landing: ...".
 |---|---|---|---|
 | 1 | plan.py parallel table: `split_row` honours `\|` (and writes it back escaped) with a clean error on short rows; Needs, Touches, Who read; `new --parallel`; problems for bad ids, unknown Needs and cycles; `ready [--json]`, `assign <n> <who>`; `current` lists running and ready; writes refused in a slot with `plans/LEAD` | `python3 -m unittest discover -s skills/plan/scripts` green, the new tests among them, the old ones unchanged | done |
 | 2 | plan.py `brief <n>` (templates/step-brief.md, with the subservant's exact first prompt), `report <n>` (templates/report.md) and `reports [--json]` / `watch` (the lead's Monitor: reports arrived on origin/NN) | the same unittest run green with tests for brief, report, reports | done |
-| 3 | plan SKILL.md: the parallel table, "Run a parallel plan" (the lead's loop as code, subagent vs subservant, a subservant's life, shared files, milestones, limits, hand-off), the subservant's rules; the help table | `grep -c "Run a parallel plan" skills/plan/SKILL.md` ≥ 2 and every D 1-12 point has its paragraph (checked against the design) | next |
-| 4 | create-worktree-session: `--from <NN>`, `--base <rev>` (`git branch -f NN <rev>`, a reused clean slot reset), `--lead "<slot> <plan> <step>"` writes `plans/LEAD` and `CURRENT_PLAN` (ignored through info/exclude when the repo does not ignore it), free disk checked before a new slot, `--exact` documented | `python3 -m unittest discover -s skills/create-worktree-session/scripts` green with tests for each flag | |
+| 3 | plan SKILL.md: the parallel table, "Run a parallel plan" (the lead's loop as code, subagent vs subservant, a subservant's life, shared files, milestones, limits, hand-off), the subservant's rules; the help table | `grep -c "Run a parallel plan" skills/plan/SKILL.md` ≥ 2 and every D 1-12 point has its paragraph (checked against the design) | done |
+| 4 | create-worktree-session: `--from <NN>`, `--base <rev>` (`git branch -f NN <rev>`, a reused clean slot reset), `--lead "<slot> <plan> <step>"` writes `plans/LEAD` and `CURRENT_PLAN` (ignored through info/exclude when the repo does not ignore it), free disk checked before a new slot, `--exact` documented | `python3 -m unittest discover -s skills/create-worktree-session/scripts` green with tests for each flag | next |
 | 5 | mtm: `scripts/subservant-guard.sh` refuses in a slot with `plans/LEAD` (bats test), SKILL.md runs it first; milestone mode (`/mtm milestone`: no `--keep-reserved`, CURRENT_PLAN kept, no /cleanup) | `bats skills/mtm/scripts` green | |
 | 6 | handoff: decisions.py reports the `plans/LEAD` marker (`lead` in JSON, a line in the text); SKILL.md: `/handoff c` in a marked slot continues that one step only | `python3 -m unittest discover -s skills/handoff/scripts` green with the marker test | |
 | 7 | farmer skips marked slots: mtm_scan (no work-not-queued, the marker in each worktree), boss (no /mtm text to a marked slot, a holder wakes the farmer), lead_scan and duties.plan_lead (a stop mid-step gets "continue your step", never "land"), instructions/mtm.md and lead.md | `cd skills/farmer/scripts && python3 -m unittest` green with the new tests | |
@@ -117,3 +117,6 @@ answered before implementation, with the user's words and the date; the run acts
   `new --parallel`, `refuse_subservant`, `run_parallel`, `watch`). Steps 1 and 2's code and both templates
   (`templates/step-brief.md`, `templates/report.md`) are in the WIP commit `74e09f1`; their tests
   (`skills/plan/scripts/test_parallel.py`) are not written yet: the context guard cut the write off.
+- 2026-10-06 step 3: the design moved with hal2 02's commit `d940287d` to plan 0149's folder; SKILL.md cites it there.
+  "Run a parallel plan" and "Work as a subservant" cover D 1-12 and G; create.py's `--from`, `--base`, `--lead` and
+  `--min-free-gb` are documented there ahead of step 4, which implements them.
