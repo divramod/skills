@@ -12,6 +12,10 @@ HANDOFF.md names (`Farmer: <session> (<repo>)`, written by /handoff for a servan
 
   decision check <slot>: I have these decisions: (1) ... (2) .... Did I forget one?
 
+In a parallel plan's subservant slot (skills plan 0013: `plans/LEAD` holds `<lead-slot> <plan> <step>`) it adds
+`lead` ({slot, plan, step}) to the JSON and a `lead:` line to the text: `/handoff c` there continues that one step
+only, never the plan and never a landing.
+
 `--check` validates HANDOFF.md's Decisions section after /handoff wrote it: the section exists (`- none` when the
 work holds no user decision) and every line is `- <YYYY-MM-DD> "<the user's words>" (<who relayed it>) · home: <plan |
 INTENT.md | .adr/<file>.md | a relative path>[ · ended <YYYY-MM-DD>: <why>]`, its home file exists and holds the
@@ -137,6 +141,13 @@ def plan_file(root: Path, handoff: str) -> Path | None:
     return root / m.group(1) if m and (root / m.group(1)).exists() else None
 
 
+def lead_of(root: Path) -> dict | None:
+    """The subservant marker plans/LEAD: {slot, plan, step}; None without one (or a broken one)."""
+    f = root / "plans" / "LEAD"
+    parts = f.read_text().split() if f.is_file() else []
+    return {"slot": parts[0], "plan": parts[1], "step": parts[2]} if len(parts) >= 3 else None
+
+
 def short(item: str) -> str:
     return item if len(item) <= ITEM_CHARS else item[:ITEM_CHARS - 1].rstrip() + "…"
 
@@ -158,7 +169,8 @@ def collect(root: Path, main_name: str, farmer_repo: str | None) -> dict:
     repo = farmer_repo or repo or main_name
     slot = root.name if repo == main_name else f"{main_name}/{root.name}"
     listed = " ".join(f"({n}) {short(d)}" for n, (_, d) in enumerate(have, 1)).rstrip(".") or "none"
-    return {"root": str(root), "plan": str(plan.relative_to(root)) if plan else None, "farmer": farmer,
+    return {"root": str(root), "plan": str(plan.relative_to(root)) if plan else None, "lead": lead_of(root),
+            "farmer": farmer,
             "farmer_repo": repo, "slot": slot, "decisions": [{"from": s, "text": d} for s, d in have],
             "message": f"decision check {slot}: I have these decisions: {listed}. Did I forget one?"}
 
@@ -185,6 +197,10 @@ def main(argv: list[str]) -> int:
         print(json.dumps(r, indent=1))
         return 0
     print(f"plan: {r['plan'] or 'none'}")
+    if r["lead"]:
+        lead = r["lead"]
+        print(f"lead: slot {lead['slot']}, plan {lead['plan']}, step {lead['step']}: a subservant, continue that one "
+              "step only (never the plan, never a landing)")
     for n, d in enumerate(r["decisions"], 1):
         print(f"{n:3}. [{d['from']}] {short(d['text'])}")
     print(f"farmer: {r['farmer'] or 'none named in HANDOFF.md: ListAgents, the session in the farmer slot of ' + r['farmer_repo']}"

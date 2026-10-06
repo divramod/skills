@@ -24,6 +24,11 @@ is lost. `S=<skill-dir>/scripts`.
 
 ## Continue
 
+**In a subservant's slot** (a parallel plan's helper session: `plans/LEAD` holds `<lead-slot> <plan> <step>`,
+`decisions.py` prints a `lead:` line) `/handoff c` continues **that one step only**, as the plan skill's "Work as a
+subservant" says: never the plan's next step, never `/mtm`, never an edit of `plan.md`; `CURRENT_PLAN` keeps naming
+the lead's plan. When the step's report is pushed and the lead told, the work is done: say so and stop.
+
 1. Read `HANDOFF.md` and every file its **Read first** and **Plan** sections link to. When **Plan** links a plan
    with steps left and `plans/CURRENT_PLAN` is missing or names something else (another machine, a fresh
    worktree), write the plan's slug into it so the statusline shows it; otherwise write a short name of the first
@@ -52,8 +57,8 @@ is lost. `S=<skill-dir>/scripts`.
    uncommitted changes. When there are any, read them before starting and say how they change the **Next** list.
 4. Tell the user in two or three lines where things stand and what you start with (and the decision check: sent to
    whom, or the gaps found), then do the first **Next** task.
-   When the handoff continues a plan (**Plan** links one with steps left), the plan was already approved: keep
-   running it as the `plan` skill's "Run the plan" says (step after step without asking, a commit after every
+   When the handoff continues a plan (**Plan** links one with steps left) and this is no subservant's slot, the
+   plan was already approved: keep running it as the `plan` skill's "Run the plan" says (step after step without asking, a commit after every
    step, the context check after each one) instead of stopping after the first task.
 
 If there is no handoff file, say so and ask what to work on.
@@ -165,7 +170,10 @@ Rules:
 - **Next** is specific enough that a session without this conversation can start: name files, commands, and the
   first task.
 - Decisions live in their one home (step 1); the handoff indexes them (**Decisions**), it never holds the only copy.
-- **Next** for plan work is the current step's tasks only; the step list itself stays in the plan.
+- **Next** for plan work is the current step's tasks only; the step list itself stays in the plan. A subservant's
+  handoff (`plans/LEAD`) names its one step, its brief and its lead under **Plan**, and **Next** ends with the report.
+- A parallel plan's lead lists what is in flight under **Next**: each running step, who (`subagent`, `slot NN`) and
+  since when; after the clear it runs `plan.py current`, `ready --json` and `reports` before the loop goes on.
 - No secrets, no tool-call logs, no restating of the plan's content.
 
 Then check the index; fix the handoff (or record the missing quote in the home) until it prints `ok`:

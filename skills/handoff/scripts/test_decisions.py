@@ -77,6 +77,14 @@ class DecisionsTest(unittest.TestCase):
                                        'deploy to staging. User: "go" (3) which port the server uses (waiting for the '
                                        "farmer). Did I forget one?")
 
+    def test_a_subservant_slot_reports_its_lead(self):
+        self.assertIsNone(self.run_it()["lead"])
+        (self.slot / "plans" / "LEAD").write_text("02 0003-x 4\n")
+
+        self.assertEqual(self.run_it()["lead"], {"slot": "02", "plan": "0003-x", "step": "4"})
+        text = subprocess.run(["python3", str(SCRIPT)], cwd=self.slot, env=ENV, text=True, capture_output=True).stdout
+        self.assertIn("lead: slot 02, plan 0003-x, step 4: a subservant, continue that one step only", text)
+
     def test_current_plan_and_no_farmer_mean_this_repos_farmer(self):
         (self.slot / "plans" / "CURRENT_PLAN").write_text("0003-x\n")
         r = self.run_it()
