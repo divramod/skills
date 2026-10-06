@@ -43,8 +43,8 @@ starting "after the landing: ...".
 | 6 | handoff: decisions.py reports the `plans/LEAD` marker (`lead` in JSON, a line in the text); SKILL.md: `/handoff c` in a marked slot continues that one step only | `python3 -m unittest discover -s skills/handoff/scripts` green with the marker test | done |
 | 7 | farmer skips marked slots: mtm_scan (no work-not-queued, the marker in each worktree), boss (no /mtm text to a marked slot, a holder wakes the farmer), lead_scan and duties.plan_lead (a stop mid-step gets "continue your step", never "land"), instructions/mtm.md and lead.md | `cd skills/farmer/scripts && python3 -m unittest` green with the new tests | done |
 | 8 | farmer prune and delegation: a marked 30+ slot is removed once origin/NN and HEAD are in origin/<lead> and it has been idle over an hour (origin/NN deleted then); the farmer's own servants start in 30+ (`--from 30`, free sessions from 30 only); SKILL.md and reference.md | the same farmer test run green with tests for the prune rule and the delegation's slots | done |
-| 9 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks; `python3 scripts/check-plugins.py` ok; every scripts folder's tests green | next |
-| 10 | hal2's 02 reviews the diff: a summary to the session in hal2 slot 02, its findings fixed, its okay recorded under Decisions | the okay quoted under Decisions | |
+| 9 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks; `python3 scripts/check-plugins.py` ok; every scripts folder's tests green | done |
+| 10 | hal2's 02 reviews the diff: a summary to the session in hal2 slot 02, its findings fixed, its okay recorded under Decisions | the okay quoted under Decisions | next |
 
 ## Pre-authorized
 
