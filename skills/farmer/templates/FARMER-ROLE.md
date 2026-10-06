@@ -6,6 +6,7 @@ duties:
   mtm: "*/15 * * * *"         # merge-to-main-boss: finished work onto main
   lead: "*/15 * * * *"        # development-lead: unstick sessions
   ci: "*/30 * * * *"          # GitHub Actions green
+  sync: "*/30 * * * *"        # farmer branch onto main: a servant merges main, then farmer, and lands
   prs: "23 * * * *"           # pull requests clean: Dependabot PRs batched to one servant, leftovers closed
   watch: "*/15 * * * *"       # sanity-watch: resume abnormal stops
   autoclear: "0 * * * *"      # fix-autoclear: autoclear failures

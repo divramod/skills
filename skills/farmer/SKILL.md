@@ -1,6 +1,6 @@
 ---
 name: farmer
-description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, a clean pull-request list, sanity-watch, fix-autoclear, merge trains, FARMER-ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "keep the pull requests clean", "dependabot", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
+description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, a clean pull-request list, the farmer branch synced with main, sanity-watch, fix-autoclear, merge trains, FARMER-ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "keep the pull requests clean", "dependabot", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
 ---
 
 # farmer
@@ -28,6 +28,7 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 | `lead` | `duties.plan_lead` | [instructions/lead.md](instructions/lead.md) | [cases.md](subskills/development-lead/cases.md) |
 | `ci` | `duties.plan_ci` | [instructions/ci.md](instructions/ci.md) | |
 | `prs` | `duties.plan_prs` (`pr_scan.py`: the open Dependabot PRs to one servant per batch, PRs main holds and leftover landing PRs closed, any other PR to the user) | [instructions/prs.md](instructions/prs.md) | |
+| `sync` | `role_sync.py` (main's FARMER-ROLE.md differs from the farmer branch's: one servant merges the latest main, then `farmer`, and lands it; no plan) | | |
 | `watch` | `duties.plan_watch` (sanity-watch's scan) | [instructions/watch.md](instructions/watch.md) | sanity-watch's |
 | `autoclear` | `duties.plan_autoclear` (fix-autoclear's doctor) | [instructions/autoclear.md](instructions/autoclear.md) | fix-autoclear's |
 | `trains` | `trains.py` (merge trains: finished, non-overlapping waiters land as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |

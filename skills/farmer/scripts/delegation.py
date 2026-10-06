@@ -30,6 +30,8 @@ PROMPT = ("You are a servant started by the farmer (the user's stand-in for {rep
           "professional, battle-tested option\", record each decision, no question and no confirmation. Then run the "
           "plan to its end. It lands itself. When you are blocked, message the farmer session with one line and carry "
           "on with what you can; ack every farmer instruction.")
+PLAN_TASK = ("- Plan: create it with the plan skill (`/plan new \"{title}\"`, `Landing: auto`), autogrill it, run it to "
+             "its end. It lands itself.")
 
 
 def call(argv: list[str], cwd: str) -> tuple[int, str]:
@@ -77,14 +79,15 @@ def write_brief(a: dict, main: str, now: dt.datetime) -> Path:
     return path
 
 
-def write_role(main: str, brief: Path, title: str, now: dt.datetime) -> Path:
+def write_role(main: str, brief: Path, title: str, now: dt.datetime, task: str | None = None) -> Path:
     """The servant's role file (hal2 plan 0137, the user's point 6), named by the brief: the slot is known only
-    after the session started. Runtime state under the farmer's state folder, never committed."""
+    after the session started. Runtime state under the farmer's state folder, never committed. `task`: the role's
+    task line when the servant gets a direct instruction instead of a plan."""
     d = mtm_scan.state_dir(main) / "servants"
     d.mkdir(exist_ok=True)
     path = d / f"{slug(title)}.md"
     path.write_text(ROLE.read_text().format(repo=Path(main).name, brief=brief, title=title,
-                                            at=f"{now:%Y-%m-%d %H:%M}"))
+                                            at=f"{now:%Y-%m-%d %H:%M}", task=task or PLAN_TASK.format(title=title)))
     return path
 
 
@@ -133,11 +136,13 @@ def delegate(a: dict, main: str, limit: int | str, dry: bool, now: dt.datetime) 
     running = [e for e in held.values() if e.get("state") == "running"]
     given = (a.get("brief") or {}).get("brief_file")
     brief = Path(given) if given else write_brief(a, main, now) if not dry else Path("<brief>")
+    # A direct instruction (`prompt`, `role_task`) instead of a plan; kept on a waiting entry for its later start.
+    own = {k: a[k] for k in ("prompt", "role_task") if a.get(k)}
     if not has_room(limit, len(running)):
-        result = {"key": a["key"], "state": "waiting", "brief": str(brief), "title": a["text"]}
+        result = {"key": a["key"], "state": "waiting", "brief": str(brief), "title": a["text"], **own}
     else:
-        role = write_role(main, brief, a["text"][:80], now) if not dry else Path("<role>")
-        prompt = PROMPT.format(repo=Path(main).name, brief=brief, title=a["text"][:80], role=role)
+        role = write_role(main, brief, a["text"][:80], now, a.get("role_task")) if not dry else Path("<role>")
+        prompt = a.get("prompt", PROMPT).format(repo=Path(main).name, brief=brief, title=a["text"][:80], role=role)
         started = start(prompt, main, dry)
         state = "error" if "error" in started else "planned" if dry else "running"
         result = {"key": a["key"], "state": state, "brief": str(brief), "role": str(role), "title": a["text"],
@@ -167,7 +172,8 @@ def follow_up(main: str, slots: dict[str, dict], limit: int | str, dry: bool, no
             mtm_scan.log(main, {"kind": "landed", "slot": d["slot"], "what": "the servant's plan has landed",
                                 "note": "session stopped when idle", "by": "tick", "key": d["key"]})
     waiting = [{"key": k, "text": e["title"], "brief": {"brief_file": e["brief"]}, "duty": "farmer",
-                "kind": "waiting", "slot": "-"} for k, e in ledger(main).items() if e.get("state") == "waiting"]
+                "kind": "waiting", "slot": "-", **{f: e[f] for f in ("prompt", "role_task") if e.get(f)}}
+               for k, e in ledger(main).items() if e.get("state") == "waiting"]
     running = sum(1 for e in ledger(main).values() if e.get("state") == "running")
     # auto: one at a time, the load shows a new servant only after a while
     room = int(has_room(limit, running)) if limit == "auto" else limit - running

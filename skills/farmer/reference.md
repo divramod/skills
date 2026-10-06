@@ -51,6 +51,9 @@ The `farmer` branch is main plus the user's `FARMER-ROLE.md` commits, and it syn
   - invalid: leave it uncommitted, notify the user with the problems, and run nothing this round.
 - **Missing hooks:** when the repository lacks either hook, the farmer delegates one servant to add them from the
   templates (logged). Until they have landed, the farmer's commits only reach main when the user lands them.
+- **The `sync` duty** (opt-in, `role_sync.py`): when main's `FARMER-ROLE.md` differs from the farmer branch's, one
+  servant is told directly, without a plan: `/mfm`, then `git merge --no-edit farmer`, then `/mtm` (the boss's "land
+  now"). One sync at a time; the next round's stay-current brings the new main back into `farmer`. It needs no hooks.
 
 ## The log
 

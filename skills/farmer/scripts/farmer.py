@@ -54,6 +54,7 @@ import decision_log
 import delegation
 import due
 import duties
+import role_sync
 import handoff
 import tasks
 import tick
@@ -69,6 +70,7 @@ HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned 
     "duty:lead": duties.plan_lead,
     "duty:ci": duties.plan_ci,
     "duty:prs": duties.plan_prs,
+    "duty:sync": role_sync.plan_sync,
     "duty:watch": duties.plan_watch,
     "duty:autoclear": duties.plan_autoclear,
     "duty:trains": trains.handler,
