@@ -122,6 +122,15 @@ answered before implementation, with the user's words and the date; the run acts
   `plans/LEAD` (a reused slot is fresh); a broken marker or a missing `origin/<lead>` refuses the prune; a marked
   slot below 10 is not cleaned either; `remove` runs `worktree remove NN --force`, then deletes `origin/NN` after one
   more ancestry check. `delegation.start` read a `pane` field `free.py` never prints (it prints `panes`): fixed.
+- 2026-10-06 (hal2's 02, step 10 review 1): "findings, not okay yet": 1 HIGH /mtm milestone through CI left the
+  queue reserved; 2 the guard checked `.` for `/mtm <slot>`; 3 the farmer restarts merged subservants (ahead
+  counted against main, not origin/<lead>); 4 `assign` reassigns a running slot or a farmer servant's slot, and
+  SKILL.md runs assign before create.py; 5 a blocked step frees its Touches; 6 create.py marks a new slot after the
+  agent started; 7 Touches compared verbatim; 8 an f-string with nested quotes (Python 3.10/3.11); 9 the brief's
+  commit suffix `(plan {slug} ...)`, not NNNN; 10 a malformed marker counts as unmarked in mtm_scan and
+  decisions.py; 11 merge trains take marked slots; 12 finished idle subservants wake the farmer hourly; 13
+  `plan.py --root <lead>` from a marked slot edits the lead's plan. 14: milestone rows' done-whens start "landed:",
+  no change. 1-6 must be fixed, 7-13 as I see fit: all 13 get fixed. 1-2 fixed in `ebcb0f6`.
 
 ## Notes
 
