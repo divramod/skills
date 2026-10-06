@@ -27,6 +27,14 @@ shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 720000
 | 5 | `stopped`, `cancelled`, `interrupted` | the user ended it: report and stop, never rerun on your own (your own shell's time limit is no user stop: rerun) |
 | 1 | `error` | uncommitted changes: SKILL.md step 2. Anything else: report the `message`; the queue may be held for this worktree, so ask the user (fix, or `hal2-cli-git worktree release`) |
 
+**Watch the run every 5 minutes while it is tested** (the user, 2026-10-06). Once the candidate's run is known (exit
+6 names `run`; else `hal2-cli-git worktree landings --json`), look at its jobs every 5 minutes
+(`gh run view <run> --json jobs`) for as long as the landing waits. A job that concluded `failure` or `timed_out`
+while others still run: start on [Red](#red) at once (read its log, reproduce, fix, commit, push) instead of waiting
+for the landing to end; the landing keeps its place meanwhile, and when it ends with `gate_failed` the fix is ready
+for the next [Land](#land) at once. A red outside the code (runner offline, full disk, network): tell the farmer
+right away.
+
 ## Red
 
 `gate_failed` lists the `red` jobs, each with its `url` (the job's log) and `reproduce`, the command that runs the
