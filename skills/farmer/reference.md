@@ -122,11 +122,11 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
    - the done-when check;
    - the urgency;
    - a pending patch's path, when there is one.
-4. **Slot.** Idle sessions first, including the ones the user started:
-   `python3 $K/list-free-worktrees/scripts/free.py` finds a running session that is idle and holds no work. If
-   there is one, SendMessage the prompt below to it. Otherwise start a new one:
-   `python3 $K/create-worktree-session/scripts/create.py --prompt "<prompt>"`. Its first prompt runs `/mfm`, then
-   the given prompt.
+4. **Slot**, only 30-99 (skills plan 0013: helper sessions only work in the worktrees 30+). Idle sessions first,
+   including the ones the user started: `python3 $K/list-free-worktrees/scripts/free.py` finds a running session
+   that is idle and holds no work; take one in a slot 30-99 and SendMessage the prompt below to it. Otherwise start
+   a new one: `python3 $K/create-worktree-session/scripts/create.py --from 30 --prompt "<prompt>"`. Its first
+   prompt runs `/mfm`, then the given prompt.
 5. **Role file**: `farmer.py delegate --brief <file> --title <title>` writes it on its own; by hand, fill
    [templates/SERVANT-ROLE.md](templates/SERVANT-ROLE.md) into `roles/farmer/servants/<title-slug>.md`
    (runtime state, never committed). Sessions the user started get none, but they ack too.
@@ -145,6 +145,8 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 7. **Follow up** in later rounds. The development lead helps the servant like any session. When its plan has
    landed, record `landed`, set the case to `landed <plan> <date>`, and stop the session with
    `python3 $K/delete-worktree-session/scripts/stop.py stop <slot>` when it is idle. Its slot is free again.
+   Only the farmer's own servants (its ledger `delegations.jsonl`): a parallel plan's subservant is its lead's to
+   follow up and stop, never the farmer's.
 
 ## Decisions
 
@@ -156,7 +158,8 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
   roles/farmer/ROLE.md), and every fix goes to a servant
   with a plan.
 - Servants: at most `servant_limit` at a time (`auto` by load, or a number); idle sessions first (the user's too), else new ones. They run the same model as the
-  user's servants (create-worktree-session's default).
+  user's servants (create-worktree-session's default). Since skills plan 0013 only in slots 30-99, like a parallel
+  plan's subservants (the user: "helper sessions (subservants) only work in the worktrees 30+").
 - Notification: every round that has open items, batched into one push.
 - **Nothing implicit**: every duty and task is an opt-in in roles/farmer/ROLE.md, each with its own cron (5-field
   notation). The settings are required, and without the file the farmer runs nothing. The loop runs at the
@@ -172,4 +175,10 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
   with a draft, a busy agent or one active in the last 30 minutes). Main, role slots and other names are never
   touched. `/mtm` cleans its own slot after a landing (`after-landing.sh`) and tells the farmer when a 10-99 slot is
   done.
+- **Subservants' slots go too** (skills plan 0013): a slot marked `plans/LEAD` never lands on main, so it is
+  measured against its lead's branch: a marked slot 30-99 is removed once HEAD, `origin/NN` and every side branch
+  `NN-*` are in `origin/<lead>`, nothing is uncommitted, no ticket or busy agent, no session active and no
+  `plans/LEAD` written in the last hour (the lead may reuse the slot meanwhile) and no build runs; `remove` fetches
+  and checks again, removes with `--force` and deletes `origin/NN` once it is in `origin/<lead>`. A marked slot
+  below 30 is never pruned.
 - A busy session without `plans/CURRENT_PLAN` is told to fill it in (development-lead).

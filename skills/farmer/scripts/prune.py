@@ -10,12 +10,19 @@
       folder; the tick starts it in the background and reports it the next round (plan 0011)
   prune.py remove <NN> [--repo <dir>] [--dry-run]
       a slot 10-99: checked again, its idle session ended (`/exit` typed only into an empty prompt, killed only when
-      it does not exit: delete-worktree-session's stop.py), then `hal2-cli-git worktree remove NN --remote`
+      it does not exit: delete-worktree-session's stop.py), then `hal2-cli-git worktree remove NN --remote`; a
+      subservant's slot 30-99 (marked, below): fetched and checked again, `hal2-cli-git worktree remove NN --force`
+      (its branch is not on main by design), then `git push origin --delete NN` once origin/NN is in origin/<lead>
 
 A slot is free when nothing in it is unsaved: no commit (its branch or a side branch `NN-*`) that origin's default
 branch lacks, no change, no plans/CURRENT_PLAN, no merge queue ticket or boss pause, no busy agent (working,
 starting, blocked), no session active in the last 30 minutes (10-99), no build running in it (cleanup's `busy`)
 and no open question to the user in the farmer's log. Never main, a role slot or a name that is not two digits.
+A slot marked `plans/LEAD` (`<lead-slot> <plan> <step>`: a parallel plan's subservant, skills plan 0013) is measured
+against its lead's branch instead, never main: a marked slot 30-99 is free when HEAD, origin/NN and every side branch
+`NN-*` are in origin/<lead>, nothing is uncommitted (the ignored LEAD and CURRENT_PLAN aside), no ticket, boss pause,
+open question or busy agent, no session active and no LEAD written in the last hour, and no build runs. A marked
+slot below 30 is never pruned.
 The tick (`handler`) plans a `clean` per landing (keyed on the slot's HEAD) for 00-09, one `remove` per round for
 10-99, and every 6 hours the free disk and the biggest worktrees for the round summary, a notice under 100 GB free:
 measured by a detached `prune.py sizes` (never inside a round) and reported by the round after it finished.
@@ -48,6 +55,10 @@ NUMBERED = re.compile(r"\d\d")
 BUSY = {"working", "starting", "blocked"}
 GONE = {"ended", "failed"}
 QUIET = 30 * 60  # a 10-99 session active more recently is left alone
+SUBSERVANT_QUIET = 3600  # a marked 30-99 slot: the lead may reuse it with its warm build cache meanwhile
+SUBSERVANTS_FROM = 30  # subservants work only in slots 30-99 (the user, skills plan 0013)
+LEAD = Path("plans/LEAD")
+IGNORED = (":!plans/LEAD", ":!plans/CURRENT_PLAN")  # a marked slot's runtime files, ignored or not
 LOW_DISK_GB = 100
 SIZES_EVERY = 6 * 3600  # du over every worktree takes minutes
 SIZES_TOP = 5
@@ -78,6 +89,38 @@ def unsaved(path: str, slot: str, base: str) -> list[str]:
     return out
 
 
+def marker(path: str) -> dict | None:
+    """The subservant marker plans/LEAD as {slot, plan, step, at}; {"bad": text} when it is malformed; None when
+    the slot has none. `at` is its mtime: the lead's `plan.py assign` rewrites it when it reuses the slot."""
+    f = Path(path) / LEAD
+    try:
+        text, at = f.read_text().strip(), f.stat().st_mtime
+    except OSError:
+        return None
+    parts = text.split()
+    if len(parts) < 3 or not NUMBERED.fullmatch(parts[0]):
+        return {"bad": text}
+    return {"slot": parts[0], "plan": parts[1], "step": parts[2], "at": at}
+
+
+def ref_exists(path: str, ref: str) -> bool:
+    return bool(git(path, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"))
+
+
+def unsaved_for_lead(path: str, slot: str, lead: str) -> list[str]:
+    """What a subservant's slot holds that `lead` (origin/<lead-slot>) lacks: commits on HEAD, origin/NN or a side
+    branch, changes (plans/LEAD and plans/CURRENT_PLAN aside: they mark the slot, they are not work)."""
+    out = []
+    for ref in ["HEAD", *([f"origin/{slot}"] if ref_exists(path, f"origin/{slot}") else []),
+                *git(path, "for-each-ref", "--format=%(refname:short)", f"refs/heads/{slot}-*").split()]:
+        n = git(path, "rev-list", "--count", f"{lead}..{ref}")
+        if n != "0":
+            out.append(f"{ref}: {n or 'some'} commit(s) not in {lead}")
+    if git(path, "status", "--porcelain", "--untracked-files=all", "--", ".", *IGNORED):
+        out.append("uncommitted changes")
+    return out
+
+
 def build_running(path: str) -> bool:
     """cleanup.py's `busy`: a process whose command line names the worktree."""
     try:
@@ -97,6 +140,9 @@ def sessions(agents: list[dict], path: str) -> list[dict]:
 def refusal(w: dict, ctx: dict, agents: list[dict], now_ms: float, build=build_running) -> str | None:
     """Why the slot `w` (a worktree: path, slot) may not be pruned now, None when it may."""
     slot, path = w["slot"], w["path"]
+    lead = marker(path)
+    if lead is not None:
+        return subservant_refusal(w, lead, ctx, agents, now_ms, build)
     why = unsaved(path, slot, tick.default_ref(path))
     if why:
         return "; ".join(why)
@@ -109,6 +155,35 @@ def refusal(w: dict, ctx: dict, agents: list[dict], now_ms: float, build=build_r
             return f"its agent {a.get('pane_id')} is {a['state']}"
         if int(slot) >= 10 and now_ms - (a.get("since") or 0) < QUIET * 1000:
             return f"its session {a.get('pane_id')} was active in the last {QUIET // 60} min"
+    if build(path):
+        return "a build or test runs in it"
+    return None
+
+
+def subservant_refusal(w: dict, lead: dict, ctx: dict, agents: list[dict], now_ms: float, build) -> str | None:
+    """`refusal` for a slot marked plans/LEAD: its work belongs in origin/<lead>, never on main."""
+    slot, path = w["slot"], w["path"]
+    if "bad" in lead:
+        return f"plans/LEAD is not `<lead-slot> <plan> <step>`: '{lead['bad']}'"
+    if int(slot) < SUBSERVANTS_FROM:
+        return f"a subservant's slot below {SUBSERVANTS_FROM} (lead {lead['slot']}) is never pruned"
+    base = f"origin/{lead['slot']}"
+    if not ref_exists(path, base):
+        return f"its lead's branch {base} does not exist"
+    why = unsaved_for_lead(path, slot, base)
+    if why:
+        return "; ".join(why)
+    if slot in ctx.get("waiting", set()) | ctx.get("landing", set()):
+        return "it has a merge queue ticket or the boss paused it"
+    if slot in logstate.waiting_for_user(ctx.get("log", [])):
+        return "it waits for the user's answer"
+    if now_ms - lead["at"] * 1000 < SUBSERVANT_QUIET * 1000:
+        return f"its plans/LEAD was written in the last {SUBSERVANT_QUIET // 60} min"
+    for a in sessions(agents, path):
+        if a.get("state") in BUSY:
+            return f"its agent {a.get('pane_id')} is {a['state']}"
+        if now_ms - (a.get("since") or 0) < SUBSERVANT_QUIET * 1000:
+            return f"its session {a.get('pane_id')} was active in the last {SUBSERVANT_QUIET // 60} min"
     if build(path):
         return "a build or test runs in it"
     return None
@@ -225,9 +300,11 @@ def plan(item: dict, ctx: dict, found: list[dict] | None = None, info: dict | No
                            text=f"clean landed slot {w['slot']}'s build artifacts", on_fail=[failed(w, "clean")]))
         elif not removed:
             removed = True
+            lead = marker(w["path"])
+            text = (f"remove subservant slot {w['slot']} (its work is in origin/{lead['slot']}) with origin/{w['slot']}"
+                    if lead else f"remove landed slot {w['slot']} with its branch (origin/{w['slot']} once merged)")
             out.append(act("prune", "remove", "run", w["slot"], key=f"prune:remove:{w['slot']}:{w['head']}",
-                           window=3600, argv=me + ["remove", w["slot"], "--repo", main],
-                           text=f"remove landed slot {w['slot']} with its branch (origin/{w['slot']} once merged)",
+                           window=3600, argv=me + ["remove", w["slot"], "--repo", main], text=text,
                            on_fail=[failed(w, "remove")]))
     return out + disk_actions(main, ctx, info)
 
@@ -269,6 +346,9 @@ def act_on(main: str, slot: str, what: str, dry: bool) -> tuple[int, str]:
         return 1, f"no numbered slot {slot} in {main}"
     if (what == "clean") != (int(slot) < 10):
         return 1, f"{what} is for slots {'00-09' if what == 'clean' else '10-99'}"
+    lead = marker(w["path"])
+    if lead and "bad" not in lead and what == "remove" and not dry:
+        tick.git(main, "fetch", "--quiet", "--prune", "origin")  # checked again against the lead's newest branch
     ctx, agents = live(main)
     why = refusal(w, ctx, agents, time.time() * 1000)
     if why:
@@ -280,11 +360,31 @@ def act_on(main: str, slot: str, what: str, dry: bool) -> tuple[int, str]:
     problem = end_sessions(main, w["path"], slot, dry)
     if problem:
         return 0, f"skipped remove {slot}: {problem}"
+    if lead:
+        return remove_subservant(main, w, lead["slot"], dry)
     argv = ["hal2-cli-git", "worktree", "remove", slot, "--remote"]
     if dry:
         return 0, "would run " + " ".join(argv)
     code, text = tick.sh(argv, main)
     return code, text
+
+
+def remove_subservant(main: str, w: dict, lead_slot: str, dry: bool) -> tuple[int, str]:
+    """A free subservant's slot: `--force` (its branch is not on main by design), then origin/NN deleted once it is
+    in origin/<lead> (hal2's `--remote` only deletes a branch origin's default branch contains)."""
+    slot, base = w["slot"], f"origin/{lead_slot}"
+    remote = ref_exists(main, f"origin/{slot}")
+    argv = ["hal2-cli-git", "worktree", "remove", slot, "--force"]
+    push = ["git", "push", "--quiet", "origin", "--delete", slot]
+    if dry:
+        return 0, "would run " + " ".join(argv) + ("; then " + " ".join(push) if remote else "")
+    code, text = tick.sh(argv, main)
+    if code or not remote:
+        return code, text
+    if git(main, "rev-list", "--count", f"{base}..origin/{slot}") != "0":
+        return 1, f"{text}\norigin/{slot} kept: it holds commits not in {base}"
+    pushed, out = tick.sh(push, main)
+    return pushed, "\n".join(x for x in (text, out or f"deleted origin/{slot}") if x)
 
 
 def main(argv: list[str]) -> int:

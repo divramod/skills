@@ -42,8 +42,8 @@ starting "after the landing: ...".
 | 5 | mtm: `scripts/subservant-guard.sh` refuses in a slot with `plans/LEAD` (bats test), SKILL.md runs it first; milestone mode (`/mtm milestone`: no `--keep-reserved`, CURRENT_PLAN kept, no /cleanup) | `bats skills/mtm/scripts` green | done |
 | 6 | handoff: decisions.py reports the `plans/LEAD` marker (`lead` in JSON, a line in the text); SKILL.md: `/handoff c` in a marked slot continues that one step only | `python3 -m unittest discover -s skills/handoff/scripts` green with the marker test | done |
 | 7 | farmer skips marked slots: mtm_scan (no work-not-queued, the marker in each worktree), boss (no /mtm text to a marked slot, a holder wakes the farmer), lead_scan and duties.plan_lead (a stop mid-step gets "continue your step", never "land"), instructions/mtm.md and lead.md | `cd skills/farmer/scripts && python3 -m unittest` green with the new tests | done |
-| 8 | farmer prune and delegation: a marked 30+ slot is removed once origin/NN and HEAD are in origin/<lead> and it has been idle over an hour (origin/NN deleted then); the farmer's own servants start in 30+ (`--from 30`, free sessions from 30 only); SKILL.md and reference.md | the same farmer test run green with tests for the prune rule and the delegation's slots | next |
-| 9 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks; `python3 scripts/check-plugins.py` ok; every scripts folder's tests green | |
+| 8 | farmer prune and delegation: a marked 30+ slot is removed once origin/NN and HEAD are in origin/<lead> and it has been idle over an hour (origin/NN deleted then); the farmer's own servants start in 30+ (`--from 30`, free sessions from 30 only); SKILL.md and reference.md | the same farmer test run green with tests for the prune rule and the delegation's slots | done |
+| 9 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks; `python3 scripts/check-plugins.py` ok; every scripts folder's tests green | next |
 | 10 | hal2's 02 reviews the diff: a summary to the session in hal2 slot 02, its findings fixed, its okay recorded under Decisions | the okay quoted under Decisions | |
 
 ## Pre-authorized
@@ -114,6 +114,14 @@ answered before implementation, with the user's words and the date; the run acts
 - 2026-10-06 (servant, step 5) milestone mode skips mtm's step 5 entirely instead of finishing the milestone row
   there: the queue is released at step 4, so a row commit would need a second landing; the lead marks the row done
   in its own branch and the next landing carries it.
+- 2026-10-06 (servant, step 7) every queue ticket of a marked slot (waiting ones too) is `subservant-holds` only,
+  never a head-of-queue, `waiter-gone` or `long-queue` finding; the boss turns any landing finding for a marked slot
+  into that wake; a marked orphan is restarted with `/handoff c` on the marker alone (HANDOFF.md still needed); only
+  a marked stop that announces its next step gets "continue your step", a waiting one wakes the farmer.
+- 2026-10-06 (servant, step 8) prune's idle signal for a marked slot is the agent's `since` and the mtime of
+  `plans/LEAD` (a reused slot is fresh); a broken marker or a missing `origin/<lead>` refuses the prune; a marked
+  slot below 10 is not cleaned either; `remove` runs `worktree remove NN --force`, then deletes `origin/NN` after one
+  more ancestry check. `delegation.start` read a `pane` field `free.py` never prints (it prints `panes`): fixed.
 
 ## Notes
 
