@@ -214,6 +214,11 @@ class ParallelTest(unittest.TestCase):
         self.assertEqual(Path(info["marker"]).resolve(), (slot / "plans" / "LEAD").resolve())
         self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 3\n")
         self.assertEqual((slot / "plans" / "CURRENT_PLAN").read_text(), SLUG + "\n")
+        self.assertEqual(git(slot, "status", "--porcelain"), "")  # both ignored through info/exclude
+        self.plan("assign", "5", "slot", "31")  # a reused slot: the exclude is written once
+        self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 5\n")
+        exclude = Path(git(self.root, "rev-parse", "--git-common-dir").strip())
+        self.assertEqual((self.root / exclude / "info" / "exclude").read_text().count("plans/LEAD"), 1)
 
     # the subservant's slot
 

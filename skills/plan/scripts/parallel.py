@@ -176,9 +176,17 @@ def read_marker(root: Path) -> dict | None:
 
 
 def write_marker(worktree: Path, lead: str, plan: str, step: str) -> Path:
+    """The marker and CURRENT_PLAN, both ignored (the clone's info/exclude when the repo does not ignore them)."""
     (worktree / "plans").mkdir(exist_ok=True)
     (worktree / LEAD).write_text(f"{lead} {plan} {step}\n")
     (worktree / "plans" / "CURRENT_PLAN").write_text(plan + "\n")
+    common = Path(git(worktree, "rev-parse", "--git-common-dir").stdout.strip())
+    exclude = (common if common.is_absolute() else worktree / common) / "info" / "exclude"
+    for name in ("plans/LEAD", "plans/CURRENT_PLAN"):
+        if git(worktree, "check-ignore", "-q", name).returncode != 0:
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with exclude.open("a") as f:
+                f.write(name + "\n")
     return worktree / LEAD
 
 
