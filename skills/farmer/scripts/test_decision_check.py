@@ -2,6 +2,7 @@
 
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -411,6 +412,57 @@ class Subject(unittest.TestCase):
 
     def test_nested_asides_go_too(self):
         self.assertEqual(decision_log.subject("a (b (04) c) d").split(), ["a", "d"])
+
+
+SLOT04 = Path(__file__).resolve().parent / "testdata" / "slot04"
+MESSAGE04 = ("decision check 04: I have these decisions: plan 0094's Decisions (2026-10-01/02: scope, instances, pinned "
+             "n8n 2.41.5, writes by diff, webhook-only run, backups without the key, hardening, gates without Docker, "
+             "pane layout, run now, name matching, push rules), INTENT.md 2026-10-06 rows (Swift abandoned after the "
+             "train lands, the cleanup train 04+06,08,11,16,20,22, 09 joins before a reland if done and pushed, a red "
+             "landing keeps the queue). Did I forget one? Status: land run red in bash-lint + rust-test, both already "
+             "fixed on 04; relanding as soon as macos/bash finishes and the running merge-to-main exits.")
+
+
+class Replay04(unittest.TestCase):
+    """Skills plan 0012: hal2 slot 04's decision check of 2026-10-06 10:54 (5 reported, 1 really missing), replayed
+    with 04's checkout and the farmer log (trimmed fixtures in testdata/slot04)."""
+
+    def setUp(self):
+        self.log = [json.loads(line) for line in (SLOT04 / "log.jsonl").read_text().splitlines() if line.strip()]
+        self.tmp = Path(tempfile.mkdtemp())
+        self.slot = self.tmp / "04"
+        shutil.copytree(SLOT04, self.slot)
+        p = mock.patch.object(dc, "WORKTREES", self.tmp / "none")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def reported(self, log=None):
+        code, text, entry = dc.check(MESSAGE04, "hal2", self.log if log is None else log, {"04": str(self.slot)})
+        self.assertEqual(code, 0, text)
+        return entry["note"].split("; ") if entry["note"] else []
+
+    def test_only_the_stop_of_the_04_train_is_missing(self):
+        self.assertEqual(self.reported(), ["2026-10-06T10:16:35"])
+        _, text, _ = dc.check(MESSAGE04, "hal2", self.log, {"04": str(self.slot)})
+        self.assertIn('"stop the 04-train. 12 should finish first"', text)
+
+    def test_the_stale_entry_goes_by_its_supersede_not_by_text(self):
+        before = [e for e in self.log if e["at"] < "2026-10-06T10:56"]
+        self.assertEqual(self.reported(before), ["2026-10-03T11:23:12", "2026-10-06T10:16:35"])
+
+    def test_without_the_checkout_the_cleanup_train_was_missing_too(self):
+        _, _, entry = dc.check(MESSAGE04, "hal2", self.log, ["04"])
+        self.assertEqual(entry["note"].split("; "), ["2026-10-06T09:39:21", "2026-10-06T10:16:35"])
+
+    def test_once_the_handoff_indexes_the_stop_nothing_is_missing(self):
+        handoff = self.slot / "HANDOFF.md"
+        handoff.write_text(handoff.read_text().replace("## Read first", """## Decisions
+
+- 2026-10-06 "stop the 04-train. 12 should finish first" (via farmer 04-9) · home: plan · ended 2026-10-06: 12 landed,
+  go 04-11
+
+## Read first"""))
+        self.assertEqual(self.reported(), [])
 
 
 if __name__ == "__main__":
