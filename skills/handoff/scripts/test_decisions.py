@@ -90,5 +90,106 @@ class DecisionsTest(unittest.TestCase):
         self.assertEqual(r["message"], "decision check 04: I have these decisions: none. Did I forget one?")
 
 
+INDEXED_PLAN = """# Plan 0003: x
+
+## Decisions
+
+- 2026-10-06 (the user, via the farmer 04-9): the train waits. User: "stop the 04-train. 12 should finish first"
+- 2026-10-06 (autogrill 1): bash, not python.
+"""
+INTENT = """# Intent
+
+| Date | Question | Decision |
+|---|---|---|
+| 2026-10-06 | How are the worktrees cleaned up? | One train (the user via the farmer 04-6: "i want 06, 08 and 04 to \
+be merged to main after 12. one train, 04 should take the lead") |
+"""
+INDEXED = """# Handoff
+
+Updated 2026-10-06, branch `04`, written at `abc1234`.
+Farmer: farmer-hal2-71 (hal2)
+
+## Plan
+[Plan 0003](plans/0003-x/plan.md): 1/3 done.
+
+## Decisions
+- 2026-10-06 "stop the 04-train. 12 should finish first" (via farmer 04-9) · home: plan Decisions · ended 2026-10-06:
+  12 landed, go 04-11
+- 2026-10-06 "i want 06, 08 and 04 to be merged to main after 12. one train, 04 should take the lead" (via farmer
+  04-6) · home: INTENT.md 2026-10-06 row
+"""
+
+
+class IndexTest(unittest.TestCase):
+    """Skills plan 0012: HANDOFF.md's Decisions section indexes every user decision in force."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.slot = Path(self.tmp.name) / "04"
+        self.slot.mkdir()
+        git(self.slot, "init", "-q", "-b", "04")
+        (self.slot / "plans" / "0003-x").mkdir(parents=True)
+        (self.slot / "plans" / "0003-x" / "plan.md").write_text(INDEXED_PLAN)
+        (self.slot / "INTENT.md").write_text(INTENT)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_it(self, *args):
+        return subprocess.run(["python3", str(SCRIPT), *args], cwd=self.slot, env=ENV, text=True, capture_output=True)
+
+    def check(self, handoff):
+        (self.slot / "HANDOFF.md").write_text(handoff)
+        p = self.run_it("--check")
+        return p.returncode, p.stdout.strip()
+
+    def test_the_index_comes_first_and_the_plan_item_it_holds_is_not_repeated(self):
+        (self.slot / "HANDOFF.md").write_text(INDEXED)
+        r = json.loads(self.run_it("--json").stdout)
+        self.assertEqual([(d["from"], d["text"][:30]) for d in r["decisions"]], [
+            ("HANDOFF.md Decisions", '2026-10-06 "stop the 04-train.'),
+            ("HANDOFF.md Decisions", '2026-10-06 "i want 06, 08 and '),
+            ("plan Decisions", "2026-10-06 (autogrill 1): bash")])
+        self.assertIn("ended 2026-10-06: 12 landed, go 04-11", r["message"])
+
+    def test_a_complete_index_passes_the_check(self):
+        self.assertEqual(self.check(INDEXED), (0, "ok"))
+        self.assertEqual(self.check("# Handoff\n\n## Decisions\n- none\n"), (0, "ok"))
+
+    def test_a_handoff_without_the_section_fails(self):
+        code, out = self.check("# Handoff\n\n## Next\n1. go on\n")
+        self.assertEqual(code, 1)
+        self.assertIn("no `## Decisions` section", out)
+
+    def test_each_line_needs_date_quote_and_a_home_that_holds_the_quote(self):
+        code, out = self.check(INDEXED.split("## Decisions")[0] + """## Decisions
+- "stop the 04-train. 12 should finish first" · home: plan
+- 2026-10-06 the user said to wait · home: plan
+- 2026-10-06 "no fail fast at the first red job please" (via farmer 12-51) · home: plan
+- 2026-10-06 "stop the 04-train. 12 should finish first" · home: .adr/missing.md
+- 2026-10-06 "stop the 04-train. 12 should finish first" (via farmer 04-9)
+- 2026-10-06 "stop the 04-train. 12 should finish first" · home: plan · ended: 12 landed
+""")
+        self.assertEqual(code, 1)
+        lines = out.splitlines()
+        self.assertEqual([line.split(":")[0] for line in lines], [f"Decisions line {n}" for n in range(1, 7)])
+        self.assertIn("no date", lines[0])
+        self.assertIn("quotes no user's words", lines[1])
+        self.assertIn("does not hold the quote", lines[2])
+        self.assertIn("no existing file", lines[3])
+        self.assertIn("names no home", lines[4])
+        self.assertIn("`ended` without a date", lines[5])
+
+    def test_quotes_match_across_case_whitespace_and_punctuation(self):
+        spec = __import__("importlib.util").util.spec_from_file_location("decisions", SCRIPT)
+        mod = __import__("importlib.util").util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertTrue(mod.found("Stop the 04-train!  12 should finish first", "stop the 04 train; 12 should\nfinish first"))
+        self.assertFalse(mod.found("stop the 04-train. 12 should finish first", "stop the 04 train later"))
+        self.assertIsNone(mod.found("1", "1"))
+        long = "i want 06, 08 and 04 to be merged to main after 12. one train, 04 should take the lead. are there others?"
+        self.assertTrue(mod.found(long, INTENT))
+
+
 if __name__ == "__main__":
     unittest.main()

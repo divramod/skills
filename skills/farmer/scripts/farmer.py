@@ -24,8 +24,8 @@
       when it is missing); --clear, once it is written, starts hal2's clear-and-continue (/clear, then /farmer act)
   farmer.py decision-check (--message <text> | <slot> --have <list>) [--repo <dir>] [--dry-run]
       answer a servant's `decision check <slot>: I have these decisions: ...` (decision_check.py): the log's
-      `decision` entries for the slot its list lacks, with the user's words quoted, or "none missing"; exit 1 for an
-      unknown slot. Logs the check (kind `decision-check`) unless --dry-run; superseded decisions never count
+      `decision` entries for the slot that neither its list nor its checkout (HANDOFF.md, current plan, INTENT.md)
+      holds, with the user's words quoted, or "none missing"; exit 1 for an unknown slot. Logs the check (kind `decision-check`) unless --dry-run; superseded decisions never count
   farmer.py decision list [--slot <slot>] [--all] | supersede <at>... --by <at> [--why <text>] [--dry-run]
       the user's current decisions in the log; mark ones a later decision replaced (decision_log.py)
   farmer.py timer install|remove|status [--repo <dir>] [--dry-run] [--json]

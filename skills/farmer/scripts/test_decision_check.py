@@ -2,6 +2,7 @@
 
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -317,6 +318,151 @@ class Cli(Repo):
         with redirect_stdout(listed):
             farmer.main(["decision", "list", "--slot", "12", "--repo", str(self.slot)])
         self.assertIn("delete all old GitHub Actions workflow runs (relayed as 12-1)", listed.getvalue())
+
+
+STOP_TRAIN = {"at": "2026-10-06T10:16:35", "kind": "decision", "slot": "04",
+              "what": 'the user: "stop the 04-train. 12 should finish first"', "note": "04 waits for the go"}
+CLEANUP = {"at": "2026-10-06T09:39:21", "kind": "decision", "slot": "04",
+           "what": 'the user: "ok, i want to clean up. i want 06, 08 and 04 to be merged to main after 12. one train, 04 '
+                   'should take the lead. are there other open ones?"', "note": "order: 12, then 04's train"}
+
+
+class InTheCheckout(unittest.TestCase):
+    """Skills plan 0012: a decision whose quote stands in the asking checkout's HANDOFF.md, current plan or INTENT.md
+    is not missing."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        p = mock.patch.object(dc, "WORKTREES", self.root)
+        p.start()
+        self.addCleanup(p.stop)
+        self.slot = self.root / "hal2" / "04"
+        (self.slot / "plans" / "0094-x").mkdir(parents=True)
+
+    def gone(self, trees=None, have="the cleanup train"):
+        msg = f"decision check 04: I have these decisions: {have}. Did I forget one?"
+        _, text, _ = dc.check(msg, "hal2", [STOP_TRAIN, CLEANUP], trees if trees is not None else {"04": str(self.slot)})
+        return [line[2:12] + line[14:22] for line in text.splitlines()[1:]] if "none missing" not in text else []
+
+    def test_nothing_in_the_checkout_reports_both(self):
+        self.assertEqual(len(self.gone()), 2)
+
+    def test_the_handoffs_index_holds_it(self):
+        (self.slot / "HANDOFF.md").write_text('## Decisions\n- 2026-10-06 "Stop the 04-train!  12 should finish\n'
+                                              '  first" (via farmer 04-9) · home: plan\n')
+        self.assertEqual(len(self.gone()), 1)
+
+    def test_the_current_plan_holds_it(self):
+        (self.slot / "plans" / "CURRENT_PLAN").write_text("0094-x\n")
+        (self.slot / "plans" / "0094-x" / "plan.md").write_text(
+            '## Decisions\n- 2026-10-06 (the user, via the farmer 04-9): wait. User: "stop the 04-train. 12 should '
+            'finish first"\n')
+        self.assertEqual(len(self.gone()), 1)
+
+    def test_the_plan_the_handoff_links_holds_it(self):
+        (self.slot / "HANDOFF.md").write_text("## Plan\n[Plan 0094](plans/0094-x/plan.md): 9/9\n")
+        (self.slot / "plans" / "0094-x" / "plan.md").write_text('User: "stop the 04-train. 12 should finish first"')
+        self.assertEqual(len(self.gone()), 1)
+
+    def test_intent_holds_a_long_quote_by_a_distinctive_run(self):
+        (self.slot / "INTENT.md").write_text('| 2026-10-06 | cleanup | (the user: "i want 06, 08 and 04 to be merged to '
+                                             'main after 12. one train, 04 should take the lead") |\n')
+        self.assertEqual(len(self.gone()), 1)
+
+    def test_a_short_or_partial_match_is_no_match(self):
+        (self.slot / "INTENT.md").write_text("stop the 04-train later; one train, 04 should take\n")
+        self.assertEqual(len(self.gone()), 2)
+
+    def test_no_checkout_changes_nothing(self):
+        self.assertEqual(len(self.gone(trees=["04"])), 2)
+        self.assertEqual(len(self.gone(trees={"04": str(self.root / "gone")})), 2)
+
+    def test_another_repos_slot_is_read_from_the_worktree_root(self):
+        other = self.root / "skills" / "04"
+        other.mkdir(parents=True)
+        (other / "INTENT.md").write_text('"stop the 04-train. 12 should finish first"')
+        self.assertEqual(dc.checkout("skills/04", "hal2", {}), other)
+        self.assertEqual(dc.checkout("hal2/04", "hal2", {"04": "/x/04"}), Path("/x/04"))
+
+
+class Subject(unittest.TestCase):
+    """Skills plan 0012: a repo-wide decision concerns a slot when the slot is its subject, not an aside."""
+
+    ASK = {"at": "2026-10-05T07:12:28", "kind": "decision", "slot": "-",
+           "what": "user: ask every farmer round: (a) is the user away from the Mac, so UI tests may run (06 three "
+                   "classes, 04 plan 0094 step 7, 09 node UI tests)? (b) may slot 11 measure its benchmarks?"}
+    BUILT = {"at": "2026-10-05T22:04:13", "kind": "decision", "slot": "-",
+             "what": "handoff skill: a servant asks the farmer; built now by a servant in ~/a/skills (slot 04)"}
+    QUOTED = {"at": "2026-10-06T09:30:59", "kind": "decision", "slot": "-",
+              "what": 'the user: "if there is a conflict (who does what), then i prefer 02" (02 gets the work)'}
+
+    def test_a_slot_named_only_in_an_aside_is_not_concerned(self):
+        self.assertFalse(decision_log.concerns(self.ASK, "04", "hal2"))
+        self.assertFalse(decision_log.concerns(self.ASK, "06", "hal2"))
+        self.assertFalse(decision_log.concerns(self.BUILT, "04", "hal2"))
+        self.assertFalse(decision_log.concerns(self.BUILT, "hal2/04", "hal2"))
+
+    def test_another_repos_slot_counts_with_its_repo_named(self):
+        self.assertTrue(decision_log.concerns(self.BUILT, "skills/04", "hal2"))
+
+    def test_a_slot_named_in_the_sentence_or_the_users_words_is(self):
+        self.assertTrue(decision_log.concerns(self.ASK, "11", "hal2"))
+        self.assertTrue(decision_log.concerns(self.QUOTED, "02", "hal2"))
+        self.assertTrue(decision_log.concerns({**self.BUILT, "what": "04 builds the handoff skill"}, "04", "hal2"))
+
+    def test_nested_asides_go_too(self):
+        self.assertEqual(decision_log.subject("a (b (04) c) d").split(), ["a", "d"])
+
+
+SLOT04 = Path(__file__).resolve().parent / "testdata" / "slot04"
+MESSAGE04 = ("decision check 04: I have these decisions: plan 0094's Decisions (2026-10-01/02: scope, instances, pinned "
+             "n8n 2.41.5, writes by diff, webhook-only run, backups without the key, hardening, gates without Docker, "
+             "pane layout, run now, name matching, push rules), INTENT.md 2026-10-06 rows (Swift abandoned after the "
+             "train lands, the cleanup train 04+06,08,11,16,20,22, 09 joins before a reland if done and pushed, a red "
+             "landing keeps the queue). Did I forget one? Status: land run red in bash-lint + rust-test, both already "
+             "fixed on 04; relanding as soon as macos/bash finishes and the running merge-to-main exits.")
+
+
+class Replay04(unittest.TestCase):
+    """Skills plan 0012: hal2 slot 04's decision check of 2026-10-06 10:54 (5 reported, 1 really missing), replayed
+    with 04's checkout and the farmer log (trimmed fixtures in testdata/slot04)."""
+
+    def setUp(self):
+        self.log = [json.loads(line) for line in (SLOT04 / "log.jsonl").read_text().splitlines() if line.strip()]
+        self.tmp = Path(tempfile.mkdtemp())
+        self.slot = self.tmp / "04"
+        shutil.copytree(SLOT04, self.slot)
+        p = mock.patch.object(dc, "WORKTREES", self.tmp / "none")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def reported(self, log=None):
+        code, text, entry = dc.check(MESSAGE04, "hal2", self.log if log is None else log, {"04": str(self.slot)})
+        self.assertEqual(code, 0, text)
+        return entry["note"].split("; ") if entry["note"] else []
+
+    def test_only_the_stop_of_the_04_train_is_missing(self):
+        self.assertEqual(self.reported(), ["2026-10-06T10:16:35"])
+        _, text, _ = dc.check(MESSAGE04, "hal2", self.log, {"04": str(self.slot)})
+        self.assertIn('"stop the 04-train. 12 should finish first"', text)
+
+    def test_the_stale_entry_goes_by_its_supersede_not_by_text(self):
+        before = [e for e in self.log if e["at"] < "2026-10-06T10:56"]
+        self.assertEqual(self.reported(before), ["2026-10-03T11:23:12", "2026-10-06T10:16:35"])
+
+    def test_without_the_checkout_the_cleanup_train_was_missing_too(self):
+        _, _, entry = dc.check(MESSAGE04, "hal2", self.log, ["04"])
+        self.assertEqual(entry["note"].split("; "), ["2026-10-06T09:39:21", "2026-10-06T10:16:35"])
+
+    def test_once_the_handoff_indexes_the_stop_nothing_is_missing(self):
+        handoff = self.slot / "HANDOFF.md"
+        handoff.write_text(handoff.read_text().replace("## Read first", """## Decisions
+
+- 2026-10-06 "stop the 04-train. 12 should finish first" (via farmer 04-9) · home: plan · ended 2026-10-06: 12 landed,
+  go 04-11
+
+## Read first"""))
+        self.assertEqual(self.reported(), [])
 
 
 if __name__ == "__main__":
