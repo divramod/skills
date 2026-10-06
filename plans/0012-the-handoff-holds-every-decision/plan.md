@@ -34,8 +34,8 @@ starting "after the landing: ...".
 | 2 | Decision check reads the checkout (B1): before reporting a decision missing, `decision_check` looks for its quote (normalized: case, whitespace, punctuation; the whole quote of 4+ words or a run of 8 words with 2 key words) in the asking checkout's `HANDOFF.md`, current plan and `INTENT.md`; `run` finds the checkout (own repo: the worktree's path; `<repo>/<slot>`: the worktree root's folder) | `python3 -m unittest test_decision_check` in skills/farmer/scripts: a quote in each of the three files counts present, a missing file or checkout changes nothing | done |
 | 3 | Subject, not mention (B2): a repo-wide entry concerns a slot only when its `what` names the slot outside parentheses (an aside such as "(06 ..., 04 plan 0094 step 7, ...)" or "(slot 04)" is no subject); the change's effect on hal2's real log listed in Notes | `python3 -m unittest test_decision_check` passes with the two cases; Notes list every hal2 decision whose concern changed | done |
 | 4 | Regression replay (C): fixtures trimmed from hal2 slot 04's `HANDOFF.md`, plan 0094, `INTENT.md` rows and the farmer log at the check; 04's exact message reports exactly "stop the 04-train. 12 should finish first"; with that decision in the fixture handoff's Decisions none missing | `python3 -m unittest test_decision_check` in skills/farmer/scripts: the replay tests pass | done |
-| 5 | Live: 04's message through `farmer.py decision-check --dry-run --repo ~/a/hal2` on hal2's real log and 04's real checkout, output recorded in Notes | the recorded output reports only the 04-train stop (or none once 04 holds it) | next |
-| 6 | Docs and suites: farmer SKILL.md "Decision checks" (the checkout's files, subject rule), decision_check docstring, check-plugins, every scripts suite of handoff and farmer | `python3 scripts/check-plugins.py` ok; `python3 -m unittest discover -s skills/farmer/scripts` and the handoff suite pass | |
+| 5 | Live: 04's message through `farmer.py decision-check --dry-run --repo ~/a/hal2` on hal2's real log and 04's real checkout, output recorded in Notes | the recorded output reports only the 04-train stop (or none once 04 holds it) | done |
+| 6 | Docs and suites: farmer SKILL.md "Decision checks" (the checkout's files, subject rule), decision_check docstring, check-plugins, every scripts suite of handoff and farmer | `python3 scripts/check-plugins.py` ok; `python3 -m unittest discover -s skills/farmer/scripts` and the handoff suite pass | next |
 | 7 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
 
 ## Pre-authorized
@@ -101,3 +101,7 @@ answered before implementation, with the user's words and the date; the run acts
 - Step 4: 04 recorded the 04-train stop in plan 0094 after the check (its Decisions, "via the farmer's decision
   check"); the fixture leaves those two lines out to show the files as the check saw them. The fixture log holds the
   42 decision and supersede entries for 04 or repo-wide up to 10:56:39, demo server names and a brief path scrubbed.
+- Step 5 (live, 2026-10-06): `farmer.py decision-check --message "<04's message>" --repo ~/a/hal2 --dry-run` on hal2's
+  real log and 04's real checkout: `farmer: decision check 04: none missing` (04's plan 0094 holds the stop since).
+  The same message on the real log with 04's files as the check saw them (the fixture checkout): `1 missing` /
+  `- 2026-10-06 · 04 · "stop the 04-train. 12 should finish first"` (the farmer's answer at 10:54 had 5).
