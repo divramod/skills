@@ -67,8 +67,9 @@ reports, the lead merges it. Elsewhere it prints nothing and the landing goes on
 **Through CI or locally.** `bash $S/landing-mode.sh` prints `ci` when `.github/workflows/land.yml` is in this
 worktree's `HEAD` or in origin's default branch: the landing then runs through GitHub Actions; read
 [references/ci.md](references/ci.md) and follow it in place of steps 1, 3 and 4 (steps 2 and 5 to 8 stay); before it
-takes the queue and before every candidate it pushes, `bash $S/land-runs.sh` waits until no `land.yml` run is
-unfinished (`gh run list --workflow land.yml`, queued runs too; [references/ci.md](references/ci.md#land)). Otherwise
+lands, it reserves the queue and `bash $S/land-runs.sh` waits until no `land.yml` run is unfinished (`gh run list
+--workflow land.yml`, queued runs too), again before a rerun with a new candidate (exit 3 or 4), never before an
+exit-6 rerun ([references/ci.md](references/ci.md#land)). Otherwise
 the steps below land locally.
 
 ### Milestone mode

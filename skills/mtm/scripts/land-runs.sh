@@ -3,17 +3,21 @@
 # so a landing through CI never reserves the queue or pushes a candidate while
 # another landing still runs or ships (references/ci.md). A run counts until its
 # status is `completed`: `queued` too (a ship job waiting for a runner is queued).
-#   land-runs.sh [--once] [--interval <s>] [<dir>]
+#   land-runs.sh [--once] [--interval <s>] [--max-wait <minutes>] [<dir>]
 # Exit 0: none unfinished. --once: exit 6 and list them instead of waiting.
+# Exit 7: still unfinished after --max-wait (default 60): a run stuck queued or
+# waiting (a parked runner, a pending approval); tell the farmer, do not push.
 # Exit 2: gh is missing. Exit 1: gh failed, nothing is known: do not push.
 set -euo pipefail
 once=0
 interval=60
+max_wait=60
 dir=.
 while [ $# -gt 0 ]; do
   case "$1" in
     --once) once=1 ;;
     --interval) shift; interval="$1" ;;
+    --max-wait) shift; max_wait="$1" ;;
     *) dir="$1" ;;
   esac
   shift
@@ -38,6 +42,10 @@ while :; do
   echo "land runs unfinished: $(echo "$runs" | paste -sd ',' - | sed 's/,/, /g')"
   if [ "$once" -eq 1 ]; then
     exit 6
+  fi
+  if [ "$SECONDS" -ge $((max_wait * 60)) ]; then
+    echo "land-runs.sh: still unfinished after ${max_wait} min: tell the farmer (a parked runner or a pending approval?); do not push" >&2
+    exit 7
   fi
   sleep "$interval"
 done

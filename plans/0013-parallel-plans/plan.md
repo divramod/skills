@@ -147,6 +147,14 @@ answered before implementation, with the user's words and the date; the run acts
   `origin/<lead>` lacks some of its work (`missing`). An idle subservant stops waking the farmer once its report is
   on `origin/NN`, or HEAD is in `origin/<lead>` and holds the report: HEAD in `origin/<lead>` alone is also true of a
   freshly created subservant.
+- 2026-10-06 (hal2's 02, step 10 review 2): "all 13 earlier findings are fixed"; four new: 1 MED land-runs.sh before
+  an exit-6 rerun blocks it past the 10-min park grace; 2 LOW a queue wait goes stale before the push; 3 LOW no time
+  limit; 4 LOW the guard resolves only folder names (`main`, named slots, "2" matched "02").
+- 2026-10-06 (servant, step 10 review 2) a CI landing reserves first (`worktree reserve`, which merge-to-main takes
+  over), then `land-runs.sh`, then `merge-to-main`; again only before a rerun after exit 3 or 4 (held already: no
+  reserve), never before an exit-6 rerun. `land-runs.sh --max-wait <min>` (default 60) exits 7: tell the farmer.
+  The guard resolves `<slot>` through `hal2-cli-git worktree list --json`, else by folder name compared as text
+  (`main`: the main checkout).
 
 ## Notes
 

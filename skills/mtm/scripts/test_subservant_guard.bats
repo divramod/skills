@@ -58,3 +58,35 @@ teardown() { rm -rf "$tmp"; }
   [ "$status" -eq 3 ]
   [[ "$output" == *"named '99'"* ]]
 }
+
+@test "a named slot resolves through hal2-cli-git's worktree list" {
+  mkdir -p "$tmp/bin" "$tmp/slots/farmer-hal2/plans"
+  git init -q "$tmp/slots/farmer-hal2"
+  echo "30 0013-parallel 2" > "$tmp/slots/farmer-hal2/plans/LEAD"
+  printf '#!/usr/bin/env bash\necho %s\n' "'{\"worktrees\":[{\"name\":\"farmer-hal2\",\"path\":\"$tmp/slots/farmer-hal2\"}]}'" > "$tmp/bin/hal2-cli-git"
+  chmod +x "$tmp/bin/hal2-cli-git"
+  cd "$tmp/wt"
+  PATH="$tmp/bin:$PATH" run bash "$here/subservant-guard.sh" farmer-hal2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"slot 30"* ]]
+}
+
+@test "main is the main checkout without hal2-cli-git" {
+  git -C "$tmp/wt" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  git -C "$tmp/wt" worktree add -q -b 33 "$tmp/slots/33"
+  mkdir -p "$tmp/bin" && printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/bin/hal2-cli-git" && chmod +x "$tmp/bin/hal2-cli-git"
+  mkdir -p "$tmp/wt/plans" && echo "07 0001-x 9" > "$tmp/wt/plans/LEAD"
+  cd "$tmp/slots/33"
+  PATH="$tmp/bin:$PATH" run bash "$here/subservant-guard.sh" main
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"slot 07"* ]]
+}
+
+@test "a slot name is compared as text: 2 is not 02" {
+  git -C "$tmp/wt" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  git -C "$tmp/wt" worktree add -q -b 02 "$tmp/slots/02"
+  mkdir -p "$tmp/bin" && printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/bin/hal2-cli-git" && chmod +x "$tmp/bin/hal2-cli-git"
+  cd "$tmp/wt"
+  PATH="$tmp/bin:$PATH" run bash "$here/subservant-guard.sh" 2
+  [ "$status" -eq 3 ]
+}

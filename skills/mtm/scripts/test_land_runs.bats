@@ -56,3 +56,10 @@ teardown() { rm -rf "$tmp"; }
   [ "$status" -eq 2 ]
   [[ "$output" == *"brew install gh"* ]]
 }
+
+@test "a run stuck past --max-wait exits 7 for the farmer" {
+  printf '%s\n' "70 land/05 queued" "70 land/05 queued" "70 land/05 queued" > "$tmp/runs"
+  run bash "$here/land-runs.sh" --interval 0 --max-wait 0 "$tmp"
+  [ "$status" -eq 7 ]
+  [[ "$output" == *"tell the farmer"* ]]
+}
