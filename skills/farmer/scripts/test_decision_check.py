@@ -384,5 +384,34 @@ class InTheCheckout(unittest.TestCase):
         self.assertEqual(dc.checkout("hal2/04", "hal2", {"04": "/x/04"}), Path("/x/04"))
 
 
+class Subject(unittest.TestCase):
+    """Skills plan 0012: a repo-wide decision concerns a slot when the slot is its subject, not an aside."""
+
+    ASK = {"at": "2026-10-05T07:12:28", "kind": "decision", "slot": "-",
+           "what": "user: ask every farmer round: (a) is the user away from the Mac, so UI tests may run (06 three "
+                   "classes, 04 plan 0094 step 7, 09 node UI tests)? (b) may slot 11 measure its benchmarks?"}
+    BUILT = {"at": "2026-10-05T22:04:13", "kind": "decision", "slot": "-",
+             "what": "handoff skill: a servant asks the farmer; built now by a servant in ~/a/skills (slot 04)"}
+    QUOTED = {"at": "2026-10-06T09:30:59", "kind": "decision", "slot": "-",
+              "what": 'the user: "if there is a conflict (who does what), then i prefer 02" (02 gets the work)'}
+
+    def test_a_slot_named_only_in_an_aside_is_not_concerned(self):
+        self.assertFalse(decision_log.concerns(self.ASK, "04", "hal2"))
+        self.assertFalse(decision_log.concerns(self.ASK, "06", "hal2"))
+        self.assertFalse(decision_log.concerns(self.BUILT, "04", "hal2"))
+        self.assertFalse(decision_log.concerns(self.BUILT, "hal2/04", "hal2"))
+
+    def test_another_repos_slot_counts_with_its_repo_named(self):
+        self.assertTrue(decision_log.concerns(self.BUILT, "skills/04", "hal2"))
+
+    def test_a_slot_named_in_the_sentence_or_the_users_words_is(self):
+        self.assertTrue(decision_log.concerns(self.ASK, "11", "hal2"))
+        self.assertTrue(decision_log.concerns(self.QUOTED, "02", "hal2"))
+        self.assertTrue(decision_log.concerns({**self.BUILT, "what": "04 builds the handoff skill"}, "04", "hal2"))
+
+    def test_nested_asides_go_too(self):
+        self.assertEqual(decision_log.subject("a (b (04) c) d").split(), ["a", "d"])
+
+
 if __name__ == "__main__":
     unittest.main()

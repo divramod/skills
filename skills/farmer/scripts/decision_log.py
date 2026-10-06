@@ -60,20 +60,36 @@ def names(text: str, slot: str) -> bool:
     return re.search(r"(?<![\w./:-])" + re.escape(slot) + r"(?![\w/:-])", text or "") is not None
 
 
+ASIDE = re.compile(r"\([^()\"“”]*\)")
+
+
+def subject(text: str) -> str:
+    """The text without its asides: a parenthetical holding no quote mark (an example list "(06 ..., 04 plan 0094 step
+    7)", "(slot 04)") names slots the decision is not about (skills plan 0012); the user's quoted words stay."""
+    while True:
+        bare = ASIDE.sub(" ", text or "")
+        if bare == text:
+            return bare
+        text = bare
+
+
 def slots(entry: dict) -> list[str]:
     return [s.strip() for s in str(entry.get("slot", "")).split(",")]
 
 
 def concerns(entry: dict, slot: str, repo: str) -> bool:
     """Is this `decision` entry for the slot (`<slot>` of the farmer's repo `repo`, or `<other repo>/<slot>`)? Its `slot`
-    names it, or it is repo-wide and its `what` names it."""
+    names it, or it is repo-wide and its `what` names it: a slot of the farmer's repo outside asides (`subject`), a
+    slot of another repo together with that repo's name."""
     own, _, bare = slot.rpartition("/")
     if slot in slots(entry) or (not own or own == repo) and bare in slots(entry):
         return True
     if not all(s in REPO_WIDE for s in slots(entry)):
         return False
     text = entry.get("what", "")  # the decision itself; a note naming a slot is bookkeeping ("relayed to 12")
-    return names(text, bare) and (not own or own == repo or re.search(rf"\b{re.escape(own)}\b", text) is not None)
+    if not own or own == repo:  # the slot must be the subject, not an aside (skills plan 0012)
+        return names(subject(text), bare)
+    return names(text, bare) and re.search(rf"\b{re.escape(own)}\b", text) is not None
 
 
 def when(entry: dict) -> dt.datetime:
