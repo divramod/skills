@@ -1,5 +1,7 @@
 # Plan 0014: The mtm skill and the farmer's merge trains follow hal2's lease and one-train rule
 
+Finished: 2026-10-07
+
 Landing: manual
 
 Created 2026-10-06. `plans/CURRENT_PLAN` names the active plan; helper files for this plan live next to this file.
@@ -28,7 +30,7 @@ starting "after the landing: ...".
 | 3 | The docs: merge-train SUBSKILL, instructions/trains.md and mtm.md, the boss's "Merge trains", SKILL.md's duty line | `grep -rn "at most 4" skills/farmer` finds nothing | done |
 | 4 | The mtm skill: `--keep-reserved` only when a step follows the landing, the finish landing without it, the lease explained, a background landing waited for by its task notification or PID, never a `pgrep` pattern (SKILL.md steps 4 and 5, references/ci.md) | `grep -c "pgrep" skills/mtm/SKILL.md skills/mtm/references/ci.md` names both | done |
 | 5 | All of the repository's script tests | `python3 -m unittest discover -s skills/farmer/scripts` green | done |
-| 6 | Land: `/mtm` here, or, while the main checkout holds foreign uncommitted edits to `skills/mtm/references/ci.md`, the patch in hal2's farmer slot `roles/farmer/pending/` and the farmer told (hal2 plan 0169 decision 14) | the change is on `origin/main`, or the patch file exists and the farmer has the line | next |
+| 6 | Land: `/mtm` here, or, while the main checkout holds foreign uncommitted edits to `skills/mtm/references/ci.md`, the patch in hal2's farmer slot `roles/farmer/pending/` and the farmer told (hal2 plan 0169 decision 14) | the change is on `origin/main`, or the patch file exists and the farmer has the line | done |
 
 ## Pre-authorized
 
