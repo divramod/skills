@@ -35,7 +35,7 @@ TEXT = {
                        "--no-edit <branch>`, one at a time; none touches a file of yours or of another), run your "
                        "quick checks and land as usual (/mtm). A merge that conflicts, or a passenger's change that "
                        "fails the landing before it lands: `git reset --hard ORIG_HEAD` for it, land without it and "
-                       "name it in one line.",
+                       "name it in one line.{subject}",
     "passenger": TRAIN + ": your branch {branch} rides in slot {carrier}'s landing; keep your ticket and wait. "
                          "After it lands run /mfm; your /mtm then lands what is left (plan steps checked after the "
                          "landing), probably nothing.",
@@ -43,6 +43,19 @@ TEXT = {
               "it, tell the carrier to reset that merge (`git reset --hard ORIG_HEAD`) and land without it, and that "
               "passenger to land alone after /mfm.",
 }
+
+
+# The candidate's subject (the land run's title) is the carrier's CURRENT_PLAN (hal2 plan 0131, the user 2026-10-06:
+# "or better, only <CURRENT_PLAN>"): a train names every car's.
+SUBJECT = (" Before your landing, write `{line}` as the first line of your plans/CURRENT_PLAN (your landing's commit "
+           "and run are named after it; drop a reset passenger's name).")
+
+
+def current_plan(worktree: str) -> str:
+    """The first line of the worktree's plans/CURRENT_PLAN, or ''."""
+    current = Path(worktree) / "plans/CURRENT_PLAN"
+    text = current.read_text() if current.exists() else ""
+    return next((line.strip() for line in text.splitlines() if line.strip()), "")
 
 
 def plan_done(worktree: str) -> bool | None:
@@ -70,7 +83,8 @@ def slot_info(main: str, tickets: list[dict]) -> dict[str, dict]:
         if t.get("state") != "waiting" or not t.get("worktree") or not t.get("branch"):
             continue
         files = git(main, "diff", "--name-only", f"{base}...{t['branch']}").split("\n")
-        out[t["slot"]] = {"finished": plan_done(t["worktree"]) is True, "files": {f for f in files if f}}
+        out[t["slot"]] = {"finished": plan_done(t["worktree"]) is True, "files": {f for f in files if f},
+                          "current": current_plan(t["worktree"])}
     return out
 
 
@@ -105,13 +119,16 @@ def group(tickets: list[dict], info: dict[str, dict], skip: set[str]) -> list[li
     return trains
 
 
-def train_actions(cars: list[str], branches: dict[str, str], panes: dict) -> list[dict]:
-    """The carrier's message first; the passengers' and the record follow it (dropped with it by tick.fresh)."""
+def train_actions(cars: list[str], branches: dict[str, str], panes: dict, plans: dict[str, str] = None) -> list[dict]:
+    """The carrier's message first (with the train's CURRENT_PLAN line: every car's, joined by ` + `); the passengers'
+    and the record follow it (dropped with it by tick.fresh)."""
     carrier, passengers = cars[0], cars[1:]
+    line = " + ".join(n for n in ((plans or {}).get(c, "") for c in cars) if n)
+    subject = SUBJECT.format(line=line) if line else ""
     key, window = "train:" + "+".join(cars), WINDOW.total_seconds()
     first = f"{key}:{carrier}"
     out = [act("trains", "carrier", "send", carrier, pane=panes.get(carrier), key=first, window=window,
-               text=TEXT["carrier"].format(branches=", ".join(branches[p] for p in passengers)))]
+               text=TEXT["carrier"].format(branches=", ".join(branches[p] for p in passengers), subject=subject))]
     out += [act("trains", "passenger", "send", p, pane=panes.get(p), key=f"{key}:{p}", window=window, after=first,
                 text=TEXT["passenger"].format(branch=branches[p], carrier=carrier)) for p in passengers]
     return out + [act("trains", "train", "record", carrier, key=key, window=window, after=first,
@@ -120,8 +137,8 @@ def train_actions(cars: list[str], branches: dict[str, str], panes: dict) -> lis
 
 def failures(trains: dict[str, dict], tickets: list[dict], red: list[dict] = ()) -> list[dict]:
     """A train whose carrier's landing failed: its ticket held by a failed local landing, or (CI, mtm_ci) a red
-    land.yml run of the carrier started after the train (red releases the queue, so no hold shows it): wake the
-    farmer to split it."""
+    land.yml run of the carrier started after the train (a red CI landing keeps its reservation hold, which says
+    nothing about the run): wake the farmer to split it."""
     held = {t["slot"]: t for t in tickets if (t.get("hold") or {}).get("reason") == "failed"}
     out = []
     for key, tr in trains.items():
@@ -156,7 +173,7 @@ def plan(tickets: list[dict], info: dict[str, dict], log: list[dict], panes: dic
     branches = {t["slot"]: t.get("branch") or t["slot"] for t in tickets}
     out = failures(trains, tickets, red)
     for cars in group(tickets, info, riding):
-        out += train_actions(cars, branches, panes)
+        out += train_actions(cars, branches, panes, {s: i.get("current", "") for s, i in info.items()})
     return out
 
 

@@ -59,6 +59,13 @@ class Plan(unittest.TestCase):
         self.assertEqual(out[0]["pane"], "%1")
         self.assertIn("rides in slot 17's landing; keep your ticket", out[1]["text"])
         self.assertEqual({a.get("after") for a in out[1:]}, {"train:17+21+12:17"})
+        self.assertNotIn("CURRENT_PLAN", out[0]["text"], "no car names a plan")
+
+    def test_the_carrier_writes_every_cars_current_plan_as_the_trains_name(self):
+        i = {s: dict(v, current=c) for (s, v), c in zip(self.I.items(), ("0131-landings", "", "owner/3/a-shot"))}
+        out = trains.plan(self.Q, i, [], {}, NOW)
+        self.assertIn("write `0131-landings + owner/3/a-shot` as the first line of your plans/CURRENT_PLAN",
+                      out[0]["text"])
 
     def test_a_train_under_way_is_not_planned_again(self):
         log = [logged("train:17+21+12")]
@@ -90,6 +97,7 @@ class PlanDone(unittest.TestCase):
             (Path(d) / "plans").mkdir()
             (Path(d) / "plans/CURRENT_PLAN").write_text("owner/3/some-shot\n")
             self.assertIsNone(trains.plan_done(d))
+            self.assertEqual(trains.current_plan(d), "owner/3/some-shot")
 
 
 if __name__ == "__main__":
