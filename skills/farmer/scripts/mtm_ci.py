@@ -11,6 +11,8 @@ give mtm_scan.py.
 import datetime as dt
 import re
 
+import gh_runs
+
 LAND_FILE = ".github/workflows/land.yml"
 RED = {"failure", "timed_out", "startup_failure", "cancelled"}
 NOT_COUNTED = {"park", "merge"}  # park's state is no verdict; a red merge is "main moved"
@@ -72,9 +74,14 @@ def summary(runs: list[dict], jobs_of, since: float) -> list[dict]:
 
 
 def landings(run_json, main: str, since: float) -> list[dict]:
-    runs = run_json(["gh", "run", "list", "--workflow", "land.yml", "--limit", "100", "--json", FIELDS], main) or []
-    return summary(runs, lambda rid: (run_json(["gh", "run", "view", str(rid), "--json", "jobs"], main)
-                                      or {}).get("jobs", []), since)
+    """The recent landing rows; the not-landed runs' jobs fetched together, once per round (gh_runs)."""
+    runs = gh_runs.listed(run_json, ["gh", "run", "list", "--workflow", "land.yml", "--limit", "100", "--json", FIELDS],
+                          main) or []
+    need = [r for r in runs if slot_of(r.get("headBranch") or "") and started(r) >= since and outcome(r) != "landed"]
+    jobs = gh_runs.jobs([r["databaseId"] for r in need],
+                        {r["databaseId"] for r in need if r.get("status") == "completed"},
+                        gh_runs.view_jobs(run_json, main))
+    return summary(runs, lambda rid: jobs.get(rid, []), since)
 
 
 def running_run(recent: list[dict], slot: str) -> dict | None:

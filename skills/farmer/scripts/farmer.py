@@ -135,7 +135,7 @@ def print_round(r: dict) -> None:
     if r.get("summary"):
         print(f"summary: {r['summary']}")
     if r.get("timing"):
-        print(tick.timing_line(r["timing"]))
+        print(tick.timing_line(r["timing"], r.get("gh")))
 
 
 def run_tick(repo: str, dry: bool, as_json: bool, all_due: bool = False) -> int:

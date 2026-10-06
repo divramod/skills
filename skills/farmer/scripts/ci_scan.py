@@ -24,6 +24,7 @@ import sys
 import time
 from pathlib import Path
 
+import gh_runs
 import roles
 
 DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
@@ -114,10 +115,10 @@ def waiting(runs: list[dict], now: float) -> dict | None:
             "why": f"{r.get('workflowName')} queued {age} min on {r.get('headBranch')}: waking the runner"}
 
 
-def failed_jobs(rid: int, cwd: str) -> list[str]:
-    view = run_json(["gh", "run", "view", str(rid), "--json", "jobs"], cwd) or {}
+def failed_jobs(jobs: list[dict]) -> list[str]:
+    """`<job>: <its first failed step>` of a run's red jobs."""
     return [f"{j.get('name')}: {next((s.get('name') for s in j.get('steps') or [] if s.get('conclusion') == 'failure'), '?')}"
-            for j in view.get("jobs") or [] if j.get("conclusion") in RED]
+            for j in jobs or [] if j.get("conclusion") in RED]
 
 
 def handled(main: str) -> set[int]:
@@ -129,7 +130,7 @@ def handled(main: str) -> set[int]:
 
 def scan(repo: str, show_all: bool) -> dict:
     main = main_checkout(repo)
-    runs = run_json(["gh", "run", "list", "--limit", "100", "--json", FIELDS], main) or []
+    runs = gh_runs.listed(run_json, ["gh", "run", "list", "--limit", "100", "--json", FIELDS], main) or []
     if not runs and not any((Path(main) / ".github/workflows").glob("*.y*ml")):
         return {"repo": main, "workflows": False, "findings": []}
     default = (run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], main).strip()
@@ -140,9 +141,10 @@ def scan(repo: str, show_all: bool) -> dict:
     wake = waiting(runs, time.time()) if (Path(main) / WAKE_TOOL).exists() else None
     if wake:
         found.insert(0, {**wake, "tool": str(Path(main) / WAKE_TOOL)})
-    for f in found:
-        if f["kind"].endswith("-red"):
-            f["failed_jobs"] = failed_jobs(f["run"], main)
+    red = [f for f in found if f["kind"].endswith("-red")]
+    jobs = gh_runs.jobs([f["run"] for f in red], {f["run"] for f in red}, gh_runs.view_jobs(run_json, main))
+    for f in red:  # a red run is completed: its jobs are kept on disk (gh_runs)
+        f["failed_jobs"] = failed_jobs(jobs.get(f["run"], []))
     return {"repo": main, "workflows": True, "default": default, "findings": found}
 
 

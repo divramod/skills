@@ -40,6 +40,7 @@ from logstate import paused, read_log, waiting_for_user  # noqa: F401  (tick.<na
 import delegation
 import deliver
 import due
+import gh_runs
 import mtm_scan
 import roles
 import wake
@@ -283,7 +284,7 @@ def delegate_all(main: str, out: dict, dry: bool, now: dt.datetime) -> None:
 
 def summarize(main: str, top: str, out: dict) -> None:
     """The round's summary from the log: a file of its own when the round did something, latest.md always."""
-    snap = mtm_scan.snapshot(top, 24)
+    snap = mtm_scan.snapshot(top, 24, fetch=False)  # the round's merge-from-main fetched origin
     logged = [a for a in out["done"] if a["do"] != "ran"]
     notes = "\n".join(f"- {a['duty']} {a['kind']} {a['slot']}: {a.get('text', '')}" for a in logged) or "quiet"
     if logged or snap["findings"]:
@@ -311,6 +312,16 @@ def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None, al
             stay_current(top, main, out)
             out["done"].append(out["planned"][0])
         edit, go_on = role_edit(top)
+    with gh_runs.round(gh_runs.cache_dir(mtm_scan.state_dir(main))) as out["gh"]:
+        rest(out, top, main, handlers, now, dry, all_due, edit, go_on)
+    timing["total"] = round(time.monotonic() - start, 2)
+    return out
+
+
+def rest(out: dict, top: str, main: str, handlers: dict, now: dt.datetime | None, dry: bool, all_due: bool,
+         edit: list[dict], go_on: bool) -> None:
+    """The round after its frame: plan, execute, delegate, wake, summarize (inside one gh_runs round)."""
+    timing = out["timing"]
     out["planned"] += edit
     rnd = plan_round(top, handlers, now, dry, timing, all_due) if go_on else {"due": [], "settings": {}, "actions": [],
                                                                               "stop": True}
@@ -333,10 +344,10 @@ def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None, al
     if not dry:
         with timed(timing, "summary"):
             summarize(main, top, out)
-    timing["total"] = round(time.monotonic() - start, 2)
-    return out
 
 
-def timing_line(timing: dict) -> str:
-    """`timing: frame 2.1s, duty:mtm 3.4s, ..., total 9.8s`: where the round's time went (tick.log)."""
-    return "timing: " + ", ".join(f"{name} {secs:.1f}s" for name, secs in timing.items())
+def timing_line(timing: dict, gh: dict | None = None) -> str:
+    """`timing: frame 2.1s, duty:mtm 3.4s, ..., total 9.8s; gh 2 list, 3 view, 5 cached`: where the round's time
+    went (tick.log) and the gh calls it made (gh_runs)."""
+    line = "timing: " + ", ".join(f"{name} {secs:.1f}s" for name, secs in timing.items())
+    return line + (f"; gh {gh['list']} list, {gh['view']} view, {gh['cached']} cached" if gh else "")
