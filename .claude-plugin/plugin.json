@@ -11,6 +11,7 @@
   "license": "MIT",
   "keywords": ["skills", "summarize", "video", "youtube", "article", "github", "twitter", "x", "hacker-news", "reddit", "pdf", "digest", "topic", "research"],
   "skills": [
+    "./skills/adapt-merge-queue",
     "./skills/c",
     "./skills/cleanup",
     "./skills/continue",
