@@ -2,7 +2,8 @@
 
 A repository whose default branch has `.github/workflows/land.yml` lands
 through CI: each landing is a `land.yml` run on `land/<slot>`, green ones
-fast-forward the default branch, red ones release the merge queue at once.
+fast-forward the default branch, red ones keep the merge queue held for their
+worktree until its fix lands.
 Here they become the same recent-landings rows the local landings' records
 give mtm_scan.py.
 """

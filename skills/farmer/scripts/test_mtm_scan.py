@@ -58,6 +58,14 @@ class Findings(unittest.TestCase):
         self.assertEqual(f[0]["kind"], "priority")
         self.assertIn("#1 in the queue, waiting", f[0]["why"])
 
+    def test_a_ci_landing_under_test_is_no_idle_reservation(self):
+        q = [{"slot": "12", "state": "held", "enqueued": "2026-10-03T02:33:17Z", "process_alive": True,
+              "hold": {"reason": "reserved"}}]
+        w = [{"slot": "12", "ahead": 2, "agent_state": "idle", "agent_idle_seconds": 9000}]
+        self.assertNotIn("reserved-idle", [f["kind"] for f in scan.findings(snap(queue=q, worktrees=w))])
+        q[0]["process_alive"] = False
+        self.assertIn("reserved-idle", [f["kind"] for f in scan.findings(snap(queue=q, worktrees=w))])
+
     def test_a_held_landing_whose_agent_works_is_left_alone(self):
         q = [{"slot": "12", "state": "held", "process_alive": False, "hold": {"reason": "failed"}}]
         w = [{"slot": "12", "ahead": 2, "agent_state": "working"}]

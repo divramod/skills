@@ -10,9 +10,9 @@ orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs ju
 
 **Through CI** (the default branch has `.github/workflows/land.yml`, hal2 plan 0131): landings are candidates on
 `land/<slot>` with a pull request each, tested by GitHub Actions. The scan reads them from GitHub (`ci: true`;
-`gh pr list --head 'land/'`, `gh run list --workflow land.yml`); a red candidate releases the queue at once, so
-there is no held landing to wake or release for it: its session reads the red job, reproduces it with
-`gate/main.sh <job>`, fixes and lands again. A slot that stays red and idle shows as `work-not-queued`. Load
+`gh pr list --head 'land/'`, `gh run list --workflow land.yml`); a red candidate keeps the queue held for its
+worktree until its fix lands (the user, 2026-10-06: "run landing until everything is fixed and merged and then release"): its session reads the red jobs, reproduces them with `gate/main.sh <job>`, fixes
+and lands again at once. While a CI landing's run is tested its process lives, so its reservation is not idle. Load
 pauses and flaky disabling are rarely needed (the gates do not run on the Mac). The farmer's own `farmer` branch
 lands like any slot's (an ordinary `/mtm` of the farmer slot), its per-round mfm stays.
 
@@ -84,8 +84,8 @@ You never decide product questions, secrets, deploys to production, or anything 
   - edit permissions, settings or CLAUDE.md files;
   - decide product questions;
   - deploy.
-- `release` is allowed only for a `held` ticket with no live landing process whose session did not move after one
-  wake-up. Always tell its session.
+- `release` is allowed only for a `held` ticket with no live landing process and no session (none, or ended): a
+  holder with a live session is only woken, again every hour, never released (the user, 2026-10-06: "run landing until everything is fixed and merged and then release"). Always tell its session.
 - Disabled tests are always recorded in the ledger and get a shot. The boss never deletes a test.
 - Never act on the boss's own session. Never start `/mtm` for a slot without its session being told, except for
   orphaned work (R7).

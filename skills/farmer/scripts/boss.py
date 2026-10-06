@@ -17,7 +17,6 @@ from tick import act
 
 HERE = Path(__file__).resolve().parent
 BOSS = "farmer (merge-to-main boss)"
-SECOND_LOOK = dt.timedelta(minutes=10)  # a wake gets this long before the queue is released
 REWAKE = dt.timedelta(hours=1)  # the same judgment item wakes the model at most hourly
 ORPHAN = dt.timedelta(hours=3)
 JUDGE = ("active-long", "work-not-queued", "long-queue", "paused")
@@ -26,8 +25,8 @@ TEXT = {
                         "landing now (/mtm). A test that fails only under load: say so in one line.",
     "reserved-idle": BOSS + ": you reserved the merge queue for your plan's finish and nothing lands. Finish and "
                             "land now (/mtm).",
-    "released": BOSS + ": your held landing did not move after a wake, so I released the merge queue. Fix it, then "
-                       "/mtm again to requeue.",
+    "released": BOSS + ": your held landing has no session, so I released the merge queue. Fix it, then /mtm "
+                       "again to requeue.",
     "moves": BOSS + ": the merge queue moves again ({slot} was released).",
     "priority": "merge-to-main boss: land now. The user wants slot {slot} on main first ({note}). What is "
                 "committed lands; unfinished steps land after it.",
@@ -41,11 +40,6 @@ TEXT = {
 
 def when(entry: dict) -> dt.datetime:
     return dt.datetime.fromisoformat(entry["at"])
-
-
-def last(log: list[dict], key: str) -> dt.datetime | None:
-    hits = [when(e) for e in log if e.get("key") == key]
-    return max(hits) if hits else None
 
 
 class Planner:
@@ -85,19 +79,19 @@ class Planner:
                       dt.timedelta(hours=6))
 
     def held(self, f: dict) -> None:
+        """A held queue nobody moves. A holder with a live session is woken (again every hour) and never released:
+        a red landing keeps the queue until its fix lands (the user, 2026-10-06: "run landing until everything is
+        fixed and merged and then release"). Only a holder without a session is released."""
         slot, seq = f["slot"], self.ticket(f["slot"]).get("seq")
         key, w = f"wake:{slot}:{seq}", self.wt.get(slot, {})
-        woken = last(self.log, key)
-        if w.get("agent_state") is not None and woken is None:
+        if w.get("agent_state") not in (None, "ended"):
             text = TEXT[f["kind"]].format(failure=f.get("failure") or f["why"])
-            self.tell(slot, f["kind"], text, key, dt.timedelta(days=7))
-            return
-        if woken is not None and self.now - woken < SECOND_LOOK:
+            self.tell(slot, f["kind"], text, key, REWAKE)
             return
         release = f"release:{slot}:{seq}"
         self.add("release", "run", slot, dt.timedelta(days=7), key=release,
                  argv=["hal2-cli-git", "worktree", "release", slot, "--json"], text=f"released the queue held by {slot}",
-                 why="no session" if woken is None else "did not move after a wake")
+                 why="no session")
         self.tell(slot, "released", TEXT["released"], f"released:{slot}:{seq}", dt.timedelta(days=7), after=release)
         for t in self.queue:
             if t["state"] == "waiting":

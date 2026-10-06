@@ -191,7 +191,9 @@ def findings(snap: dict) -> list[dict]:
         age = now - (parse_time(head.get("enqueued")) or now)
         agent = by_slot.get(head["slot"], {}).get("agent_state")
         hold = head.get("hold") or {}
-        if hold.get("reason") == "reserved" and agent not in BUSY and age > HELD_IDLE_AFTER:
+        # A CI landing holds the queue as its reservation while its run is tested: its process lives.
+        if hold.get("reason") == "reserved" and not head.get("process_alive") and agent not in BUSY \
+                and age > HELD_IDLE_AFTER:
             out.append({"kind": "reserved-idle", "slot": head["slot"],
                         "why": f"reserved the queue, its agent is {agent}, nothing lands"})
         elif hold.get("reason") != "reserved" and not head.get("process_alive") and agent not in BUSY:

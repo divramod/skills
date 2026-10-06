@@ -1,7 +1,8 @@
 # Woken for merge-to-main (mtm)
 
-The tick already woke failed landings, released held queues (local landings; through CI a red candidate releases
-the queue itself and its session fixes and lands again, see [mtm's CI page](../../mtm/references/ci.md)), put priority slots first, paused and resumed heavy
+The tick already woke failed landings and released the held queues of slots without a session (a holder with a live
+session is woken hourly, never released; through CI a red candidate keeps the queue until its session's fix lands, see
+[mtm's CI page](../../mtm/references/ci.md)), put priority slots first, paused and resumed heavy
 work and restarted orphans with a HANDOFF.md. You get what needs a look. Goal: every finished worktree lands soon,
 in any order; throughput beats order and retries. Check each finding is still true
 (`hal2-cli-git worktree queue --json`), act, then log it:

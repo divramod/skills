@@ -5,9 +5,10 @@ GitHub Actions (hal2 plan 0131, `.adr/landings-on-github-actions.md` in hal2). N
 `hal2-cli-git worktree merge-to-main` takes the worktree's turn in the merge queue, merges the default branch in,
 builds the `--no-ff` candidate, pushes the branch and `land/<slot>`, opens or updates the landing's pull request
 (`land/<slot>` → the default branch) and waits until `land.yml` has tested the candidate: green, its `merge` job
-fast-forwards the default branch to the candidate (the PR shows merged); red, the queue is released at once. There
-is no hold, no attempts counter and no `reserve`: SKILL.md's steps 2 and 5 to 8 apply as they are, this page
-replaces steps 1, 3 and 4.
+fast-forwards the default branch to the candidate (the PR shows merged); red, the queue stays held for this worktree
+until its fix lands (the user, 2026-10-06: "run landing until everything is fixed and merged and then release"). There
+is no attempts counter and no `reserve`: SKILL.md's steps 2 and 5 to 8 apply as they are, this page replaces steps
+1, 3 and 4.
 
 ## Land
 
@@ -22,7 +23,7 @@ shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 720000
 | 0 | `landed` | the default branch is the candidate (`commit`), the PR (`pull_request`) merged; `retests` counts how often the default branch moved under it. `reserved: true`: go to SKILL.md [step 5](../SKILL.md#5-finish-the-plan-and-land-it). Report `warnings` (e.g. the main checkout could not be pulled) |
 | 0 | `nothing` | the branch has nothing the default branch lacks: step 5 |
 | 6 | `waiting` | the slice passed: in the queue (`ahead`) or while the candidate is tested (`candidate`, `run`). The place and the candidate are kept: **rerun the same command at once**, as often as it takes |
-| 4 | `gate_failed` | the candidate is red, the queue is already released: [fix it](#red) and run again |
+| 4 | `gate_failed` | the candidate is red; the queue stays held for this worktree (`released: false`): [fix it](#red) and run again at once, the rerun adopts the hold at the head of the queue. Never release it yourself while you can fix: it is released when the branch lands. An older hal2-cli-git answers `released: true`: rerun at once all the same (it queues again) |
 | 3 | `conflict` | merging the default branch in conflicts (`files`): resolve as the [mfm](../../mfm/SKILL.md) skill's **Conflicts** says, commit, rerun (the queue stays held for this worktree meanwhile: go straight on) |
 | 5 | `stopped`, `cancelled`, `interrupted` | the user ended it: report and stop, never rerun on your own (your own shell's time limit is no user stop: rerun) |
 | 1 | `error` | uncommitted changes: SKILL.md step 2. Anything else: report the `message`; the queue may be held for this worktree, so ask the user (fix, or `hal2-cli-git worktree release`) |
@@ -50,7 +51,8 @@ same job in this checkout (`code/bash/scripts/gate/main.sh <job>`):
 
 A job red for a reason outside the code (the runner offline, a network failure, a full disk) is no code fix: rerun
 the landing once; when it is red the same way again, report it and ask the user (the farmer's ci duty may already
-be on it). Keep going until the PR is merged: every fix is a new candidate, and the queue is free meanwhile.
+be on it). Keep going until the PR is merged: every fix is a new candidate, and the queue stays held for this worktree
+meanwhile, so every other landing waits on you: fix and run again at once.
 
 ## After the landing
 

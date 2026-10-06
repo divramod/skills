@@ -35,14 +35,22 @@ Q = [{"slot": "04", "state": "held", "seq": 7, "landing": "L1"}, {"slot": "05", 
 
 
 class Held(unittest.TestCase):
-    def test_wake_first_then_release_and_tell_the_waiters(self):
+    def test_a_holder_with_a_session_is_woken_hourly_and_never_released(self):
+        # The user, 2026-10-06: "run landing until everything is fixed and merged and then release".
         s = snap([HELD], Q, [wt("04"), wt("05")])
         self.assertEqual(plan(s), [("send", "held-idle", "04")])
-        woke = [{"at": at(5), "key": "wake:04:7", "kind": "held-idle"}]
-        self.assertEqual(plan(s, woke), [])
-        woke[0]["at"] = at(20)
-        self.assertEqual(plan(s, woke), [("run", "release", "04"), ("send", "released", "04"), ("send", "moves", "05")])
-        released = woke + [{"at": at(1), "key": "release:04:7"}]
+        woke = [{"at": at(20), "key": "wake:04:7", "kind": "held-idle"}]
+        self.assertEqual(plan(s, woke), [], "no release after a wake")
+        woke[0]["at"] = at(70)
+        self.assertEqual(plan(s, woke), [("send", "held-idle", "04")], "woken again after an hour")
+        reserved = snap([dict(HELD, kind="reserved-idle")], Q, [wt("04", state="sleeping"), wt("05")])
+        self.assertEqual(plan(reserved), [("send", "reserved-idle", "04")])
+
+    def test_a_holder_whose_session_ended_is_released_and_the_waiters_told(self):
+        s = snap([HELD], Q, [wt("04", state="ended"), wt("05")])
+        self.assertEqual(plan(s), [("run", "release", "04"), ("send", "released", "04"), ("send", "moves", "05")])
+        released = [{"at": at(1), "key": "release:04:7"}, {"at": at(1), "key": "released:04:7"},
+                    {"at": at(1), "key": "moves:04:7:05"}]
         self.assertEqual(plan(s, released), [])
 
     def test_a_holder_without_session_is_released_at_once(self):
