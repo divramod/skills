@@ -4,10 +4,12 @@
   farmer.py start-check [--repo <dir>] [--json]
       may the farmer start here? The farmer slot, holding nothing but roles/farmer/ROLE.md changes, the
       tools, a valid roles/farmer/ROLE.md; prints the loop's cron
-  farmer.py tick [--repo <dir>] [--dry-run] [--json]
+  farmer.py tick [--repo <dir>] [--dry-run [--all-due]] [--json]
       one round as code: stay current (merge-from-main), the user's roles/farmer/ROLE.md edit, what is due,
       each due item's actions, the log, the summary. Items that need judgment are collected as
-      `wake`, notices for the user as `notify`. --dry-run plans the round and touches nothing.
+      `wake`, notices for the user as `notify`. --dry-run plans the round and touches nothing; --all-due (dry runs
+      only) counts every opted-in duty and task due, to measure a full round. Ends with a `timing:` line: the
+      seconds of the frame, each due item (planning and execution), delegations, wake, summary and the total
   farmer.py delegate --brief <file> --title <title> [--repo <dir>] [--dry-run] [--json]
       hand a brief the woken farmer wrote to a servant (the same limit, slot choice, prompt and ledger as the tick's
       delegations); --dry-run prints the calls it would make
@@ -132,9 +134,11 @@ def print_round(r: dict) -> None:
                                                  else ""))
     if r.get("summary"):
         print(f"summary: {r['summary']}")
+    if r.get("timing"):
+        print(tick.timing_line(r["timing"]))
 
 
-def run_tick(repo: str, dry: bool, as_json: bool) -> int:
+def run_tick(repo: str, dry: bool, as_json: bool, all_due: bool = False) -> int:
     missing = [t for t in TOOLS if not shutil.which(t)]
     if missing:
         print(f"farmer.py: missing {', '.join(missing)}; run {HERE}/install-prerequisites.sh", file=sys.stderr)
@@ -143,6 +147,9 @@ def run_tick(repo: str, dry: bool, as_json: bool) -> int:
         print("farmer.py: mode is `claude` (the farmer's Claude loop runs the rounds); a tick runs only in timer mode "
               "(`farmer.py mode timer`), or use --dry-run", file=sys.stderr)
         return 4
+    if all_due and not dry:
+        print("farmer.py: --all-due only measures: use it with --dry-run", file=sys.stderr)
+        return 4
     with (state(repo) / "tick.lock").open("w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -150,7 +157,7 @@ def run_tick(repo: str, dry: bool, as_json: bool) -> int:
             print("busy: another tick runs")
             return 0
         timer.rotate(state(repo))
-        r = tick.run(repo, dry, HANDLERS)
+        r = tick.run(repo, dry, HANDLERS, all_due=all_due)
         if not dry and not r.get("problem"):
             follow_cron(repo)
     print(json.dumps(r, indent=1, default=str) if as_json else "", end="")
@@ -241,6 +248,7 @@ def parser() -> argparse.ArgumentParser:
     sc = sub.add_parser("start-check")
     t = sub.add_parser("tick")
     t.add_argument("--dry-run", action="store_true")
+    t.add_argument("--all-due", action="store_true")
     for x in (sc, t):
         x.add_argument("--repo", default=os.getcwd())
         x.add_argument("--json", action="store_true")
@@ -330,7 +338,7 @@ def main(argv: list[str]) -> int:
                                         args.dry_run)
         print(text)
         return code
-    return run_tick(args.repo, args.dry_run, args.json)
+    return run_tick(args.repo, args.dry_run, args.json, args.all_due)
 
 
 if __name__ == "__main__":
