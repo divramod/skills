@@ -3,7 +3,16 @@
 # latest main right away. Never fails a delivery: a merge that cannot happen now waits for the
 # farmer's next round (it merges main every round too).
 set -uo pipefail
-farmer="${HAL_FARMER_BRANCH:-farmer}"
+# The farmer works in the slot and branch farmer-<project> (hal2 .adr/roles-folder.md): <project> is origin's
+# repository name, else the main checkout's folder, lowercase, other characters than [a-z0-9-] as "-".
+project() {
+  local url name
+  url="$(git -C "${HAL_HOOK_MAIN_ROOT:-.}" remote get-url origin 2>/dev/null || true)"
+  name="${url##*[/:]}"; name="${name%.git}"
+  [ -n "$name" ] || name="$(basename "$(cd "${HAL_HOOK_MAIN_ROOT:-.}" && pwd)")"
+  printf '%s' "$name" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9-' '-' | sed 's/^-*//; s/-*$//'
+}
+farmer="${HAL_FARMER_BRANCH:-farmer-$(project)}"
 dir="$(git -C "${HAL_HOOK_MAIN_ROOT:-.}" worktree list --porcelain \
   | awk -v b="branch refs/heads/$farmer" '/^worktree /{w=substr($0,10)} $0==b{print w}')"
 [ -n "$dir" ] || exit 0

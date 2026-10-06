@@ -1,6 +1,6 @@
 # farmer › merge-train
 
-The duty `trains` of the [farmer](../../SKILL.md), opted in by FARMER-ROLE.md (`trains: "*/15 * * * *"`). A long
+The duty `trains` of the [farmer](../../SKILL.md), opted in by roles/farmer/ROLE.md (`trains: "*/15 * * * *"`). A long
 merge queue lands faster when finished branches that touch different files land as one: the gates run once. Its
 rule-based part runs as code in the tick: `trains.py` (`python3 $S/trains.py plan --repo <main>` shows what it
 would do now, sending nothing). What needs judgment wakes the farmer session with

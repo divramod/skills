@@ -11,7 +11,7 @@
       mark that stop handled (the next scans skip it until the session moves on)
 
 Reads hal2-cli-agents list --json and Claude Code's transcripts; writes only
-~/skills/farmer/<repo>/lead.jsonl. Exit 0 on success, 2 when a tool is missing.
+lead.jsonl in the farmer's state folder (roles/farmer/ of its slot). Exit 0 on success, 2 when a tool is missing.
 """
 
 import argparse
@@ -25,7 +25,9 @@ import sys
 import time
 from pathlib import Path
 
-DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
+import roles
+
+DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
 PROJECTS = Path(os.environ.get("CLAUDE_PROJECTS_DIR", Path.home() / ".claude/projects"))
 MINUTE = 60
 BLOCKED_AFTER = 5 * MINUTE
@@ -111,7 +113,7 @@ def classify(agent: dict, said: str, now: float) -> tuple[str, str] | None:
 
 def handled(main: str, now: float | None = None) -> set[tuple[str, int]]:
     """The stops marked handled within the last REWAKE seconds: one still there after that counts again."""
-    f = DATA / Path(main).name / "lead.jsonl"
+    f = roles.state_dir(main, DATA) / "lead.jsonl"
     if not f.exists():
         return set()
     cutoff, out = (now or time.time()) - REWAKE, set()
@@ -183,8 +185,7 @@ def main(argv: list[str]) -> int:
             if not result["needs_help"]:
                 print("nobody needs help")
     else:
-        d = DATA / Path(main_checkout(args.repo)).name
-        d.mkdir(parents=True, exist_ok=True)
+        d = roles.state_dir(args.repo, DATA)
         entry = {"at": dt.datetime.now().isoformat(timespec="seconds"), "session": args.session,
                  "since": args.since, "what": args.what, "note": args.note}
         with (d / "lead.jsonl").open("a") as f:

@@ -2,17 +2,17 @@
 """The farmer's deterministic side: what runs without a model (.adr/deterministic-first.md, plan 0007).
 
   farmer.py start-check [--repo <dir>] [--json]
-      may the farmer start here? The farmer slot, holding nothing but FARMER-ROLE.md changes, the
-      tools, a valid FARMER-ROLE.md; prints the loop's cron
+      may the farmer start here? The farmer slot, holding nothing but roles/farmer/ROLE.md changes, the
+      tools, a valid roles/farmer/ROLE.md; prints the loop's cron
   farmer.py tick [--repo <dir>] [--dry-run] [--json]
-      one round as code: stay current (merge-from-main), the user's FARMER-ROLE.md edit, what is due,
+      one round as code: stay current (merge-from-main), the user's roles/farmer/ROLE.md edit, what is due,
       each due item's actions, the log, the summary. Items that need judgment are collected as
       `wake`, notices for the user as `notify`. --dry-run plans the round and touches nothing.
   farmer.py delegate --brief <file> --title <title> [--repo <dir>] [--dry-run] [--json]
       hand a brief the woken farmer wrote to a servant (the same limit, slot choice, prompt and ledger as the tick's
       delegations); --dry-run prints the calls it would make
   farmer.py check task <name> | flaky | orphans [--repo <dir>]
-      a task's Check (machine form, see tasks.py), or a built-in check for FARMER-ROLE.md tasks: flaky ledger
+      a task's Check (machine form, see tasks.py), or a built-in check for roles/farmer/ROLE.md tasks: flaky ledger
       entries whose servant runs no plan, slots with work and no session; exit 0 fine, 1 with what is wrong
   farmer.py wake [--done <seq>] [--repo <dir>] [--json]
       what the tick handed to the farmer session (wake.json: items that need judgment, relays, notices, failed
@@ -33,10 +33,10 @@
       who runs the rounds: the farmer's Claude session (`claude`, the default) or the external
       timer (`timer`). A tick without --dry-run runs only in timer mode, so the two never overlap.
 
-State: ~/skills/farmer/<repo>/ (FARMER_DIR overrides the root): mode, tick.lock, log.jsonl, runs.jsonl, wake.json,
-timer.json, tick.log, handoff.md.
-Exit 0 ok (also: another tick holds the lock, `busy`), 1 FARMER-ROLE.md invalid, 2 a tool missing,
-3 no FARMER-ROLE.md, 4 not the farmer slot, a slot holding other work, or not in timer mode.
+State: roles/farmer/ of the farmer slot farmer-<repo> (roles.py; $FARMER_DIR/<repo>/ overrides it): mode, tick.lock, log.jsonl, runs.jsonl, wake.json,
+timer.json, tick.log, handoff.md, summaries/; its .gitignore ignores all but ROLE.md and itself.
+Exit 0 ok (also: another tick holds the lock, `busy`), 1 roles/farmer/ROLE.md invalid, 2 a tool missing,
+3 no roles/farmer/ROLE.md, 4 not the farmer slot (or one still named `farmer`: migrate first), a slot holding other work, or not in timer mode.
 """
 
 import argparse
@@ -55,6 +55,7 @@ import delegation
 import due
 import duties
 import role_sync
+import roles
 import handoff
 import tasks
 import tick
@@ -79,9 +80,7 @@ HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned 
 
 
 def state(repo: str) -> Path:
-    d = due.DATA / due.repo_name(repo)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return roles.state_dir(repo, due.DATA)
 
 
 def mode(repo: str) -> str:
@@ -100,7 +99,7 @@ def start_check(repo: str) -> tuple[int, dict]:
     top = tick.git(repo, "rev-parse", "--show-toplevel")
     role = Path(top) / tick.ROLE
     if not role.exists():
-        return 3, {"ok": False, "problems": [f"no {role}: nothing is opted in (template: templates/FARMER-ROLE.md)"]}
+        return 3, {"ok": False, "problems": [f"no {role}: nothing is opted in (template: templates/ROLE.md)"]}
     items, settings, problems = due.schedule(role.read_text())
     if problems:
         return 1, {"ok": False, "problems": problems}
@@ -155,7 +154,7 @@ def run_tick(repo: str, dry: bool, as_json: bool) -> int:
 
 
 def follow_cron(repo: str) -> None:
-    """Reinstall the timer when FARMER-ROLE.md changed the loop's cron."""
+    """Reinstall the timer when roles/farmer/ROLE.md changed the loop's cron."""
     code, check = start_check(repo)
     st = state(repo)
     if code == 0 and timer.installed(st).get("cron") not in (None, check["loop_cron"]):

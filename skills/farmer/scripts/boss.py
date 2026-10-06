@@ -118,8 +118,8 @@ class Planner:
                 self.tell(slot, "go", TEXT["go"], f"go:{landing}:{slot}", dt.timedelta(days=1))
 
     def flaky(self, f: dict) -> None:
-        test, ledger = f["test"], Path(self.ctx["main"]).name
-        flaky_md = mtm_scan.DATA / ledger / "flaky.md"
+        test = f["test"]
+        flaky_md = mtm_scan.state_dir(self.ctx["main"]) / "flaky.md"
         if flaky_md.exists() and test in flaky_md.read_text():
             return
         load = any(test in x["tests"] and x["load_hint"] for x in self.snap["landings"])

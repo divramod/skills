@@ -35,12 +35,13 @@ import delegation
 import deliver
 import due
 import mtm_scan
+import roles
 import wake
 
 OFFLINE = 75  # EX_TEMPFAIL: a recheck that could not tell (this machine is offline) is not a failure
 
-FARMER_SLOT = "farmer"
-ROLE = "FARMER-ROLE.md"
+ROLE = roles.ROLE_FILE
+ROLE_FILES = (roles.ROLE_FILE, roles.ROLE_IGNORE)  # what the farmer slot may change
 MFM = ["hal2-cli-git", "worktree", "merge-from-main", "--json"]
 
 
@@ -66,13 +67,18 @@ def default_ref(repo: str) -> str:
 
 
 def slot_problem(repo: str) -> str | None:
-    """None when `repo` is the farmer slot holding nothing but FARMER-ROLE.md changes, else why not."""
+    """None when `repo` is the farmer slot (`farmer-<project>`) holding nothing but changes of its role files
+    (ROLE_FILES), else why not."""
     top = git(repo, "rev-parse", "--show-toplevel")
-    if not top or Path(top).name != FARMER_SLOT:
-        return f"not the farmer slot ({top or repo}): start me with `hal2-cli-git worktree run farmer --agent claude`"
+    if top and Path(top).name == roles.ROLE:
+        return (f"the farmer slot {top} is not migrated to {roles.slot_name(top)}: "
+                f"run `farmer.py migrate --repo {top}`")
+    if not top or not roles.is_slot(top):
+        slot = roles.slot_name(top or repo)
+        return f"not the farmer slot {slot} ({top or repo}): start me with `hal2-cli-git worktree run farmer --agent claude`"
     changed = set(git(top, "diff", "--name-only", f"{default_ref(top)}...HEAD").split())
-    changed |= {line[3:].strip() for line in git(top, "status", "--porcelain").splitlines()}
-    other = sorted(changed - {ROLE, ""})
+    changed |= {line[3:].strip() for line in git(top, "status", "--porcelain", "-uall").splitlines()}
+    other = sorted(changed - {*ROLE_FILES, ""})
     return f"the farmer slot holds more than {ROLE}: {', '.join(other)}" if other else None
 
 
@@ -81,8 +87,8 @@ def act(duty: str, kind: str, do: str, slot: str = "-", **fields) -> dict:
 
 
 def role_edit(top: str) -> tuple[list[dict], bool]:
-    """The user's uncommitted FARMER-ROLE.md edit: commit it when valid. Returns (actions, round may go on)."""
-    if not git(top, "status", "--porcelain", "--", ROLE):
+    """The user's uncommitted role file edit (ROLE_FILES): commit it when valid. Returns (actions, round may go on)."""
+    if not git(top, "status", "--porcelain", "-uall", "--", *ROLE_FILES):
         return [], True
     path = Path(top) / ROLE
     if not path.exists():
@@ -91,12 +97,14 @@ def role_edit(top: str) -> tuple[list[dict], bool]:
     if problems:
         return [act("frame", "role-invalid", "notify",
                     text=f"{ROLE} edit not committed, nothing runs: " + "; ".join(problems))], False
-    return [act("frame", "role-commit", "run", argv=["git", "commit", "-q", "-m", "farmer-role: the user's change",
-                                                    "--", ROLE], text=f"committed the user's {ROLE} edit")], True
+    files = [f for f in ROLE_FILES if (Path(top) / f).exists()]
+    return [act("frame", "role-add", "run", argv=["git", "add", "--", *files], text=f"staged the user's {ROLE} edit"),
+            act("frame", "role-commit", "run", argv=["git", "commit", "-q", "-m", "farmer-role: the user's change",
+                                                    "--", *files], text=f"committed the user's {ROLE} edit")], True
 
 
 def due_items(top: str, now: dt.datetime | None = None) -> tuple[list[dict], dict, list[str]]:
-    """(the due duties and tasks, the settings, problems) from the slot's FARMER-ROLE.md."""
+    """(the due duties and tasks, the settings, problems) from the slot's role file (ROLE)."""
     path = Path(top) / ROLE
     if not path.exists():
         return [], {}, [f"no {ROLE}: nothing is opted in"]
@@ -138,7 +146,7 @@ def fresh(actions: list[dict], log: list[dict], now: dt.datetime) -> list[dict]:
         # An open ask holds what the farmer would type; a lead wake still reaches it: it finds the answer (plan 0137).
         judge = a["do"] == "wake" and a.get("duty") == "lead"
         held = (a["slot"] in asked and ((talk and not judge) or a["kind"] == "orphan")) \
-            or (a["slot"] == FARMER_SLOT and talk)
+            or (roles.is_farmer_label(a["slot"]) and talk)
         if old or held or a.get("after") in dropped:
             dropped.add(key)
             continue

@@ -27,8 +27,8 @@ class Plan(unittest.TestCase):
         [a] = role_sync.plan_sync({}, CTX, {"differs": True, "sha": "abc"}, {})
         self.assertEqual((a["do"], a["duty"], a["key"]), ("delegate", "sync", "sync:abc"))
         self.assertIn("land now", a["prompt"])
-        self.assertLess(a["prompt"].index("/mfm"), a["prompt"].index("git merge --no-edit farmer"))
-        self.assertLess(a["prompt"].index("git merge --no-edit farmer"), a["prompt"].index("/mtm"))
+        self.assertLess(a["prompt"].index("/mfm"), a["prompt"].index("git merge --no-edit {farmer_slot}"))
+        self.assertLess(a["prompt"].index("git merge --no-edit {farmer_slot}"), a["prompt"].index("/mtm"))
         self.assertNotIn("/plan new", a["prompt"])
 
     def test_one_sync_at_a_time(self):
@@ -48,6 +48,7 @@ class State(unittest.TestCase):
             origin, slot = Path(d) / "origin", Path(d) / "farmer"
             git(d, "init", "-q", "-b", "main", str(origin))
             git(origin, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "0")
+            (origin / tick.ROLE).parent.mkdir(parents=True)
             (origin / tick.ROLE).write_text("a\n")
             git(origin, "add", tick.ROLE)
             git(origin, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "role")

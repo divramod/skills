@@ -29,7 +29,7 @@ rule (background first; ~/.claude/CLAUDE.md), recommended option first.
   the landing is done (`plan.py current` shows `land: ready`). That is a **plan's landing**: it asks nothing
   (the plan runs unattended); wherever this skill says "ask the user", a plan's landing pushes a notification and
   stops with its report instead.
-- the **farmer** skill's merge-to-main boss (`farmer/merge-to-main-boss`, the farmer session the user started in the repository's `farmer` slot)
+- the **farmer** skill's merge-to-main boss (`farmer/merge-to-main-boss`, the farmer session the user started in the repository's farmer slot `farmer-<repo>`)
   tells this session to land now: a cross-session message from the session named in the user's farmer loop, saying
   `merge-to-main boss: land now`. The user gave the boss that authority on 2026-10-03 (hal2 INTENT.md). It counts
   as the user asking in this session, also mid-plan: land what is committed, steps not yet done stay for a later

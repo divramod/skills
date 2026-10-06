@@ -2,7 +2,7 @@
 
 A round's items that need the model, `wake` (judgment), `relay` (a templated message for a busy session, sent
 verbatim with SendMessage), `notify` (a notice for the user, pushed batched) and the delegations that could not be
-placed (`delegate-failed`), go into `~/skills/farmer/<repo>/wake.json`:
+placed (`delegate-failed`), go into `wake.json` of the state folder (`roles/farmer/` of the farmer slot):
 
   {"woken_at": <iso or null>, "items": [{"seq": n, "duty", "kind", "slot", "do", "text", "evidence"?, "brief"?,
                                          "instructions": <the file to read for this kind>}, ...]}

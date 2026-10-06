@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 import farmer
+import tick
 import timer
 from test_farmer import Repo
 
@@ -74,7 +75,7 @@ class Install(Repo):
         n = len(self.cmds)
         farmer.follow_cron(str(self.slot))
         self.assertEqual(len(self.cmds), n)
-        (self.slot / "FARMER-ROLE.md").write_text((self.slot / "FARMER-ROLE.md").read_text()
+        (self.slot / tick.ROLE).write_text((self.slot / tick.ROLE).read_text()
                                                  .replace('mtm: "*/15', 'mtm: "*/5'))
         with contextlib.redirect_stdout(io.StringIO()):
             farmer.follow_cron(str(self.slot))

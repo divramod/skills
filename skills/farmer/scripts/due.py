@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""What the farmer runs this round: the duties and tasks FARMER-ROLE.md opts in to, due by their cron.
+"""What the farmer runs this round: the duties and tasks roles/farmer/ROLE.md opts in to, due by their cron.
 
   due.py due [--repo <dir>] [--json]
       the due duties and tasks (each with its cron and last run) and the farmer loop's cron
   due.py ran <name> [--repo <dir>]
       record that a duty (`duty:<name>`) or task (`task:<name>`) ran now (runs.jsonl)
   due.py check [--repo <dir>] [--json]
-      validate FARMER-ROLE.md: every duty and task with a valid cron, the required settings
+      validate roles/farmer/ROLE.md: every duty and task with a valid cron, the required settings
   due.py list [--repo <dir>] [--json]
       every opted-in duty and task with its cron, last run and whether it is due
 
 Nothing is implicit: only the duties under the front matter's `duties:` (name → cron) and the
 tasks under `## Tasks` (each `### <name>` with its `- **Cron**: <cron>` line) run, and the
-setting `notify` is required, `servant_limit` (`auto` or a number) defaults to `auto`. No FARMER-ROLE.md: nothing runs (exit 3).
+setting `notify` is required, `servant_limit` (`auto` or a number) defaults to `auto`. No roles/farmer/ROLE.md: nothing runs (exit 3).
 A cron is standard 5-field notation in local time: minute hour day-of-month month day-of-week
 (`*/15 * * * *`, `0 * * * *`, `7 9 * * *`, `0 8 * * 1-5`). An item is due when one of its fire
-times passed since it last ran. Writes only ~/skills/farmer/<repo>/runs.jsonl.
-Exit 0 ok, 1 invalid FARMER-ROLE.md, 3 no FARMER-ROLE.md.
+times passed since it last ran. Writes only runs.jsonl in the farmer's state folder (roles/farmer/ of its slot).
+Exit 0 ok, 1 invalid roles/farmer/ROLE.md, 3 no roles/farmer/ROLE.md.
 """
 
 import argparse
@@ -28,7 +28,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
+import roles
+
+DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
 DUTIES = ("mtm", "lead", "ci", "prs", "sync", "watch", "autoclear", "trains")
 NOTIFY = ("every-round", "hourly", "daily", "never")
 MIN_TICK = 5
@@ -192,7 +194,7 @@ def repo_name(repo: str) -> str:
 
 
 def last_runs(repo: str) -> dict[str, dt.datetime]:
-    f = DATA / repo_name(repo) / "runs.jsonl"
+    f = roles.state_dir(repo, DATA) / "runs.jsonl"
     out: dict[str, dt.datetime] = {}
     if f.exists():
         for e in map(json.loads, f.read_text().splitlines()):
@@ -201,9 +203,7 @@ def last_runs(repo: str) -> dict[str, dt.datetime]:
 
 
 def record_run(repo: str, name: str, at: dt.datetime | None = None) -> None:
-    d = DATA / repo_name(repo)
-    d.mkdir(parents=True, exist_ok=True)
-    with (d / "runs.jsonl").open("a") as f:
+    with (roles.state_dir(repo, DATA) / "runs.jsonl").open("a") as f:
         f.write(json.dumps({"at": (at or dt.datetime.now()).isoformat(timespec="seconds"), "name": name}) + "\n")
 
 
@@ -222,15 +222,15 @@ def main(argv: list[str]) -> int:
     if args.cmd == "ran":
         record_run(args.repo, args.name)
         return 0
-    role = Path(git_out(["rev-parse", "--show-toplevel"], args.repo) or args.repo) / "FARMER-ROLE.md"
+    role = Path(git_out(["rev-parse", "--show-toplevel"], args.repo) or args.repo) / roles.ROLE_FILE
     if not role.exists():
-        print(f"due.py: no {role}: nothing is opted in, the farmer does nothing (template: templates/FARMER-ROLE.md)",
+        print(f"due.py: no {role}: nothing is opted in, the farmer does nothing (template: templates/ROLE.md)",
               file=sys.stderr)
         return 3
     items, settings, problems = schedule(role.read_text())
     if problems:
         print(json.dumps({"ok": False, "problems": problems}, indent=1) if args.json else
-              "FARMER-ROLE.md problems:\n" + "\n".join(f"- {x}" for x in problems), file=None if args.json else sys.stderr)
+              f"{roles.ROLE_FILE} problems:\n" + "\n".join(f"- {x}" for x in problems), file=None if args.json else sys.stderr)
         return 1
     now, last = dt.datetime.now(), last_runs(args.repo)
     rows = [{"name": n, "cron": c, "last": last[n].isoformat() if n in last else None,
@@ -244,7 +244,7 @@ def main(argv: list[str]) -> int:
     if args.json:
         print(json.dumps(result, indent=1))
     else:
-        print(f"FARMER-ROLE.md ok; farmer loop cron `{result['loop_cron']}`; {settings}")
+        print(f"{roles.ROLE_FILE} ok; farmer loop cron `{result['loop_cron']}`; {settings}")
         for name, mode in modes.items():
             print(f"- task {name}: {'run by the tick' if mode == 'machine' else 'prose: the woken model runs it'}")
         for x in result["items"]:

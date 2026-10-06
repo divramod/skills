@@ -3,12 +3,13 @@
 What the [farmer](SKILL.md) reads when a woken item or a call needs it: the role file, the branch, the log,
 delegation by hand, and the decisions behind it all.
 
-## FARMER-ROLE.md
+## roles/farmer/ROLE.md
 
-Each repository's own farmer settings and tasks live in `FARMER-ROLE.md` in its root ([template](templates/FARMER-ROLE.md)).
-It is **maintained in the `farmer` branch**: the user edits it in the farmer slot
-(`~/.hal/git/worktree/<repo>/farmer/FARMER-ROLE.md`), and the tick reads it from there at the start of every
-round. A change counts from the next round, without waiting for a landing.
+Each repository's own farmer settings and tasks live in `roles/farmer/ROLE.md` ([template](templates/ROLE.md)), the
+role folder hal2's `.adr/roles-folder.md` gives every role. It is **maintained in the farmer branch**
+(`farmer-<repo>`): the user edits it in the farmer slot
+(`~/.hal/git/worktree/<repo>/farmer-<repo>/roles/farmer/ROLE.md`), and the tick reads it from there at the start of
+every round. A change counts from the next round, without waiting for a landing.
 
 - **Front matter: settings, all required.**
   - `duties`: maps each duty it opts in to to its cron (`mtm: "*/15 * * * *"`). A duty left out does not run.
@@ -34,26 +35,38 @@ round. A change counts from the next round, without waiting for a landing.
 - **Only the user changes it.** The farmer writes what it learned and the rules it wants as **proposals** in its
   round summary. A servant applies one only after the user says yes.
 - **Missing or invalid:** the farmer runs nothing: no duty, no task, no loop. It tells the user what is missing,
-  offers the [template](templates/FARMER-ROLE.md), and ends. It never writes or drafts the file unasked.
+  offers the [template](templates/ROLE.md), and ends. It never writes or drafts the file unasked.
+
+## The role folder
+
+`roles/farmer/` of the farmer slot holds `ROLE.md` and every runtime file of the farmer (the state the SKILL.md lists,
+the round summaries in `summaries/`). **The role decides what is ignored**: the folder's own `.gitignore` (`*`,
+`!.gitignore`, `!ROLE.md`; `roles.py` writes it when it is missing) ignores everything but itself and the role file,
+so nothing the farmer writes ever shows in the slot's `git status` or reaches a commit. A file the role means to
+commit gets its own `!<path>` line there. The repository's root `.gitignore` names nothing of the role. The tick
+commits a new or changed `.gitignore` together with the user's `ROLE.md` edit. `roles.state_dir` never creates the
+slot: without a slot `farmer-<repo>` the scripts that write state stop with the start (or migrate) hint.
 
 ## The farmer branch
 
-The `farmer` branch is main plus the user's `FARMER-ROLE.md` commits, and it syncs with main on every landing:
+The farmer branch `farmer-<repo>` is main plus the user's `roles/farmer/ROLE.md` commits, and it syncs with main on every landing:
 
 - **farmer → main:** the repository's `.hal/hooks/merge-to-main/worktree-pre-merge.sh`
-  ([template](templates/hooks/worktree-pre-merge.sh)) merges the `farmer` branch into every branch being landed, but
-  only when `farmer` changes nothing except `FARMER-ROLE.md`, so no code skips the gates.
+  ([template](templates/hooks/worktree-pre-merge.sh)) merges the farmer branch into every branch being landed, but
+  only when it changes nothing except `roles/farmer/ROLE.md` and `roles/farmer/.gitignore`, so no code skips the
+  gates (`HAL_FARMER_BRANCH` overrides the branch's name).
 - **main → farmer:** `.hal/hooks/merge-to-main/main-post-commit.sh` ([template](templates/hooks/main-post-commit.sh))
   merges the new main into the farmer slot after each landing. The farmer also merges main every round.
-- **The user's edits:** each round, when `FARMER-ROLE.md` in the slot differs from the committed one,
+- **The user's edits:** each round, when `roles/farmer/ROLE.md` in the slot differs from the committed one,
   `python3 $S/due.py check` decides:
-  - valid: commit it, that file alone (`farmer-role: the user's change`), and log it;
+  - valid: commit it with the role folder's `.gitignore`, those files alone (`farmer-role: the user's change`), and
+    log it;
   - invalid: leave it uncommitted, notify the user with the problems, and run nothing this round.
 - **Missing hooks:** when the repository lacks either hook, the farmer delegates one servant to add them from the
   templates (logged). Until they have landed, the farmer's commits only reach main when the user lands them.
-- **The `sync` duty** (opt-in, `role_sync.py`): when main's `FARMER-ROLE.md` differs from the farmer branch's, one
-  servant is told directly, without a plan: `/mfm`, then `git merge --no-edit farmer`, then `/mtm` (the boss's "land
-  now"). One sync at a time; the next round's stay-current brings the new main back into `farmer`. It needs no hooks.
+- **The `sync` duty** (opt-in, `role_sync.py`): when main's `roles/farmer/ROLE.md` differs from the farmer branch's, one
+  servant is told directly, without a plan: `/mfm`, then `git merge --no-edit farmer-<repo>`, then `/mtm` (the boss's "land
+  now"). One sync at a time; the next round's stay-current brings the new main back into the farmer branch. It needs no hooks.
 
 ## The log
 
@@ -80,7 +93,7 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
    has it, or the session whose work it concerns can do it in its own plan, send that session a message instead.
 2. **Limit.** At most `servant_limit` farmer-started servants at a time (`auto`: while the load allows). These are the log's `delegate` entries whose slot still has
    their plan in `CURRENT_PLAN`. When the limit is reached, the brief waits in `briefs/` for the next round.
-3. **Brief.** Write `~/skills/farmer/<repo>/briefs/<date>-<slug>.md`. It holds:
+3. **Brief.** Write `roles/farmer/briefs/<date>-<slug>.md` in the farmer slot. It holds:
    - what is wrong, with the evidence quoted as data;
    - where the fix belongs;
    - the done-when check;
@@ -92,7 +105,7 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
    `python3 $K/create-worktree-session/scripts/create.py --prompt "<prompt>"`. Its first prompt runs `/mfm`, then
    the given prompt.
 5. **Role file**: `farmer.py delegate --brief <file> --title <title>` writes it on its own; by hand, fill
-   [templates/SERVANT-ROLE.md](templates/SERVANT-ROLE.md) into `~/skills/farmer/<repo>/servants/<title-slug>.md`
+   [templates/SERVANT-ROLE.md](templates/SERVANT-ROLE.md) into `roles/farmer/servants/<title-slug>.md`
    (runtime state, never committed). Sessions the user started get none, but they ack too.
    **Prompt**, one paragraph:
 
@@ -116,18 +129,18 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
 
 - The goal: get things running and keep them running, autonomously wherever possible. The farmer is the user's
   helper, started only by the user.
-- One farmer per repository, in its `farmer` slot. It never changes its own branch (except committing the user's
-  FARMER-ROLE.md), and every fix goes to a servant
+- One farmer per repository, in its slot `farmer-<repo>` (hal2 plan 0143; `farmer` before). It never changes its own branch (except committing the user's
+  roles/farmer/ROLE.md), and every fix goes to a servant
   with a plan.
 - Servants: at most `servant_limit` at a time (`auto` by load, or a number); idle sessions first (the user's too), else new ones. They run the same model as the
   user's servants (create-worktree-session's default).
 - Notification: every round that has open items, batched into one push.
-- **Nothing implicit**: every duty and task is an opt-in in FARMER-ROLE.md, each with its own cron (5-field
+- **Nothing implicit**: every duty and task is an opt-in in roles/farmer/ROLE.md, each with its own cron (5-field
   notation). The settings are required, and without the file the farmer runs nothing. The loop runs at the
   shortest interval, and a round runs only what is due (`due.py`).
-- `FARMER-ROLE.md`: settings plus the repository's tasks, in the root (allowlisted), **maintained in the `farmer`
-  branch** so a change counts from the next round. Every landing carries it to main, and main flows back into
-  `farmer` (two hooks). It is the user's word and may widen authority per task. Only the user edits it; the farmer
+- `roles/farmer/ROLE.md`: settings plus the repository's tasks, in the role folder (`FARMER-ROLE.md` in the root
+  before hal2 plan 0143), **maintained in the farmer branch** so a change counts from the next round. Every landing
+  carries it to main, and main flows back into the farmer branch (two hooks). It is the user's word and may widen authority per task. Only the user edits it; the farmer
   commits the edit.
 - sanity-watch and fix-autoclear run as the farmer's duties, replacing their own loops.
 - A busy session without `plans/CURRENT_PLAN` is told to fill it in (development-lead).

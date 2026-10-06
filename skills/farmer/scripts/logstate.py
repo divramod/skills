@@ -2,13 +2,12 @@
 slots with an open question to the user, the slots the boss paused."""
 
 import datetime as dt
-from pathlib import Path
 
 import mtm_scan
 
 
 def read_log(main: str) -> list[dict]:
-    return mtm_scan.entries(mtm_scan.DATA / Path(main).name / "log.jsonl")
+    return mtm_scan.entries(mtm_scan.state_dir(main) / "log.jsonl")
 
 
 ANSWERS = ("answered", "answer", "decision")  # log kinds that close a slot's open `ask` (plan 0137)

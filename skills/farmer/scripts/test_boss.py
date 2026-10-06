@@ -96,7 +96,7 @@ class Work(unittest.TestCase):
         self.assertEqual(plan(snap([f], landings=hinted)), [("delegate", "flaky", "08")])
         plain = [dict(hinted[0], load_hint=False)]
         self.assertEqual(plan(snap([f], landings=plain)), [("wake", "flaky", "08")])
-        (self.tmp / "hal2").mkdir()
+        (self.tmp / "hal2").mkdir(exist_ok=True)
         (self.tmp / "hal2" / "flaky.md").write_text("- 2026-10-03 t disabled\n")
         self.assertEqual(plan(snap([f], landings=hinted)), [])
 

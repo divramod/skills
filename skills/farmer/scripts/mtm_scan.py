@@ -12,8 +12,8 @@
       set or clear the boss's queue pause flag (sessions are told by the boss)
   scan.py summary [--repo <dir>] [--notes <text>]
       scan, then write the round's summary (queue, landings, worktrees, findings, the
-      boss's actions and notes) to <main>/plans/farmer/<day>/<HHMM>.md and
-      latest.md; the folder ignores itself (.gitignore `*`), so it is never committed
+      boss's actions and notes) to summaries/<day>/<HHMM>.md and latest.md in the farmer's state
+      folder (roles/farmer/ of its slot, ignored by the role folder's .gitignore)
   scan.py priority <slot>... [--note <why>] | priority --clear
       the slots the user wants landed first (findings name them first)
   scan.py front <slot>... [--repo <dir>]
@@ -24,7 +24,7 @@
 
 Reads hal2 (hal2-cli-git worktree queue, hal2-cli-agents list), git and the recent
 landings: GitHub's land.yml runs (gh) where the default branch has land.yml (mtm_ci.py),
-else `hal2-cli-git worktree landings`; writes only ~/skills/farmer/<repo>/ and <main>/plans/farmer/. Exit 0 on success,
+else `hal2-cli-git worktree landings`; writes only the farmer's state folder (roles/farmer/ of its slot). Exit 0 on success,
 2 when a tool is missing.
 """
 
@@ -39,9 +39,11 @@ import sys
 import time
 from pathlib import Path
 
+import roles
+
 import mtm_ci
 
-DATA = Path(os.environ.get("FARMER_DIR", Path.home() / "skills/farmer"))
+DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
 TOOLS = ("hal2-cli-git", "hal2-cli-agents", "git")
 
 MINUTE = 60
@@ -330,9 +332,8 @@ def front(main: str, slots: list[str], by: str = "the farmer's merge-to-main bos
 
 
 def state_dir(main: str) -> Path:
-    d = DATA / Path(main).name
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    """The farmer's state folder: roles/farmer/ of its slot, or FARMER_DIR's (roles.state_dir)."""
+    return roles.state_dir(main, DATA)
 
 
 LOG_FIELDS = ("kind", "slot", "what", "note")
@@ -359,11 +360,9 @@ def log(main: str, entry: dict) -> None:
 
 
 def summary_dir(main: str) -> Path:
-    d = Path(main) / "plans" / "farmer"
+    """The round summaries: summaries/ in the state folder (ignored with the rest of roles/farmer/)."""
+    d = state_dir(main) / "summaries"
     d.mkdir(parents=True, exist_ok=True)
-    ignore = d / ".gitignore"
-    if not ignore.exists():
-        ignore.write_text("*\n")
     return d
 
 

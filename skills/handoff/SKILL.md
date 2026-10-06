@@ -33,7 +33,7 @@ is lost. `S=<skill-dir>/scripts`.
    python3 $S/decisions.py       # the plan's Decisions and Pre-authorized, HANDOFF.md's Open; the farmer; the message
    ```
    - **A farmer runs** for the repository: the one HANDOFF.md's `Farmer:` line names, else the session `ListAgents`
-     shows in this repository's `farmer` slot (`~/.hal/git/worktree/<repo>/farmer`). Send it the printed message by
+     shows in this repository's farmer slot (`~/.hal/git/worktree/<repo>/farmer-<repo>`; `farmer` before hal2 plan 0143). Send it the printed message by
      SendMessage (`decision check <slot>: I have these decisions: <list>. Did I forget one?`; for a farmer of
      another repository pass `--farmer-repo <its repo>` when HANDOFF.md does not name it). Do not wait for the
      answer: go on with the next steps. When it arrives (`farmer: decision check <slot>: ...`), write each missing

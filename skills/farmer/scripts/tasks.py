@@ -1,4 +1,4 @@
-"""FARMER-ROLE.md tasks the tick runs itself (plan 0007 step 5).
+"""The role file's (roles/farmer/ROLE.md) tasks the tick runs itself (plan 0007 step 5).
 
 A task is **machine-run** when its lines are in the strict form:
 
@@ -25,6 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import roles
 from tick import OFFLINE, act
 
 FARMER = [sys.executable, str(Path(__file__).resolve().parent / "farmer.py")]
@@ -120,7 +121,7 @@ def outcome(kind: str, name: str, why: str) -> dict:
 
 def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check, net=online) -> list[dict]:
     name = item["name"].split(":", 1)[1]
-    spec = (specs if specs is not None else parse((Path(ctx["top"]) / "FARMER-ROLE.md").read_text())).get(name)
+    spec = (specs if specs is not None else parse((Path(ctx["top"]) / roles.ROLE_FILE).read_text())).get(name)
     if not spec or not spec["machine"]:
         return [act("task", name, "wake", key=f"task-wake:{name}", window=3600,
                     text=f"task {name}: not in the machine form, run it as written", evidence=spec and spec["text"])]
@@ -148,7 +149,7 @@ def plan_task(item: dict, ctx: dict, specs: dict | None = None, check=run_check,
 def flaky_open(main: str, slots: dict[str, dict]) -> list[str]:
     """Ledger entries not back yet whose servant slot runs no plan any more."""
     import mtm_scan
-    f = mtm_scan.DATA / Path(main).name / "flaky.md"
+    f = mtm_scan.state_dir(main) / "flaky.md"
     out = []
     for line in (f.read_text().splitlines() if f.exists() else []):
         if not line.startswith("- "):
@@ -180,7 +181,7 @@ def builtin(what: str, top: str, net=online) -> tuple[int, str]:
     elif what == "orphans":
         bad = [f"{f['slot']}: {f['why']}" for f in orphans(top)]
     else:
-        spec = parse((Path(top) / "FARMER-ROLE.md").read_text()).get(what)
+        spec = parse((Path(top) / roles.ROLE_FILE).read_text()).get(what)
         if not spec or not spec["check"]:
             return 2, f"no machine-run task {what!r}"
         ok, why = run_check(spec["check"], top, main)

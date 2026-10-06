@@ -147,12 +147,16 @@ class Summary(unittest.TestCase):
             finally:
                 scan.DATA = old
 
-    def test_the_summary_folder_ignores_itself(self):
+    def test_the_summaries_live_in_the_state_folder(self):
         import tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual((scan.summary_dir(d) / ".gitignore").read_text(), "*\n")
-            self.assertTrue((Path(d) / "plans/farmer").is_dir())
+            old, scan.DATA = scan.DATA, Path(d) / "state"
+            try:  # the summaries live in the state folder, ignored with the rest of roles/farmer/
+                self.assertEqual(scan.summary_dir(str(Path(d) / "hal2")), Path(d) / "state/hal2/summaries")
+                self.assertTrue(scan.summary_dir(str(Path(d) / "hal2")).is_dir())
+            finally:
+                scan.DATA = old
 
 
 class Front(unittest.TestCase):

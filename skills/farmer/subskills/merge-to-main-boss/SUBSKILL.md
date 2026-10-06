@@ -13,7 +13,7 @@ orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs ju
 `gh pr list --head 'land/'`, `gh run list --workflow land.yml`); a red candidate keeps the queue held for its
 worktree until its fix lands (the user, 2026-10-06: "run landing until everything is fixed and merged and then release"): its session reads the red jobs, reproduces them with `gate/main.sh <job>`, fixes
 and lands again at once. While a CI landing's run is tested its process lives, so its reservation is not idle. Load
-pauses and flaky disabling are rarely needed (the gates do not run on the Mac). The farmer's own `farmer` branch
+pauses and flaky disabling are rarely needed (the gates do not run on the Mac). The farmer's own branch `farmer-<repo>`
 lands like any slot's (an ordinary `/mtm` of the farmer slot), its per-round mfm stays.
 
 ## Disable a flaky test
@@ -28,7 +28,7 @@ lands like any slot's (an ordinary `/mtm` of the farmer slot), its per-round mfm
    - TS: `it.skip`.
 
    Keep the test code itself.
-3. Add a line to `~/skills/farmer/<repo>/flaky.md`: date, test, file, slot, what the failure looked
+3. Add a line to `roles/farmer/flaky.md` in the farmer slot: date, test, file, slot, what the failure looked
    like, where it was disabled.
 4. File one shot to bring it back load-proof (budget scaled by load, or out of the landing's gate):
    `hal2-cli-shooter shots create` in the repository's shotfile for tests, or the `create-shot` skill.
