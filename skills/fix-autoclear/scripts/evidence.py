@@ -37,6 +37,9 @@ PROJECTS = HOME / ".claude/projects"
 SKILL_MD = Path(__file__).resolve().parent.parent / "SKILL.md"
 SRC = "code/rust/libs/hal2-agents/src"
 BLOCKED_AFTER = 3 * 60  # hal2's draft_alert (plan 0139), seconds
+# hal2's sweep.rs MAX_ATTEMPTS: its give-up always writes `attempts >= MAX_ATTEMPTS` with `gave_up` (selfcheck compares)
+MAX_ATTEMPTS = 3
+OFF_REARM = 100  # a rearm_percent no context reaches: hal2's cancel_marker writes at most max(percent, threshold) + 5
 
 
 def need(tool):
@@ -317,12 +320,31 @@ def capture(args):
     return 0
 
 
-def doctor_items(hours):
+def autoclear_off(marker=None, agent=None):
+    """The user switched autoclear off for the session (skills plan 0011): never a failure, never acted on.
+    hal2 has no explicit per-session switch yet (shot plugin-agents #31), so a marker counts as off when only a hand
+    can have written it: `gave_up` without the sweep's attempts, or a `rearm_percent` no context reaches. An agent
+    row with `autoclear_off: true` (what #31 adds to `hal2-cli-agents list --json`) is off too."""
+    if (agent or {}).get("autoclear_off"):
+        return True
+    m = marker or {}
+    return bool(m.get("gave_up") and m.get("attempts", 0) < MAX_ATTEMPTS) or (m.get("rearm_percent") or 0) >= OFF_REARM
+
+
+def off_sessions(hours=None):
+    """The sessions whose autoclear the user switched off (their markers, newest first; all when `hours` is None)."""
+    since = 0 if hours is None else time.time() - hours * 3600
+    return {m["session_id"]: m for p, m in markers() if p.stat().st_mtime >= since and autoclear_off(m)}
+
+
+def doctor_items(hours, off=None):
     """Every pane's failed or stuck autoclear of the last `hours` (nobody reported), as dicts:
     {what: job|blocked|marker, pane, session, who, state, reason, message, attempts, gave_up, at}. A `blocked`
-    job waits on a person's draft (hal2 plan 0139): no autoclear bug, sanity-watch's F13 owns it."""
+    job waits on a person's draft (hal2 plan 0139): no autoclear bug, sanity-watch's F13 owns it. A session whose
+    autoclear the user switched off (`autoclear_off`) is left out; `off`, when a list, collects those sessions."""
     since = time.time() - hours * 3600
     by_pane = {a.get("pane_id"): a for a in agents()}
+    switched = set(off_sessions()) | {a.get("session_id") for a in by_pane.values() if autoclear_off(agent=a)}
     out = []
 
     def who(pane, session):
@@ -334,6 +356,8 @@ def doctor_items(hours):
     for record in sorted(JOBS.glob("*.json")):
         job = read_json(record)
         if not job or record.stat().st_mtime < since:
+            continue
+        if job.get("old_session") in switched:
             continue
         blocked = job.get("waiting_since")
         if job.get("state") == "waiting" and job.get("waiting_on") and blocked \
@@ -352,7 +376,14 @@ def doctor_items(hours):
                         "reason": job.get("reason") or "", "message": job.get("message") or "",
                         "at": stamp(job.get("updated_at"))})
     for path, m in markers():
-        if path.stat().st_mtime >= since and (m.get("gave_up") or m.get("attempts", 0) >= 2):
+        if path.stat().st_mtime < since:
+            continue
+        if m["session_id"] in switched:
+            if off is not None:
+                off.append({"session": m["session_id"], "pane": m.get("pane"),
+                            "who": who(m.get("pane"), m["session_id"])})
+            continue
+        if m.get("gave_up") or m.get("attempts", 0) >= 2:
             out.append({"what": "marker", "pane": m.get("pane"), "session": m["session_id"],
                         "who": who(m.get("pane"), m["session_id"]), "attempts": m.get("attempts", 0),
                         "gave_up": bool(m.get("gave_up"))})
@@ -360,16 +391,18 @@ def doctor_items(hours):
 
 
 def doctor(args):
-    items = doctor_items(args.hours)
+    off = []
+    items = doctor_items(args.hours, off)
     if args.json:
-        print(json.dumps({"hours": args.hours, "problems": items}, indent=1))
+        print(json.dumps({"hours": args.hours, "problems": items, "off": off}, indent=1))
         return
     for i in items:
         if i["what"] in ("job", "blocked"):
             print(f"{i['who']}: {i['state']} {i['reason']} {i['message']} ({i['at']})")
         else:
             print(f"{i['who']}: session {i['session']} attempts {i['attempts']}{' gave up' if i['gave_up'] else ''}")
-    print(f"{len(items)} problem(s) in the last {args.hours} h")
+    print(f"{len(items)} problem(s) in the last {args.hours} h"
+          + (f"; autoclear off (skipped): {', '.join(o['who'] for o in off)}" if off else ""))
 
 
 def selfcheck(args):
@@ -388,6 +421,9 @@ def selfcheck(args):
     for name in re.findall(r"`([a-z][a-z-]+)`", block):
         if f'"{name}"' not in source:
             drift.append(f"name `{name}` no longer in {SRC}")
+    attempts = re.search(r"MAX_ATTEMPTS: u32 = (\d+)", source)
+    if attempts and int(attempts.group(1)) != MAX_ATTEMPTS:
+        drift.append(f"MAX_ATTEMPTS is {attempts.group(1)} in {SRC}/sweep.rs, evidence.py assumes {MAX_ATTEMPTS}")
     for fact in re.findall(r"`(REARM_POINTS|MAX_ATTEMPTS|DEFAULT_PROMPT|HANDOFF_PROGRAMS|HANDOFF_SCRIPTS|RETRY_BACKOFF|CHECK)`", skill):
         if fact not in source:
             drift.append(f"constant {fact} no longer in {SRC}")

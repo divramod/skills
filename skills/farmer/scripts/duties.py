@@ -148,13 +148,19 @@ def plan_watch(item: dict, ctx: dict, incidents: list[dict] | None = None) -> li
     return out
 
 
-def plan_autoclear(item: dict, ctx: dict, problems: list[dict] | None = None) -> list[dict]:
+def plan_autoclear(item: dict, ctx: dict, problems: list[dict] | None = None, off: set[str] | None = None
+                   ) -> list[dict]:
+    """fix-autoclear's doctor as code: a resting session's failed autoclear continued, each failure class delegated
+    once. A session whose autoclear the user switched off (`off`, evidence.autoclear_off) is never touched (plan 0011)."""
     problems = problems if problems is not None else evidence.doctor_items(1.5)
+    off = off if off is not None else set(evidence.off_sessions())
     out, agents = [], ctx.get("agents_by_pane", {})
     for p in problems:
         if p.get("what") == "blocked":
             continue  # a person's draft blocks the job (hal2 plan 0139): sanity-watch's F13 wakes the farmer
         a = agents.get(p.get("pane")) or {}
+        if p.get("session") in off or (a.get("session_id") == p.get("session") and evidence.autoclear_off(agent=a)):
+            continue  # the user's own switch, not a failure
         slot = a.get("slot") or "-"
         if p.get("session") and a.get("session_id") == p["session"] and a.get("state") in ("idle", "done", "sleeping"):
             out.append(act("autoclear", "continue", "run", slot, key=f"autoclear:{p['session']}",

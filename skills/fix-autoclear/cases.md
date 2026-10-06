@@ -3,6 +3,22 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-06 · autoclear switched off by the user, taken for a give-up and cleared (hal2 wt 02)
+
+- **Signature**: a marker `gave_up: true` with no `attempts` (or below `MAX_ATTEMPTS`) and `rearm_percent: 1000`,
+  stage `cancelled`; the farmer's log has `autoclear:<session>` with `clear-and-continue ... --await-handoff`; the job
+  asks for a hand-off far below the threshold ("at 22.0% (threshold 35%)") of an idle session waiting for the user.
+- **Cause**: no autoclear bug. The user's "disable the autoclear in 02" was written by hand as guard markers
+  (`gave_up`, rearm 1000), the only per-session off hal2 has (shot plugin-agents #31 asks for a real switch). The
+  doctor's `gave_up or attempts >= 2` took them for the sweep's give-up, and the farmer's autoclear duty acted.
+- **Occurrences**: 2026-10-06 hal2 wt 02, sessions da8d4b47 and 227f49f1, `%171`; job 171 at 10:10, cancelled by
+  02 at 10:12 (global shot fix-autoclear #9).
+- **Fix plan**: skills plan 0011: `evidence.autoclear_off` (a `gave_up` without the sweep's attempts, a rearm no
+  context reaches, an agent's `autoclear_off: true`); the doctor lists those apart (`off`), the farmer's
+  `duty:autoclear` never clears or delegates them. The hal2 side (a switch that outlives the session) is #31.
+- **Would have caught it sooner**: the regression tests replaying 227f49f1's marker (test_evidence.py,
+  farmer's test_duties.py).
+
 ## 2026-10-05 · the farmer's order left unsent in the box, taken for a draft (hal2 wt 12)
 
 - **Signature**: job `waiting` 13 min, its log `a draft in the input box (367 chars): waiting until it is sent or

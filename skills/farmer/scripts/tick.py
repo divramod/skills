@@ -22,11 +22,17 @@ that waits for the user (an `ask` in the log with no `answered` after it) are dr
 messages and wakes about the farmer's own slot (its session is the one woken).
 
 Every executed action except `ran` goes into the farmer's log with `"by": "tick"`.
+
+The round times itself (plan 0011): `out["timing"]` holds the seconds of the frame (merge-from-main, the role edit),
+the planners' shared context, each due item (its planning plus its actions' execution), acks, delegations, wake and
+summary, in round order; farmer.py prints them as one `timing:` line (tick.log).
 """
 
 import datetime as dt
 import json
 import subprocess
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import acks
@@ -34,6 +40,7 @@ from logstate import paused, read_log, waiting_for_user  # noqa: F401  (tick.<na
 import delegation
 import deliver
 import due
+import gh_runs
 import mtm_scan
 import roles
 import wake
@@ -82,6 +89,16 @@ def slot_problem(repo: str) -> str | None:
     return f"the farmer slot holds more than {ROLE}: {', '.join(other)}" if other else None
 
 
+@contextmanager
+def timed(timing: dict, name: str):
+    """Add the block's wall time to `timing[name]` (seconds, insertion order kept)."""
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        timing[name] = round(timing.get(name, 0.0) + time.monotonic() - start, 2)
+
+
 def act(duty: str, kind: str, do: str, slot: str = "-", **fields) -> dict:
     return {"duty": duty, "kind": kind, "slot": slot, "do": do, **fields}
 
@@ -103,8 +120,9 @@ def role_edit(top: str) -> tuple[list[dict], bool]:
                                                     "--", *files], text=f"committed the user's {ROLE} edit")], True
 
 
-def due_items(top: str, now: dt.datetime | None = None) -> tuple[list[dict], dict, list[str]]:
-    """(the due duties and tasks, the settings, problems) from the slot's role file (ROLE)."""
+def due_items(top: str, now: dt.datetime | None = None, all_due: bool = False) -> tuple[list[dict], dict, list[str]]:
+    """(the due duties and tasks, the settings, problems) from the slot's role file (ROLE); `all_due` counts every
+    opted-in item due (a dry run's measurement, farmer.py tick --all-due)."""
     path = Path(top) / ROLE
     if not path.exists():
         return [], {}, [f"no {ROLE}: nothing is opted in"]
@@ -113,7 +131,7 @@ def due_items(top: str, now: dt.datetime | None = None) -> tuple[list[dict], dic
         return [], settings, problems
     now, last = now or dt.datetime.now(), due.last_runs(top)
     rows = [{"name": n, "cron": c, "last": last[n].isoformat() if n in last else None}
-            for n, c in items.items() if due.is_due(c, last.get(n), now)]
+            for n, c in items.items() if all_due or due.is_due(c, last.get(n), now)]
     return rows, settings, []
 
 
@@ -183,20 +201,27 @@ def context(top: str, main: str, items: dict, now: dt.datetime, dry: bool) -> di
             "landing": landing, "waiting": {t.get("slot") for t in tickets} | paused(read_log(main), now)}
 
 
-def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bool = True) -> dict:
-    """Plan everything after the frame's git work: the due items and their actions."""
-    items, settings, problems = due_items(top, now)
+def plan_round(top: str, handlers: dict, now: dt.datetime | None = None, dry: bool = True,
+               timing: dict | None = None, all_due: bool = False) -> dict:
+    """Plan everything after the frame's git work: the due items and their actions, each tagged with its `item`
+    (whose time its execution adds to)."""
+    timing = timing if timing is not None else {}
+    items, settings, problems = due_items(top, now, all_due)
     if problems:
         return {"due": [], "settings": settings, "actions": [act("frame", "role-invalid", "notify",
                                                                  text="; ".join(problems))], "stop": True}
     main = mtm_scan.main_checkout(top)
-    ctx = context(top, main, due.schedule((Path(top) / ROLE).read_text())[0], now or dt.datetime.now(), dry)
+    with timed(timing, "context"):
+        ctx = context(top, main, due.schedule((Path(top) / ROLE).read_text())[0], now or dt.datetime.now(), dry)
     actions = []
     for item in items:
-        planned = waiting_noise(fresh(item_actions(item, handlers, ctx), ctx["log"], ctx["now"]), ctx["waiting"])
+        with timed(timing, item["name"]):
+            planned = waiting_noise(fresh(item_actions(item, handlers, ctx), ctx["log"], ctx["now"]), ctx["waiting"])
         ctx.setdefault("told", set()).update(a["slot"] for a in planned if a["do"] in ("send", "relay"))
-        actions += planned
-    actions += fresh(acks.plan(ctx["log"], ctx["now"], ctx["panes"]), ctx["log"], ctx["now"])
+        actions += [{**a, "item": item["name"]} for a in planned]
+    with timed(timing, "acks"):
+        actions += [{**a, "item": "acks"} for a in fresh(acks.plan(ctx["log"], ctx["now"], ctx["panes"]),
+                                                          ctx["log"], ctx["now"])]
     return {"due": items, "settings": settings, "actions": actions, "stop": False}
 
 
@@ -259,7 +284,7 @@ def delegate_all(main: str, out: dict, dry: bool, now: dt.datetime) -> None:
 
 def summarize(main: str, top: str, out: dict) -> None:
     """The round's summary from the log: a file of its own when the round did something, latest.md always."""
-    snap = mtm_scan.snapshot(top, 24)
+    snap = mtm_scan.snapshot(top, 24, fetch=False)  # the round's merge-from-main fetched origin
     logged = [a for a in out["done"] if a["do"] != "ran"]
     notes = "\n".join(f"- {a['duty']} {a['kind']} {a['slot']}: {a.get('text', '')}" for a in logged) or "quiet"
     if logged or snap["findings"]:
@@ -270,34 +295,59 @@ def summarize(main: str, top: str, out: dict) -> None:
     out["summary"] = str(latest)
 
 
-def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None) -> dict:
+def run(repo: str, dry: bool, handlers: dict, now: dt.datetime | None = None, all_due: bool = False) -> dict:
     """One round. Dry: plan only, touch nothing. Returns the round as data (also what `--json` prints)."""
-    out = {"dry": dry, "now": now, "wake": [], "notify": [], "done": [], "planned": []}
+    timing: dict[str, float] = {}
+    out = {"dry": dry, "now": now, "wake": [], "notify": [], "done": [], "planned": [], "timing": timing}
+    start = time.monotonic()
     problem = slot_problem(repo)
     if problem:
         out.update(stop=True, problem=problem)
         return out
-    top = git(repo, "rev-parse", "--show-toplevel")
-    main = mtm_scan.main_checkout(top)
-    out["planned"].append(act("frame", "stay-current", "run", argv=MFM, text="merge-from-main in the farmer slot"))
-    if not dry:
-        stay_current(top, main, out)
-        out["done"].append(out["planned"][0])
-    edit, go_on = role_edit(top)
+    with timed(timing, "frame"):
+        top = git(repo, "rev-parse", "--show-toplevel")
+        main = mtm_scan.main_checkout(top)
+        out["planned"].append(act("frame", "stay-current", "run", argv=MFM, text="merge-from-main in the farmer slot"))
+        if not dry:
+            stay_current(top, main, out)
+            out["done"].append(out["planned"][0])
+        edit, go_on = role_edit(top)
+    with gh_runs.round(gh_runs.cache_dir(mtm_scan.state_dir(main))) as out["gh"]:
+        rest(out, top, main, handlers, now, dry, all_due, edit, go_on)
+    timing["total"] = round(time.monotonic() - start, 2)
+    return out
+
+
+def rest(out: dict, top: str, main: str, handlers: dict, now: dt.datetime | None, dry: bool, all_due: bool,
+         edit: list[dict], go_on: bool) -> None:
+    """The round after its frame: plan, execute, delegate, wake, summarize (inside one gh_runs round)."""
+    timing = out["timing"]
     out["planned"] += edit
-    rnd = plan_round(top, handlers, now, dry) if go_on else {"due": [], "settings": {}, "actions": [], "stop": True}
+    rnd = plan_round(top, handlers, now, dry, timing, all_due) if go_on else {"due": [], "settings": {}, "actions": [],
+                                                                              "stop": True}
     out["planned"] += rnd["actions"]
     out.update(due=rnd["due"], settings=rnd["settings"], stop=rnd["stop"])
     if not dry:
         for a in edit + rnd["actions"]:
-            execute(a, top, main, out)
+            with timed(timing, a.get("item", "frame")):
+                execute(a, top, main, out)
             out["done"].append(a)
     if go_on:
-        delegate_all(main, out, dry, now or dt.datetime.now())
-    if dry:
-        out["wake_items"] = wake.items({k: [a for a in out["planned"] if a["do"] == k] for k in wake.KINDS}
-                                       | {"delegations": out.get("delegations", [])})
-    else:
-        out["woke"] = wake.hand_over(top, main, out, now or dt.datetime.now())
-        summarize(main, top, out)
-    return out
+        with timed(timing, "delegations"):
+            delegate_all(main, out, dry, now or dt.datetime.now())
+    with timed(timing, "wake"):
+        if dry:
+            out["wake_items"] = wake.items({k: [a for a in out["planned"] if a["do"] == k] for k in wake.KINDS}
+                                           | {"delegations": out.get("delegations", [])})
+        else:
+            out["woke"] = wake.hand_over(top, main, out, now or dt.datetime.now())
+    if not dry:
+        with timed(timing, "summary"):
+            summarize(main, top, out)
+
+
+def timing_line(timing: dict, gh: dict | None = None) -> str:
+    """`timing: frame 2.1s, duty:mtm 3.4s, ..., total 9.8s; gh 2 list, 3 view, 5 cached`: where the round's time
+    went (tick.log) and the gh calls it made (gh_runs)."""
+    line = "timing: " + ", ".join(f"{name} {secs:.1f}s" for name, secs in timing.items())
+    return line + (f"; gh {gh['list']} list, {gh['view']} view, {gh['cached']} cached" if gh else "")

@@ -92,6 +92,23 @@ class Plan(unittest.TestCase):
             self.assertEqual(tasks.builtin("n8n.hal9k.app stays up", "/x/farmer", lambda: True)[0], 1)
 
 
+class BuiltinChecks(unittest.TestCase):
+    def test_farmer_check_flaky_and_orphans_run_in_the_ticks_process(self):
+        # plan 0011: a second python with its own snapshot cost 8 s a round; in-process they share the round.
+        calls = []
+        with mock.patch.object(tasks, "builtin", side_effect=lambda what, top: calls.append(what) or
+                               ((1, "13: work without agent") if what == "orphans" else (0, ""))), \
+                mock.patch.object(tasks.subprocess, "run") as run:
+            self.assertEqual(tasks.run_check(["farmer check flaky"], "/x/farmer", "/x/hal2"), (True, ""))
+            ok, why = tasks.run_check(["farmer check orphans"], "/x/farmer", "/x/hal2")
+            run.assert_not_called()
+        self.assertEqual((calls, ok), (["flaky", "orphans"], False))
+        self.assertIn("farmer check orphans: exit 1\n13: work without agent", why)
+        with mock.patch.object(tasks.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
+            tasks.run_check(["farmer check task n8n"], "/x/farmer", "/x/hal2")  # a task's check: its own process
+            run.assert_called_once()
+
+
 class Online(unittest.TestCase):
     def test_online_needs_a_name_and_a_connection(self):
         conn = mock.Mock()

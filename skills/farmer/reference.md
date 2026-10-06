@@ -47,6 +47,29 @@ commit gets its own `!<path>` line there. The repository's root `.gitignore` nam
 commits a new or changed `.gitignore` together with the user's `ROLE.md` edit. `roles.state_dir` never creates the
 slot: without a slot `farmer-<repo>` the scripts that write state stop with the start (or migrate) hint.
 
+## Timing
+
+A slow round shows where its time went (plan 0011): each round's output (launchd appends it to `tick.log`) ends with
+
+```
+timing: frame 0.1s, context 0.4s, duty:mtm 4.5s, ..., task:<name> 2.5s, acks 0.0s, delegations 0.7s, wake 0.0s, summary 3.9s, total 28.6s; gh 2 list, 1 view, 8 cached
+```
+
+the seconds of the frame (merge-from-main, the user's role edit), the planners' shared context, each due duty and
+task (planning plus the execution of its actions), acks, delegations, wake, summary and the total, then the round's
+gh calls; `--json` carries them as `timing` and `gh`. `farmer.py tick --dry-run --all-due` measures a full round
+(every opted-in item counted due; refused without `--dry-run`).
+
+What keeps a round short:
+
+- **Each CI run read once per round** (`gh_runs.py`): the boss's snapshot, trains, the orphans check, the summary and
+  ci_scan share every `gh run list` and each run's `gh run view --json jobs`; a completed run's jobs stay on disk
+  (`cache/run-jobs/<id>.json`, 7 days), a running run's are read again next round; uncached runs are read in
+  parallel.
+- **No second process for the built-in checks**: a task's `farmer check flaky|orphans` runs inside the tick.
+- **du never inside a round**: prune's disk sizes come from a detached `prune.py sizes` (`disk.json`), reported the
+  round after it finished.
+
 ## The farmer branch
 
 The farmer branch `farmer-<repo>` is main plus the user's `roles/farmer/ROLE.md` commits, and it syncs with main on every landing:

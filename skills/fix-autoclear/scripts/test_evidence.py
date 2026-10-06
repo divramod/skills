@@ -38,6 +38,7 @@ class Selfcheck(unittest.TestCase):
             src = Path(repo) / evidence.SRC
             src.mkdir(parents=True)
             (src / "autoclear.rs").write_text('"waiting" REARM_POINTS MAX_ATTEMPTS DEFAULT_PROMPT')
+            (src / "sweep.rs").write_text("pub const MAX_ATTEMPTS: u32 = 4;")
             skill = Path(repo) / "SKILL.md"
             skill.write_text(
                 "`code/rust/libs/hal2-agents/src/autoclear.rs` `code/rust/libs/hal2-agents/src/gone.rs`\n"
@@ -57,7 +58,61 @@ class Selfcheck(unittest.TestCase):
             self.assertIn("gone.rs", text)
             self.assertIn("vanished-state", text)
             self.assertIn("HANDOFF_SCRIPTS", text)
+            self.assertIn("MAX_ATTEMPTS is 4", text)
             self.assertNotIn("DRIFT name `waiting`", text)
+
+
+# hal2 wt 02, 2026-10-06 (skills plan 0011): the user's "disable the autoclear in 02", written by hand as this marker;
+# the farmer's autoclear duty took it for a give-up and ran clear-and-continue (job 171, cancelled by 02).
+OFF_227 = {"session_id": "227f49f1-0b95-4ea0-af2f-b55a9b6a9917", "pane": "%171", "stage": "cancelled", "percent": 22.0,
+           "threshold": 35, "soft_at": 1791272539541, "rearm_percent": 1000.0, "gave_up": True}
+JOB_171 = {"state": "cancelled", "pane": "%171", "old_session": "227f49f1-0b95-4ea0-af2f-b55a9b6a9917",
+           "prompt": "/handoff c", "requested_at": 1791274202629, "updated_at": 1791274355223, "pid": 78211}
+# The sweep's own give-up (hal2 sweep.rs, MAX_ATTEMPTS): a real failure the doctor must keep reporting.
+SWEEP_GAVE_UP = {"session_id": "4100c537-6070-4262-b6cd-aabe0fb0067c", "pane": "%49", "stage": "soft", "percent": 35.0,
+                 "threshold": 35, "soft_at": 1791014836027, "denied_tool": "Bash", "attempts": 3, "gave_up": True}
+
+
+class AutoclearOff(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.jobs, self.real = Path(self.dir.name), (evidence.JOBS, evidence.agents, evidence.session_label)
+        evidence.JOBS = self.jobs
+        evidence.agents = lambda: [{"pane_id": "%171", "kind": "claude", "project": "/a/hal2", "slot": "02",
+                                    "session_id": OFF_227["session_id"], "state": "idle"}]
+        evidence.session_label = lambda session: None
+
+    def tearDown(self):
+        evidence.JOBS, evidence.agents, evidence.session_label = self.real
+        self.dir.cleanup()
+
+    def write(self, name, data):
+        (self.jobs / name).write_text(json.dumps(data))
+
+    def test_a_marker_only_a_hand_wrote_is_off_the_sweeps_give_up_is_not(self):
+        self.assertTrue(evidence.autoclear_off(OFF_227))
+        self.assertTrue(evidence.autoclear_off({**OFF_227, "gave_up": False}))  # rearm 1000: never re-arms
+        self.assertTrue(evidence.autoclear_off({"gave_up": True}))
+        self.assertFalse(evidence.autoclear_off(SWEEP_GAVE_UP))
+        self.assertFalse(evidence.autoclear_off({"stage": "cancelled", "percent": 41.2, "threshold": 35,
+                                                 "rearm_percent": 46.2}))  # hal2's own cancel re-arms
+        self.assertFalse(evidence.autoclear_off({"attempts": 2}))
+        self.assertTrue(evidence.autoclear_off(agent={"autoclear_off": True}))  # hal2 shot plugin-agents #31
+
+    def test_the_doctor_replays_227f49f1_and_reports_only_the_sweeps_give_up(self):
+        self.write(f"{OFF_227['session_id']}.guard", OFF_227)
+        self.write(f"{SWEEP_GAVE_UP['session_id']}.guard", SWEEP_GAVE_UP)
+        self.write("171.json", {**JOB_171, "state": "failed", "reason": "attempts"})
+        off = []
+        problems = evidence.doctor_items(24, off)
+        self.assertEqual([p["session"] for p in problems], [SWEEP_GAVE_UP["session_id"]])
+        self.assertEqual([o["session"] for o in off], [OFF_227["session_id"]])
+
+    def test_an_agent_switched_off_by_hal2_is_no_problem(self):
+        evidence.agents = lambda: [{"pane_id": "%49", "session_id": SWEEP_GAVE_UP["session_id"],
+                                    "autoclear_off": True}]
+        self.write(f"{SWEEP_GAVE_UP['session_id']}.guard", SWEEP_GAVE_UP)
+        self.assertEqual(evidence.doctor_items(24), [])
 
 
 if __name__ == "__main__":

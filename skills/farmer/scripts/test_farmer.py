@@ -108,6 +108,26 @@ class Round(Repo):
         self.assertIn(tick.ROLE, subprocess.run(["git", "status", "--porcelain"], cwd=self.slot,
                                                 capture_output=True, text=True).stdout)
 
+    def test_a_round_times_each_due_item_and_all_due_counts_every_item(self):
+        # plan 0011: a slow tick shows in tick.log where its time went; --all-due measures a full round.
+        rnd = tick.plan_round(str(self.slot), {}, NOW)
+        self.assertEqual([i["name"] for i in rnd["due"]], ["duty:mtm", "task:probe"])
+        with mock.patch.object(tick, "sh", wraps=tick.sh):
+            r = tick.run(str(self.slot), True, {}, NOW, all_due=True)
+        names = [i["name"] for i in r["due"]]
+        self.assertTrue(set(names) >= {"duty:mtm", "task:probe"})
+        self.assertEqual([n for n in r["timing"] if n.startswith(("duty:", "task:"))], names)
+        self.assertEqual(list(r["timing"])[:2], ["frame", "context"])
+        self.assertEqual(list(r["timing"])[-1], "total")
+        self.assertTrue(all(a.get("item") for a in r["planned"][1:] if a["kind"] not in ("role-add", "role-commit")))
+        line = tick.timing_line(r["timing"])
+        self.assertRegex(line, r"^timing: frame \d+\.\ds, context \d+\.\ds, duty:mtm \d+\.\ds, .*total \d+\.\ds$")
+
+    def test_all_due_is_refused_outside_a_dry_run(self):
+        with mock.patch.object(farmer, "mode", return_value="timer"), \
+                mock.patch.object(farmer.shutil, "which", return_value="/bin/x"):
+            self.assertEqual(farmer.run_tick(str(self.slot), False, False, all_due=True), 4)
+
     def run_round(self, mfm_exit=0):
         real = tick.sh
 

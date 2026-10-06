@@ -5,6 +5,9 @@
       every numbered slot 00-99 with whether it is free to prune, and why not
   prune.py clean <NN> [--repo <dir>] [--dry-run]
       a slot 00-09: checked again, then its build artifacts deleted (the cleanup skill's `delete`)
+  prune.py sizes [--repo <dir>]
+      the free disk and the biggest worktrees (du over every worktree: minutes) into disk.json in the farmer's state
+      folder; the tick starts it in the background and reports it the next round (plan 0011)
   prune.py remove <NN> [--repo <dir>] [--dry-run]
       a slot 10-99: checked again, its idle session ended (`/exit` typed only into an empty prompt, killed only when
       it does not exit: delete-worktree-session's stop.py), then `hal2-cli-git worktree remove NN --remote`
@@ -14,7 +17,8 @@ branch lacks, no change, no plans/CURRENT_PLAN, no merge queue ticket or boss pa
 starting, blocked), no session active in the last 30 minutes (10-99), no build running in it (cleanup's `busy`)
 and no open question to the user in the farmer's log. Never main, a role slot or a name that is not two digits.
 The tick (`handler`) plans a `clean` per landing (keyed on the slot's HEAD) for 00-09, one `remove` per round for
-10-99, and every 6 hours the free disk and the biggest worktrees for the round summary, a notice under 100 GB free.
+10-99, and every 6 hours the free disk and the biggest worktrees for the round summary, a notice under 100 GB free:
+measured by a detached `prune.py sizes` (never inside a round) and reported by the round after it finished.
 Exit 0 done or skipped (the slot is no longer free: prints why), 1 failed (the tick then wakes the farmer), 2 a
 tool missing.
 """
@@ -22,6 +26,7 @@ tool missing.
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -46,6 +51,8 @@ QUIET = 30 * 60  # a 10-99 session active more recently is left alone
 LOW_DISK_GB = 100
 SIZES_EVERY = 6 * 3600  # du over every worktree takes minutes
 SIZES_TOP = 5
+SIZES_FILE, SIZES_LOCK = "disk.json", "disk.lock"  # in the farmer's state folder
+SIZES_STALE = 30 * 60  # a lock this old belongs to a sizes run that died
 EXIT_WAIT = 15
 
 
@@ -142,12 +149,53 @@ def recent(log: list[dict], prefix: str, now: dt.datetime, seconds: int) -> bool
                < seconds for e in log)
 
 
+def measure(main: str) -> None:
+    """`prune.py sizes`: du over the main checkout and every worktree, written to SIZES_FILE with its time."""
+    state = mtm_scan.state_dir(main)
+    try:
+        info = disk(main, [main] + [w["path"] for w in mtm_scan.worktrees(main)])
+        tmp = state / f".{SIZES_FILE}.tmp"
+        tmp.write_text(json.dumps({"at": time.time(), **info}))
+        tmp.replace(state / SIZES_FILE)
+    finally:
+        (state / SIZES_LOCK).unlink(missing_ok=True)
+
+
+def measured(main: str, now: dt.datetime) -> dict | None:
+    """The last `prune.py sizes` result when it is younger than SIZES_EVERY."""
+    try:
+        info = json.loads((mtm_scan.state_dir(main) / SIZES_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+    return info if now.timestamp() - info.get("at", 0) < SIZES_EVERY else None
+
+
+def measure_later(main: str, spawn=subprocess.Popen) -> bool:
+    """Start `prune.py sizes` detached, one at a time (a lock older than SIZES_STALE is taken over)."""
+    lock = mtm_scan.state_dir(main) / SIZES_LOCK
+    try:
+        if time.time() - lock.stat().st_mtime < SIZES_STALE:
+            return False
+    except OSError:
+        pass
+    lock.write_text(str(os.getpid()))
+    spawn([sys.executable, str(HERE / "prune.py"), "sizes", "--repo", main], cwd=main, stdin=subprocess.DEVNULL,
+          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return True
+
+
 def disk_actions(main: str, ctx: dict, info: dict | None) -> list[dict]:
+    """Every SIZES_EVERY: the free disk and the biggest worktrees as a record, a notice when low. The sizes come
+    from a background `prune.py sizes` (started here, outside a dry run), so a round never waits for du."""
     now = ctx["now"]
     if info is None:
         if recent(ctx.get("log", []), "prune:disk:", now, SIZES_EVERY):
             return []
-        info = disk(main, [main] + [w["path"] for w in mtm_scan.worktrees(main)])
+        info = measured(main, now)
+        if info is None:
+            if not ctx.get("dry", True):
+                measure_later(main)
+            return []
     biggest = ", ".join(f"{name} {gb:.0f} GB" for gb, name in info["biggest"]) or "unknown"
     out = [act("prune", "disk", "record", key=f"prune:disk:{now:%Y-%m-%dT%H}", window=SIZES_EVERY,
                text=f"free disk {info['free_gb']:.0f} GB; biggest worktrees: {biggest}")]
@@ -241,7 +289,7 @@ def act_on(main: str, slot: str, what: str, dry: bool) -> tuple[int, str]:
 
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("cmd", choices=("scan", "clean", "remove"))
+    p.add_argument("cmd", choices=("scan", "sizes", "clean", "remove"))
     p.add_argument("slot", nargs="?")
     p.add_argument("--repo", default=".")
     p.add_argument("--dry-run", action="store_true")
@@ -257,6 +305,9 @@ def main(argv: list[str]) -> int:
         found = scan(main_dir, ctx, agents)
         print(json.dumps(found, indent=1) if args.json else
               "\n".join(f"{w['slot']}: {w['why'] or 'free'}" for w in found) or "no numbered slots")
+        return 0
+    if args.cmd == "sizes":
+        measure(main_dir)
         return 0
     if not args.slot or not NUMBERED.fullmatch(args.slot):
         print("prune.py: give a two-digit slot (00-99)", file=sys.stderr)
