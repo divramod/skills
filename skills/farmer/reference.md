@@ -143,4 +143,10 @@ From the grill with the user on 2026-10-03. They are recorded for the repositori
   carries it to main, and main flows back into the farmer branch (two hooks). It is the user's word and may widen authority per task. Only the user edits it; the farmer
   commits the edit.
 - sanity-watch and fix-autoclear run as the farmer's duties, replacing their own loops.
+- **Landed worktrees go** (the user, 2026-10-06, hal2 plan 0143): the `prune` duty cleans a landed slot 00-09's
+  build artifacts once per landing and removes one landed slot 10-99 per round, with its local branch and
+  `origin/<NN>` once merged; it may end any idle session there that holds no work, also the user's own (never one
+  with a draft, a busy agent or one active in the last 30 minutes). Main, role slots and other names are never
+  touched. `/mtm` cleans its own slot after a landing (`after-landing.sh`) and tells the farmer when a 10-99 slot is
+  done.
 - A busy session without `plans/CURRENT_PLAN` is told to fill it in (development-lead).

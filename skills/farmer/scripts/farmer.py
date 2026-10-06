@@ -61,6 +61,7 @@ import role_sync
 import roles
 import handoff
 import migrate
+import prune
 import tasks
 import tick
 import timer
@@ -79,6 +80,7 @@ HANDLERS: dict = {  # "duty:<name>" / "task:<name>" → (item, ctx) → planned 
     "duty:watch": duties.plan_watch,
     "duty:autoclear": duties.plan_autoclear,
     "duty:trains": trains.handler,
+    "duty:prune": prune.handler,
     "task:*": tasks.plan_task,
 }
 

@@ -31,7 +31,7 @@ from pathlib import Path
 import roles
 
 DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
-DUTIES = ("mtm", "lead", "ci", "prs", "sync", "watch", "autoclear", "trains")
+DUTIES = ("mtm", "lead", "ci", "prs", "sync", "watch", "autoclear", "trains", "prune")
 NOTIFY = ("every-round", "hourly", "daily", "never")
 MIN_TICK = 5
 LOOKBACK = dt.timedelta(days=8)

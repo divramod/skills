@@ -1,6 +1,6 @@
 ---
 name: farmer
-description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, a clean pull-request list, the farmer branch synced with main, sanity-watch, fix-autoclear, merge trains, roles/farmer/ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer-<repo>` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "keep the pull requests clean", "dependabot", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
+description: The user's helper that gets things running in a repository and keeps them running, autonomously wherever possible. Started only by the user. An external timer runs `farmer.py tick`, which does every rule-based step of the opted-in duties as code (merge-to-main boss, development lead, ci, a clean pull-request list, the farmer branch synced with main, sanity-watch, fix-autoclear, merge trains, landed worktrees cleaned and removed, roles/farmer/ROLE.md tasks, delegations to servant sessions that plan and land fixes) and wakes the farmer's Claude session in its worktree slot `farmer-<repo>` with `/farmer act` only for judgment, so a quiet round costs no model call. Use when the user says /farmer, "farmer", "merge boss", "development lead", "watch CI", "keep the pull requests clean", "dependabot", "get everything merged", "the merge queue hangs", "help the sessions" or "watch over the worktrees". `/farmer start` installs the timer, `/farmer h` shows help.
 ---
 
 # farmer
@@ -34,6 +34,7 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 | `watch` | `duties.plan_watch` (sanity-watch's scan) | [instructions/watch.md](instructions/watch.md) | sanity-watch's |
 | `autoclear` | `duties.plan_autoclear` (fix-autoclear's doctor) | [instructions/autoclear.md](instructions/autoclear.md) | fix-autoclear's |
 | `trains` | `trains.py` (merge trains: finished, non-overlapping waiters land as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
+| `prune` | `prune.py` (landed slots: 00-09 cleaned once per landing, one 10-99 slot removed per round with its branch; free disk and the biggest worktrees every 6 h, a notice under 100 GB) | [instructions/prune.md](instructions/prune.md) | [cleanup](../cleanup/SKILL.md), [delete-worktree-session](../delete-worktree-session/SKILL.md) |
 | tasks | `tasks.py` (machine form) | [instructions/task.md](instructions/task.md) | |
 
 `S=<skill-dir>/scripts`, `K=<skills repo>/skills`. **State** in the role folder `roles/farmer/` of the farmer slot, beside `ROLE.md` (`FARMER_DIR` overrides it with
