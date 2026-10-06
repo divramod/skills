@@ -18,6 +18,11 @@ Run in the worktree (SKILL.md step 2 first: everything committed and pushed):
 shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 7200000; a lower limit gets a
 `--max-wait` 20 minutes below it). It needs `gh` logged in to GitHub (`gh auth status`).
 
+**`/mtm milestone`** (SKILL.md's [milestone mode](../SKILL.md#milestone-mode)): run the same command **without
+`--keep-reserved`**, and on exit 0 do not go to step 5 (it is skipped): if the JSON still says `reserved: true`, run
+`hal2-cli-git worktree release --json [<slot>]` at once, so the queue is free for the next landing; then go on with
+SKILL.md step 6 as milestone mode says.
+
 | Exit | JSON `status` | Do |
 |---|---|---|
 | 0 | `landed` | the default branch is the candidate (`commit`), the PR (`pull_request`) merged; `retests` counts how often the default branch moved under it. `reserved: true`: go to SKILL.md [step 5](../SKILL.md#5-finish-the-plan-and-land-it). Report `warnings` (e.g. the main checkout could not be pulled) |

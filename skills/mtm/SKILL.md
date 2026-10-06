@@ -55,15 +55,19 @@ you") before asking. A landing that went through only reports.
 | `/mtm milestone` | a parallel plan's lead lands a milestone row: [milestone mode](#milestone-mode) |
 | `/mtm h`, `/mtm help` | print this table and stop |
 
+**A subservant never lands.** Before anything else, also before [references/ci.md](references/ci.md), run
+`bash $S/subservant-guard.sh <slot>` on the worktree that would land: no argument for plain `/mtm` (the current
+worktree), the slot for `/mtm <slot>` (a bare slot name such as `31` resolves through `git worktree list` to the
+worktree of that folder name; a directory works too, e.g. the `path` of that name in
+`hal2-cli-git worktree list --json`; exit 3: no such worktree, report it). In a parallel plan's subservant slot (the
+worktree holds `plans/LEAD`, the [plan](../plan/SKILL.md) skill's "Work as a subservant") it exits 1 and names the
+lead; then stop with that message, whoever asked (the user, a plan, the farmer): the subservant pushes its branch and
+reports, the lead merges it. Elsewhere it prints nothing and the landing goes on.
+
 **Through CI or locally.** `bash $S/landing-mode.sh` prints `ci` when `.github/workflows/land.yml` is in this
 worktree's `HEAD` or in origin's default branch: the landing then runs through GitHub Actions; read
 [references/ci.md](references/ci.md) and follow it in place of steps 1, 3 and 4 (steps 2 and 5 to 8 stay). Otherwise
 the steps below land locally.
-
-**A subservant never lands.** First run `bash $S/subservant-guard.sh`: in a parallel plan's subservant slot (the
-worktree holds `plans/LEAD`, the [plan](../plan/SKILL.md) skill's "Work as a subservant") it exits 1 and names the
-lead; then stop with that message, whoever asked (the user, a plan, the farmer): the subservant pushes its branch and
-reports, the lead merges it. Elsewhere it prints nothing and the landing goes on.
 
 ### Milestone mode
 
@@ -71,7 +75,10 @@ reports, the lead merges it. Elsewhere it prints nothing and the landing goes on
 whose Needs are done) after the farmer's or the user's "land now" (the plan skill's "Run a parallel plan"). It
 lands what the lead's branch holds like any landing, with four differences, so the plan runs on right after it:
 
-- step 4 runs `merge-to-main` **without `--keep-reserved`**: the queue is released after the landing;
+- step 4 runs `merge-to-main` **without `--keep-reserved`** (locally and through CI, see
+  [references/ci.md](references/ci.md#land)): the queue is released after the landing; if its JSON still says
+  `reserved: true` (the reservation from step 1, or an older hal2-cli-git), run `hal2-cli-git worktree release
+  --json [<slot>]` right away, since step 5, which releases it otherwise, is skipped;
 - step 5 is skipped: nothing of the plan is finished here; the lead marks the milestone row done afterwards in its
   own branch (`plan.py status <n> done`, one commit, not landed again: the next milestone or the plan's own landing
   carries it), so the worktree may end with commits that are not on the default branch;
