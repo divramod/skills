@@ -3,6 +3,10 @@ idle session first (list-free-worktrees' free.py) or a new one (create-worktree-
 prompt, the ledger `delegations.jsonl`, and the follow-up: a servant whose plan has landed is recorded and its idle
 session stopped (delete-worktree-session's stop.py).
 
+Servants work only in slots 30-99 (skills plan 0013: helper sessions only work in the worktrees 30+): a free
+session is reused only there and a new one starts with `create.py --from 30`. The follow-up reads only this ledger,
+so a parallel plan's subservant (started by its lead, not in the ledger) is never followed up or stopped here.
+
 The servant does the thinking (its plan, its autogrill); the brief only carries the finding and its evidence.
 """
 
@@ -22,6 +26,7 @@ SKILLS = Path(__file__).resolve().parents[2]
 FREE = [sys.executable, str(SKILLS / "list-free-worktrees/scripts/free.py")]
 CREATE = [sys.executable, str(SKILLS / "create-worktree-session/scripts/create.py")]
 STOP = [sys.executable, str(SKILLS / "delete-worktree-session/scripts/stop.py"), "stop"]
+FROM = 30  # the first slot a servant may work in
 SETTLE = dt.timedelta(minutes=30)  # a servant younger than this has not started its plan yet
 ROLE = Path(__file__).resolve().parents[1] / "templates" / "SERVANT-ROLE.md"
 PROMPT = ("You are a servant started by the farmer (the user's stand-in for {repo}). Read your role at {role} first. "
@@ -92,16 +97,25 @@ def write_role(main: str, brief: Path, title: str, now: dt.datetime, task: str |
     return path
 
 
+def servant_slot(slot) -> bool:
+    """A numbered slot FROM-99, where servants work."""
+    return isinstance(slot, str) and len(slot) == 2 and slot.isdigit() and int(slot) >= FROM
+
+
 def start(prompt: str, main: str, dry: bool) -> dict:
-    """An idle free session gets the prompt typed; otherwise a new session in the first free slot."""
+    """An idle free session in a slot 30-99 gets the prompt typed; otherwise a new session in the first free slot
+    from 30."""
     code, out = call(FREE + ["--repo", main], main)
     free = (json.loads(out).get("worktrees") or []) if code == 0 and out.strip() else []
     for w in free:
+        if not servant_slot(w.get("slot")):
+            continue
+        pane = w.get("pane") or next(iter(w.get("panes") or []), None)  # free.py lists `panes`
         if dry:
-            return {"slot": w.get("slot"), "how": "free", "calls": [FREE + ["--repo", main], ["send", w.get("pane")]]}
-        if w.get("pane") and not deliver.send(w["pane"], prompt):
+            return {"slot": w.get("slot"), "how": "free", "calls": [FREE + ["--repo", main], ["send", pane]]}
+        if pane and not deliver.send(pane, prompt):
             return {"slot": w.get("slot"), "how": "free"}
-    argv = CREATE + ["--repo", main, "--prompt", prompt]
+    argv = CREATE + ["--repo", main, "--from", str(FROM), "--prompt", prompt]
     if dry:
         return {"slot": None, "how": "new", "calls": [FREE + ["--repo", main], argv]}
     code, out = call(argv, main)

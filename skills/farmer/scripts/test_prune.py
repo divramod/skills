@@ -1,6 +1,7 @@
 import contextlib
 import datetime as dt
 import io
+import os
 import subprocess
 import unittest
 from unittest import mock
@@ -205,6 +206,146 @@ class Act(Slots):
         self.assertIn("would run hal2-cli-git worktree remove 13 --remote", out.getvalue())
         self.assertEqual(subprocess.run(["git", "worktree", "list"], cwd=self.main, capture_output=True,
                                         text=True).stdout.count("/13 "), 1)
+
+
+class MarkedSlots(Slots):
+    """Skills plan 0013: a lead in slot 02 and its subservants' slots marked plans/LEAD, beside the unmarked ones.
+    31 and 33: their step merged into origin/02; 32: a commit origin/02 lacks; 12: a subservant below 30."""
+
+    def setUp(self):
+        super().setUp()
+        self.lead = self.base / "02"
+        git(self.main, "worktree", "add", "-q", "-b", "02", str(self.lead), "origin/main")
+        git(self.lead, "commit", "-q", "--allow-empty", "-m", "the lead's plan")
+        git(self.lead, "push", "-q", "origin", "02")
+        for name in ("31", "32", "33", "12"):
+            path = self.base / name
+            git(self.main, "worktree", "add", "-q", "-b", name, str(path), "origin/02")
+            git(path, "commit", "-q", "--allow-empty", "-m", f"step of {name}")
+            git(path, "push", "-q", "-u", "origin", name)
+            self.mark(name)
+        for name in ("31", "33", "12"):
+            git(self.lead, "merge", "-q", "--no-ff", "-m", f"merge {name}", f"origin/{name}")
+        git(self.lead, "push", "-q", "origin", "02")
+
+    def mark(self, name, lead="02", age=2 * 3600):
+        """plans/LEAD and CURRENT_PLAN as create.py writes them (here not ignored), written `age` seconds before NOW."""
+        plans = self.base / name / "plans"
+        plans.mkdir(exist_ok=True)
+        (plans / "LEAD").write_text(f"{lead} 0013-parallel-plans 4\n")
+        (plans / "CURRENT_PLAN").write_text("0013-parallel-plans\n")
+        os.utime(plans / "LEAD", (NOW.timestamp() - age,) * 2)
+
+    def agent(self, name, minutes_ago):
+        return {"pane_id": f"%{name}", "checkout": str(self.base / name), "state": "idle",
+                "since": NOW_MS - minutes_ago * 60_000}
+
+
+class Marked(MarkedSlots):
+    def test_a_marked_30_99_slot_is_free_once_its_work_is_in_the_leads_branch(self):
+        why = self.why()
+        self.assertIsNone(why["31"])
+        self.assertIsNone(why["33"])
+        self.assertIn("HEAD: 1 commit(s) not in origin/02", why["32"])
+
+    def test_a_branch_or_side_branch_the_lead_lacks_or_a_change_keeps_it(self):
+        git(self.base / "31", "branch", "31-x")
+        git(self.base / "31", "switch", "-q", "31-x")
+        git(self.base / "31", "commit", "-q", "--allow-empty", "-m", "side")
+        git(self.base / "31", "switch", "-q", "31")
+        self.assertIn("31-x: 1 commit(s) not in origin/02", self.why()["31"])
+        (self.base / "33/new.txt").write_text("x")
+        self.assertIn("uncommitted", self.why()["33"])
+        git(self.base / "32", "reset", "-q", "--hard", "origin/02")  # HEAD in origin/02, origin/32 not
+        self.assertIn("origin/32: 1 commit(s) not in origin/02", self.why()["32"])
+
+    def test_a_session_active_or_a_lead_written_in_the_last_hour_keeps_it(self):
+        self.assertIn("active in the last 60 min", self.why(agents=[self.agent("31", 40)])["31"])
+        self.assertIsNone(self.why(agents=[self.agent("31", 61)])["31"])
+        self.assertIsNone(self.why(agents=[self.agent("13", 40)])["13"], "unmarked 10-99: 30 min, unchanged")
+        busy = {**self.agent("31", 120), "state": "working"}
+        self.assertIn("working", self.why(agents=[busy])["31"])
+        self.mark("31", age=10 * 60)  # the lead's `assign` reused it
+        self.assertIn("plans/LEAD was written in the last 60 min", self.why()["31"])
+        self.assertIn("ticket", self.why({"waiting": {"33"}})["33"])
+        self.assertIn("build", self.why(build=lambda path: path.endswith("33"))["33"])
+
+    def test_a_marked_slot_below_30_or_a_bad_marker_or_a_missing_lead_branch_is_never_pruned(self):
+        why = self.why()
+        self.assertIn("below 30", why["12"])
+        self.mark("33", lead="99")
+        self.assertIn("origin/99 does not exist", self.why()["33"])
+        (self.base / "33/plans/LEAD").write_text("nonsense\n")
+        self.assertIn("plans/LEAD is not", self.why()["33"])
+        with mock.patch.object(prune, "live", return_value=({}, [])):
+            self.assertIn("never pruned", prune.act_on(str(self.main), "12", "remove", True)[1])
+
+    def test_unmarked_slots_are_unchanged(self):
+        why = self.why()
+        self.assertEqual([s for s in ("03", "13", "14") if why[s] is None], ["03", "13", "14"])
+        self.assertIn("1 commit(s) not on origin/main", why["06"])
+        self.assertIn("7 commit(s) not on origin/main", why["02"], "the lead's own slot, unmarked")
+
+    def test_the_round_plans_its_removal_with_the_subservant_text(self):
+        found = [w for w in prune.scan(str(self.main), {}, [], NOW_MS, lambda path: False) if w["slot"] == "31"]
+        actions = prune.plan({}, {"main": str(self.main), "now": NOW, "log": []}, found, INFO)
+        remove = next(a for a in actions if a["kind"] == "remove")
+        self.assertEqual(remove["argv"][-4:], ["remove", "31", "--repo", str(self.main)])
+        self.assertIn("subservant slot 31 (its work is in origin/02)", remove["text"])
+
+
+class ActMarked(MarkedSlots):
+    def setUp(self):
+        super().setUp()
+        live = mock.patch.object(prune, "live", return_value=({}, []))
+        live.start()
+        self.addCleanup(live.stop)
+        self.calls = []
+
+    def sh(self, argv, cwd, timeout=900):
+        self.calls.append(argv)
+        if argv[0] == "hal2-cli-git":
+            return 0, "removed"
+        p = subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        return p.returncode, (p.stdout + p.stderr).strip()
+
+    def remote(self, name):
+        return subprocess.run(["git", "ls-remote", "origin", f"refs/heads/{name}"], cwd=self.main,
+                              capture_output=True, text=True, check=True).stdout.strip()
+
+    def test_remove_forces_the_worktree_then_deletes_origin_nn(self):
+        self.assertTrue(self.remote("31"))
+        with mock.patch.object(tick, "sh", side_effect=self.sh):
+            code, text = prune.act_on(str(self.main), "31", "remove", False)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(self.calls[0], ["hal2-cli-git", "worktree", "remove", "31", "--force"])
+        self.assertEqual(self.calls[1], ["git", "push", "--quiet", "origin", "--delete", "31"])
+        self.assertFalse(self.remote("31"))
+        self.assertTrue(self.remote("02"))
+
+    def test_remove_fetches_and_checks_again(self):
+        other = self.tmp / "other"
+        git(self.tmp, "clone", "-q", "-b", "31", str(self.tmp / "hal2.git"), str(other))
+        git(other, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-q", "--allow-empty", "-m", "late")
+        git(other, "push", "-q", "origin", "31")
+        with mock.patch.object(tick, "sh", side_effect=self.sh):
+            code, text = prune.act_on(str(self.main), "31", "remove", False)
+        self.assertEqual(code, 0)
+        self.assertIn("skipped remove 31: origin/31: 1 commit(s) not in origin/02", text)
+        self.assertEqual(self.calls, [])
+        self.assertTrue(self.remote("31"))
+
+    def test_kept_when_a_commit_is_not_in_the_leads_branch(self):
+        with mock.patch.object(tick, "sh", side_effect=self.sh):
+            code, text = prune.act_on(str(self.main), "32", "remove", False)
+        self.assertIn("skipped remove 32", text)
+        self.assertEqual(self.calls, [])
+
+    def test_the_dry_run_names_both_commands(self):
+        code, text = prune.act_on(str(self.main), "31", "remove", True)
+        self.assertEqual(code, 0)
+        self.assertEqual(text, "would run hal2-cli-git worktree remove 31 --force; then "
+                               "git push --quiet origin --delete 31")
 
 
 if __name__ == "__main__":

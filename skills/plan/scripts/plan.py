@@ -34,6 +34,25 @@ A flat plans/<NNNN>-<slug>.md from before the folder layout is still read and up
                                                            `hal2-cli-plans new --global`), list, status,
                                                            grilled with --plan <n>; no CURRENT_PLAN there
 
+A parallel plan (`new --parallel`; its step table has the columns `| # | Step | Needs | Touches | Who | Done when |
+Status |`, parallel.py) adds `parallel`, `running` and `ready` to the JSON, and these commands (skills plan 0013):
+  plan.py ready [--limit <n>] [--json]                     the steps that can start now: open, every Need done,
+                                                           their Touches free (greedy in table order); --json adds
+                                                           why each other open step waits
+  plan.py assign <step> <who> [--force]                    who: lead, subagent, user or slot NN (30-99); sets Who
+                                                           and `running` (a step not ready only with --force); a
+                                                           slot NN that exists gets its plans/LEAD marker; a slot
+                                                           another step holds, whose marker names other work or
+                                                           that runs a farmer servant only with --force
+  plan.py brief <step>                                     scaffold steps/<step>.md (templates/step-brief.md) and
+                                                           print the subservant's exact first prompt
+  plan.py report <step>                                    scaffold reports/<step>.md (templates/report.md)
+  plan.py reports [--no-fetch]                             the running subservants' reports arrived on origin/NN
+  plan.py watch [--interval 60] [--rounds n]               one line per newly arrived report (the lead's Monitor)
+A cell holds a literal `|` written `\\|`. In a subservant's slot (plans/LEAD: `<lead-slot> <plan> <step>`, `lead` in
+the JSON) new, status, assign, grilled, landing, uat and brief are refused: plan.md is the lead's (also with
+--root <lead's checkout> when the current directory is in a marked slot).
+
 Run from anywhere inside the repo, or pass --root. Prints JSON on stdout; exits 1 with a message on stderr.
 
 The JSON's `landing` is the plan's `Landing:` line (auto|manual; none for a global plan), each step's
@@ -49,8 +68,10 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
+import parallel
 import plan_number
 
 PLANS = Path("plans")
@@ -176,7 +197,17 @@ def set_current(root: Path, path: Path) -> None:
 
 
 def split_row(line: str) -> list[str]:
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+    """A table row's cells; `\\|` inside a cell is a literal `|`, not a column border."""
+    cells = re.split(r"(?<!\\)\|", line.strip())
+    if cells and not cells[0].strip():
+        cells = cells[1:]
+    if cells and not cells[-1].strip():
+        cells = cells[:-1]
+    return [cell.strip().replace("\\|", "|") for cell in cells]
+
+
+def join_row(cells: list[str]) -> str:
+    return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |"
 
 
 def steps_table(lines: list[str]) -> tuple[int, dict[str, int]]:
@@ -195,17 +226,23 @@ def read_steps(text: str) -> list[dict]:
         header, cols = steps_table(lines)
     except PlanError:
         return []
-    steps = []
-    for line in lines[header + 2:]:
+    steps, width = [], max(cols.values()) + 1
+    for row, line in enumerate(lines[header + 2:], 1):
         if not line.lstrip().startswith("|"):
             break
         cells = split_row(line)
-        steps.append({
+        if len(cells) < width:
+            raise PlanError(f"row {row} of the step table has {len(cells)} cells, its header {width}: write a `|` "
+                            "inside a cell as `\\|`")
+        step = {
             "number": cells[cols["#"]],
             "step": cells[cols["step"]],
             "done_when": cells[cols["done when"]] if "done when" in cols else "",
             "status": cells[cols["status"]],
-        })
+        }
+        if parallel.is_parallel(cols):
+            parallel.enrich(step, cells, cols)
+        steps.append(step)
     for step in steps:
         step["after_landing"] = step["done_when"].lower().lstrip("*_ ").startswith(AFTER_LANDING)
     return steps
@@ -250,6 +287,13 @@ def describe(root: Path, path: Path) -> dict:
     landing = landing_of(text)
     land = landing if landing != "auto" else ("wait" if before_landing else "ready")
     pointer = root / PLANS / POINTER
+    extra = {}
+    if steps and "needs" in steps[0]:
+        ready, _ = parallel.schedule(steps, parallel.capacity(text))
+        extra = {"parallel": True, "running": [s for s in steps if parallel.kind(s["status"]) == "running"],
+                 "ready": ready}
+    if not GLOBAL and (marker := parallel.read_marker(root)):
+        extra["lead"] = marker
     return {
         "slug": slug_of(path),
         "path": str(path.relative_to(root)),
@@ -267,13 +311,44 @@ def describe(root: Path, path: Path) -> dict:
         "next": (before_landing or open_steps or [None])[0],
         "landing": landing,
         "land": land,
-        "problems": problems_of(steps),
+        "problems": problems_of(steps) + (parallel.problems(steps) if extra.get("parallel") else []),
         "steps": steps,
+        **extra,
     }
 
 
+def describe_safe(root: Path, path: Path) -> dict:
+    """describe(), or the plan's error as its only problem: one broken table never hides the other plans."""
+    try:
+        return describe(root, path)
+    except PlanError as error:
+        return {"slug": slug_of(path), "path": str(path.relative_to(root)), "problems": [str(error)], "steps": []}
+
+
+def parallel_table(text: str) -> str:
+    """The template's step table with the parallel plan's columns Needs, Touches and Who (the UAT step needs every
+    step before it)."""
+    lines, out, ids, header = text.split("\n"), [], [], None
+    for line in lines:
+        if not line.lstrip().startswith("|"):
+            out.append(line)
+            continue
+        cells = split_row(line)
+        if header is None:
+            header = cells
+            cells[2:2] = ["Needs", "Touches", "Who"]
+        elif set("".join(cells)) <= set("-: "):
+            cells[2:2] = ["---"] * 3
+        else:
+            uat = "Write the UATs" in cells[1]
+            cells[2:2] = [", ".join(ids) if uat else "", "docs" if uat else "", "lead" if uat else ""]
+            ids.append(cells[0])
+        out.append(join_row(cells))
+    return "\n".join(out)
+
+
 def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool = False,
-             research: bool = False, landing: str = "auto", autogenerated: str = "") -> Path:
+             research: bool = False, landing: str = "auto", autogenerated: str = "", parallel_plan: bool = False) -> Path:
     slug = research_slug(slugify(title)) if research else slugify(title)
     if fetch:
         plan_number.git(root, "fetch", "--all", "--quiet")
@@ -289,6 +364,8 @@ def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool 
     )
     if research:
         text = "\n".join(l for l in text.split("\n") if "Write the UATs" not in l)
+    if parallel_plan:
+        text = parallel_table(text)
     path.write_text(text)
     if autogenerated:
         set_header(path, "Autogenerated", f"{autogenerated}, {dt.date.today().isoformat()}")
@@ -298,15 +375,24 @@ def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool 
 
 
 def set_status(path: Path, step: str, status: str) -> None:
+    set_cells(path, step, {"status": status})
+
+
+def set_cells(path: Path, step: str, values: dict[str, str]) -> None:
+    """Set cells of one step's row by column name (lower case), keeping every other cell."""
     lines = path.read_text().splitlines(keepends=True)
     header, cols = steps_table([l.rstrip("\n") for l in lines])
+    missing = [name for name in values if name not in cols]
+    if missing:
+        raise PlanError(f"the step table of {slug_of(path)} has no column {', '.join(missing)}")
     for i in range(header + 2, len(lines)):
         if not lines[i].lstrip().startswith("|"):
             break
         cells = split_row(lines[i])
-        if cells[cols["#"]] == step:
-            cells[cols["status"]] = status
-            lines[i] = "| " + " | ".join(cells) + " |\n"
+        if cells and cells[cols["#"]] == step:
+            for name, value in values.items():
+                cells[cols[name]] = value
+            lines[i] = join_row(cells) + "\n"
             path.write_text("".join(lines))
             stamp_finished(path)
             return
@@ -447,27 +533,54 @@ def main(argv: list[str]) -> int:
     p_landing.add_argument("landing", choices=LANDINGS)
     p_landing.add_argument("--plan")
     sub.add_parser("check")
+    p_ready = sub.add_parser("ready", help="a parallel plan's steps that can start now")
+    p_ready.add_argument("--plan")
+    p_ready.add_argument("--limit", type=int)
+    p_ready.add_argument("--json", action="store_true")
+    p_assign = sub.add_parser("assign", help="give a ready step to lead, subagent, user or slot NN (30-99)")
+    p_assign.add_argument("step")
+    p_assign.add_argument("who", nargs="+")
+    p_assign.add_argument("--plan")
+    p_assign.add_argument("--force", action="store_true",
+                          help="assign a step that is not ready, or to a slot that is taken")
+    for name in ("brief", "report"):
+        p = sub.add_parser(name)
+        p.add_argument("step")
+        p.add_argument("--plan")
+    p_reports = sub.add_parser("reports", help="reports arrived on origin/NN of the running subservants")
+    p_reports.add_argument("--plan")
+    p_reports.add_argument("--no-fetch", action="store_true")
+    p_watch = sub.add_parser("watch", help="print one line per newly arrived report (the lead's Monitor)")
+    p_watch.add_argument("--plan")
+    p_watch.add_argument("--interval", type=float, default=60)
+    p_watch.add_argument("--rounds", type=int, default=0, help="stop after this many rounds (0: never)")
+    p_new.add_argument("--parallel", action="store_true",
+                       help="the step table gets the columns Needs, Touches and Who (a parallel plan)")
     args = parser.parse_args(argv)
 
     try:
         if args.is_global or args.global_root:
             return run_global(args)
         root = args.root.resolve() if args.root else find_root(Path.cwd())
+        refuse_subservant(root, args.command)
         if args.command == "check":
             return plan_number.main(["--root", str(root), "check"])
         if args.command == "new":
             result = describe(root, new_plan(root, args.title, args.goal, not args.no_current, args.fetch,
                                              args.research,
                                              "manual" if args.manual_landing or args.research else "auto",
-                                             args.autogenerated))
+                                             args.autogenerated, args.parallel))
         elif args.command == "current":
             result = describe(root, current_path(root))
         elif args.command == "list":
-            result = [describe(root, p) for p in plan_files(root)]
+            result = [describe_safe(root, p) for p in plan_files(root)]
         elif args.command == "use":
             path = resolve(root, args.plan)
             set_current(root, path)
             result = describe(root, path)
+        elif args.command in PARALLEL_COMMANDS:
+            path = resolve(root, args.plan) if args.plan else current_path(root)
+            return run_parallel(root, path, args)
         else:
             path = resolve(root, args.plan) if args.plan else current_path(root)
             if args.command == "status":
@@ -479,11 +592,107 @@ def main(argv: list[str]) -> int:
             else:
                 set_grilled(path, args.auto)
             result = describe(root, path)
-    except PlanError as error:
+    except (PlanError, parallel.ParallelError) as error:
         print(f"plan.py: {error}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
+
+
+# What a subservant (a slot with plans/LEAD) may not do: plan.md is the lead's (hal2 shows the newest copy).
+SUBSERVANT_REFUSES = ("new", "status", "assign", "grilled", "landing", "uat", "brief")
+PARALLEL_COMMANDS = ("ready", "assign", "brief", "report", "reports", "watch")
+
+
+def refuse_subservant(root: Path, command: str) -> None:
+    marker = parallel.subservant_marker(root, Path.cwd())
+    if marker and command in SUBSERVANT_REFUSES:
+        raise PlanError(f"this slot is a subservant of slot {marker['slot']} (plan {marker['plan']} step "
+                        f"{marker['step']}, plans/LEAD): it never edits plan.md; write your report with "
+                        f"`plan.py report {marker['step']}` and tell the lead")
+
+
+def parallel_steps(path: Path) -> list[dict]:
+    steps = read_steps(path.read_text())
+    if not steps or "needs" not in steps[0]:
+        raise PlanError(f"{slug_of(path)} is no parallel plan: its step table has no Needs column")
+    return steps
+
+
+def run_parallel(root: Path, path: Path, args) -> int:
+    """ready, assign, brief, report, reports, watch (skills plan 0013)."""
+    slug, steps = slug_of(path), parallel_steps(path)
+    if args.command == "ready":
+        ready, waiting = parallel.schedule(steps, parallel.capacity(path.read_text()), args.limit)
+        if not args.json:
+            for s in ready:
+                print(f"{s['number']}\t{s['step']}\t{', '.join(s['touches']) or '-'}")
+            print("" if ready else "nothing ready", end="\n" if not ready else "")
+            return 0
+        result = {"plan": slug, "ready": ready, "waiting": waiting,
+                  "running": [s for s in steps if parallel.kind(s["status"]) == "running"]}
+    elif args.command == "assign":
+        who = parallel.check_who(" ".join(args.who))
+        step = next((s for s in steps if s["number"] == args.step), None)
+        if step is None:
+            raise PlanError(f"no step '{args.step}' in {slug}")
+        ready, waiting = parallel.schedule(steps, parallel.capacity(path.read_text()))
+        if step not in ready and not args.force:
+            why = next((w["why"] for w in waiting if w["number"] == args.step), f"it is {step['status'] or 'open'}")
+            raise PlanError(f"step {args.step} is not ready ({why}); --force assigns it anyway")
+        slot = parallel.slot_of(who)
+        if slot and not args.force and (why := parallel.slot_taken(root, slug, steps, args.step, slot)):
+            raise PlanError(f"{why}; --force assigns it anyway")
+        set_cells(path, args.step, {"who": who, "status": "running"})
+        result = describe(root, path)
+        worktree = parallel.slot_worktree(root, slot) if slot else None
+        if worktree and worktree.resolve() != root.resolve():
+            result["marker"] = str(parallel.write_marker(worktree, root.name, slug, args.step))
+    elif args.command == "brief":
+        step = next((s for s in steps if s["number"] == args.step), None)
+        if step is None:
+            raise PlanError(f"no step '{args.step}' in {slug}")
+        brief = path.parent / "steps" / f"{args.step}.md"
+        if not brief.exists():
+            brief.parent.mkdir(exist_ok=True)
+            brief.write_text(parallel.fill(
+                "step-brief.md", number=args.step, slug=slug, plan_number=slug[:4], title=step["step"],
+                lead=root.name, needs=", ".join(step["needs"]) or "none", touches=", ".join(step["touches"]) or "none",
+                done_when=step["done_when"] or "<the check that proves the step>", who=step["who"] or "<who>"))
+        result = {"plan": slug, "step": args.step, "brief": str(brief.relative_to(root)),
+                  "prompt": parallel.brief_prompt(slug, args.step, root.name)}
+    elif args.command == "report":
+        marker = parallel.read_marker(root) or {}
+        step = next((s for s in steps if s["number"] == args.step), None)
+        if step is None:
+            raise PlanError(f"no step '{args.step}' in {slug}")
+        report = path.parent / "reports" / f"{args.step}.md"
+        if not report.exists():
+            report.parent.mkdir(exist_ok=True)
+            report.write_text(parallel.fill(
+                "report.md", number=args.step, slug=slug, title=step["step"], slot=root.name,
+                lead=marker.get("slot", "<lead slot>"), date=dt.date.today().isoformat()))
+        result = {"plan": slug, "step": args.step, "report": str(report.relative_to(root))}
+    elif args.command == "reports":
+        result = {"plan": slug, "arrived": parallel.arrived(root, slug, steps, fetch=not args.no_fetch)}
+    else:
+        return watch(root, path, args.interval, args.rounds)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def watch(root: Path, path: Path, interval: float, rounds: int) -> int:
+    """One line per report newly arrived on a subservant's branch, for the lead's background Monitor."""
+    seen, n = set(), 0
+    while True:
+        for r in parallel.arrived(root, slug_of(path), read_steps(path.read_text())):
+            if (r["number"], r["sha"]) not in seen:
+                seen.add((r["number"], r["sha"]))
+                print(f"report step {r['number']} from slot {r['slot']} at {r['sha']}: {r['report']}", flush=True)
+        n += 1
+        if rounds and n >= rounds:
+            return 0
+        time.sleep(interval)
 
 
 def run_global(args) -> int:
@@ -493,7 +702,7 @@ def run_global(args) -> int:
     if args.command == "new":
         result = describe(root, new_global_plan(folder, args.title, args.goal, args.research))
     elif args.command == "list":
-        result = [describe(root, p) for p in plan_files(root)]
+        result = [describe_safe(root, p) for p in plan_files(root)]
     elif args.command in ("status", "grilled"):
         if not args.plan:
             raise PlanError("a global plan has no current plan: name it with --plan <n>")

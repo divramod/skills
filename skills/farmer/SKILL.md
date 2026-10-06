@@ -34,7 +34,7 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 | `watch` | `duties.plan_watch` (sanity-watch's scan) | [instructions/watch.md](instructions/watch.md) | sanity-watch's |
 | `autoclear` | `duties.plan_autoclear` (fix-autoclear's doctor) | [instructions/autoclear.md](instructions/autoclear.md) | fix-autoclear's |
 | `trains` | `trains.py` (merge trains: finished, non-overlapping waiters land as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
-| `prune` | `prune.py` (landed slots: 00-09 cleaned once per landing, one 10-99 slot removed per round with its branch; free disk and the biggest worktrees every 6 h, a notice under 100 GB) | [instructions/prune.md](instructions/prune.md) | [cleanup](../cleanup/SKILL.md), [delete-worktree-session](../delete-worktree-session/SKILL.md) |
+| `prune` | `prune.py` (landed slots: 00-09 cleaned once per landing, one 10-99 slot removed per round with its branch; a subservant's slot 30-99 (`plans/LEAD`) once its work is in `origin/<lead>` and it has been idle an hour; free disk and the biggest worktrees every 6 h, a notice under 100 GB) | [instructions/prune.md](instructions/prune.md) | [cleanup](../cleanup/SKILL.md), [delete-worktree-session](../delete-worktree-session/SKILL.md) |
 | tasks | `tasks.py` (machine form) | [instructions/task.md](instructions/task.md) | |
 
 `S=<skill-dir>/scripts`, `K=<skills repo>/skills`. **State** in the role folder `roles/farmer/` of the farmer slot, beside `ROLE.md` (`FARMER_DIR` overrides it with
@@ -136,7 +136,8 @@ The user gave the farmer this authority on 2026-10-03 (hal2 INTENT.md). The farm
 - tell sessions to merge their work together, to pause their work or to stop it, so that others get through;
 - pause the merge queue and reorder it;
 - **start servant sessions and give them plans**, autogrilled, run and landed, **without asking the user**
-  ([Delegate](reference.md#delegate-a-fix)); stop the sessions it started once their work has landed;
+  ([Delegate](reference.md#delegate-a-fix)), only in slots 30-99; stop the sessions it started once their work has
+  landed (never a parallel plan's subservant: its lead stops it);
 - have a test that fails only under load disabled (recorded, with a shot to bring it back);
 - review code, okay what a session waits for, and answer questions that the repository's decisions answer;
 - **relay the user's go** for an outward-facing or paid step (a production deploy, a paid server, an account): a

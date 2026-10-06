@@ -18,26 +18,32 @@ def flaky():
                     brief={"finding": {"test": "t"}})
 
 
-class Delegation(unittest.TestCase):
+class Ledger(unittest.TestCase):
+    """The farmer's state folder in a temp dir, free.py listing `self.free`, create.py starting slot 18."""
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.calls = []
 
+        self.free = []
+
         def call(argv, cwd):
             self.calls.append(argv)
             if argv[:2] == delegation.FREE:
-                return 0, json.dumps({"worktrees": []})
+                return 0, json.dumps({"worktrees": self.free})
             return 0, json.dumps({"slot": "18"})
 
         for p in (mock.patch.object(mtm_scan, "DATA", self.tmp), mock.patch.object(delegation, "call", call)):
             p.start()
             self.addCleanup(p.stop)
 
+
+class Delegation(Ledger):
     def test_a_dry_run_names_the_exact_calls_and_spawns_nothing(self):
         r = delegation.delegate(flaky(), MAIN, 5, True, NOW)
         self.assertEqual(r["how"], "new")
         self.assertEqual(r["calls"][0], delegation.FREE + ["--repo", MAIN])
-        self.assertEqual(r["calls"][1][:5], delegation.CREATE + ["--repo", MAIN, "--prompt"])
+        self.assertEqual(r["calls"][1][:7], delegation.CREATE + ["--repo", MAIN, "--from", "30", "--prompt"])
         self.assertIn('/plan new "disable the load-flaky test t"', r["calls"][1][-1])
         self.assertEqual([c for c in self.calls if c[:2] == delegation.CREATE], [])
         self.assertFalse((self.tmp / "hal2" / "delegations.jsonl").exists())
@@ -102,6 +108,39 @@ class Delegation(unittest.TestCase):
         delegation.delegate(flaky(), MAIN, 5, False, NOW)
         busy = {"18": {"plan": "0120-fix-t", "ahead": 2}}
         self.assertEqual(delegation.follow_up(MAIN, busy, 5, False, NOW + dt.timedelta(hours=2)), [])
+
+
+class ServantSlots(Ledger):
+    """Skills plan 0013: the farmer's servants work only in slots 30-99, like a parallel plan's subservants."""
+
+    def test_a_free_session_is_reused_only_in_a_slot_from_30(self):
+        self.free = [{"slot": "05", "panes": ["%5"]}, {"slot": "main", "panes": ["%1"]},
+                     {"slot": "farmer-hal2", "panes": ["%2"]}, {"slot": "31", "panes": ["%31"]}]
+        with mock.patch.object(delegation.deliver, "send", return_value=None) as send:
+            r = delegation.delegate(flaky(), MAIN, 5, False, NOW)
+        self.assertEqual((r["state"], r["slot"], r["how"]), ("running", "31", "free"))
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[0], "%31")
+        self.assertEqual([c for c in self.calls if c[:2] == delegation.CREATE], [])
+
+    def test_with_no_free_session_from_30_a_new_one_starts_from_30(self):
+        self.free = [{"slot": "05", "panes": ["%5"]}, {"slot": "29", "panes": ["%29"]}]
+        with mock.patch.object(delegation.deliver, "send", return_value=None) as send:
+            r = delegation.delegate(flaky(), MAIN, 5, False, NOW)
+        send.assert_not_called()
+        self.assertEqual((r["state"], r["how"]), ("running", "new"))
+        create = [c for c in self.calls if c[:2] == delegation.CREATE]
+        self.assertEqual(len(create), 1)
+        self.assertEqual(create[0][2:6], ["--repo", MAIN, "--from", "30"])
+
+    def test_follow_up_never_touches_a_subservant(self):
+        """A lead's subservant in slot 31 is not in the farmer's ledger: neither recorded nor stopped, even when its
+        slot looks landed (its branch is never on main by design)."""
+        delegation.delegate(flaky(), MAIN, 5, False, NOW)
+        slots = {"18": {"plan": "0120-fix-t", "ahead": 2}, "31": {"plan": "", "ahead": 0}}
+        self.assertEqual(delegation.follow_up(MAIN, slots, 5, False, NOW + dt.timedelta(hours=2)), [])
+        self.assertFalse([c for c in self.calls if c[:len(delegation.STOP)] == delegation.STOP])
+        self.assertNotIn("31", {e.get("slot") for e in delegation.ledger(MAIN).values()})
 
 
 if __name__ == "__main__":

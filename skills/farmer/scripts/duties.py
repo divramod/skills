@@ -37,6 +37,9 @@ TEXT = {
                       "<shotfile>/<n>/<title-slug>, or a short kebab-case task name (global CLAUDE.md).",
     "context-high": LEAD + ": your context is at {percent}%. Run /handoff now; hal2's autoclear continues you.",
     "continue": LEAD + ": you stopped mid-plan ({plan}). Continue the plan to its end.",
+    # A subservant (plans/LEAD) runs one step of its lead's plan and never lands (skills plan 0013).
+    "continue-step": LEAD + ": you stopped mid-step. Continue your step {step} of plan {plan} to its end, then "
+                            "report it to the lead in slot {slot} (plan.py report {step}); never land.",
     "failed": "Your last turn failed ({why}). Check git status and your last tool result, then continue.",
     "resume": "Your last response was cut off ({error}). Check git status and the result of your last tool call, "
               "then continue where you stopped.",
@@ -71,7 +74,11 @@ def plan_lead(item: dict, ctx: dict, scan: dict | None = None) -> list[dict]:
         elif kind == "context-high":
             text = TEXT["context-high"].format(percent=n.get("context_percent"))
         elif kind == "idle-in-plan" and GOING_ON.search(said) and not WAITS.search(said):
-            text = TEXT["continue"].format(plan=n.get("plan") or "your plan")
+            lead = n.get("lead")  # a subservant continues its one step, never the plan to its landing
+            if not lead:
+                text = TEXT["continue"].format(plan=n.get("plan") or "your plan")
+            elif not lead.get("bad"):  # a broken marker names no step: the farmer judges it (a wake)
+                text = TEXT["continue-step"].format(**lead)
         elif kind == "failed" and "watch" not in ctx.get("duties", ()):
             text = TEXT["failed"].format(why=n.get("why", "failed"))
         if text is None:

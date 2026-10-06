@@ -7,22 +7,45 @@ builds the `--no-ff` candidate, pushes the branch and `land/<slot>`, opens or up
 (`land/<slot>` → the default branch) and waits until `land.yml` has tested the candidate: green, its `merge` job
 fast-forwards the default branch to the candidate (the PR shows merged); red, the queue stays held for this worktree
 until its fix lands (the user, 2026-10-06: "run landing until everything is fixed and merged and then release"). There
-is no attempts counter and no `reserve`: SKILL.md's steps 2 and 5 to 8 apply as they are, this page replaces steps
+is no attempts counter, and `reserve` only holds the queue while `land-runs.sh` waits (below): SKILL.md's steps 2 and 5 to 8 apply as they are, this page replaces steps
 1, 3 and 4.
 
 ## Land
 
 Run in the worktree (SKILL.md step 2 first: everything committed and pushed):
 
+**Reserve, then wait until no land run is unfinished**, before the first `merge-to-main` below and before a rerun
+after exit 3 or 4 (a new candidate), never before an exit-6 rerun (that one waits for its own run or for the queue
+ahead; a wait over 10 minutes loses its parked ticket, so it reruns at once):
+
+1. `hal2-cli-git worktree reserve --max-wait 100m --json [<slot>]`, in the background like the landing (exit 6:
+   rerun at once; after exit 3 or 4 the queue is still held for this worktree: skip this). The hold keeps any other
+   landing from starting while you wait; `merge-to-main` takes it over.
+2. `bash $S/land-runs.sh`, in the background too. It runs `gh run list --workflow land.yml --limit 10 --json
+   databaseId,headBranch,status --jq '.[] | select(.status != "completed")'` every minute and exits 0 once that
+   prints nothing; while it lists a run, an earlier landing still runs or ships (`queued` counts too: a run whose
+   ship job waits for a runner is queued), so never push meanwhile. Exit 7: a run stayed unfinished for an hour
+   (`--max-wait`; a parked runner, a pending approval): tell the farmer and wait for it, the hold stays. Exit 1: gh
+   failed, nothing is known: check again. hal2-cli-git's own check misses queued runs (the user, 2026-10-06: "the
+   mtm skill should have a mention of the command on how to check in the gh workflow list, if he can start now or
+   needs to wait").
+
+Then land:
+
 `hal2-cli-git worktree merge-to-main --max-wait 100m --keep-reserved --json [<slot>]`, in the background with the
 shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 7200000; a lower limit gets a
 `--max-wait` 20 minutes below it). It needs `gh` logged in to GitHub (`gh auth status`).
+
+**`/mtm milestone`** (SKILL.md's [milestone mode](../SKILL.md#milestone-mode)): run the same command **without
+`--keep-reserved`**, and on exit 0 do not go to step 5 (it is skipped): if the JSON still says `reserved: true`, run
+`hal2-cli-git worktree release --json [<slot>]` at once, so the queue is free for the next landing; then go on with
+SKILL.md step 6 as milestone mode says.
 
 | Exit | JSON `status` | Do |
 |---|---|---|
 | 0 | `landed` | the default branch is the candidate (`commit`), the PR (`pull_request`) merged; `retests` counts how often the default branch moved under it. `reserved: true`: go to SKILL.md [step 5](../SKILL.md#5-finish-the-plan-and-land-it). Report `warnings` (e.g. the main checkout could not be pulled) |
 | 0 | `nothing` | the branch has nothing the default branch lacks: step 5 |
-| 6 | `waiting`, `testing`, `shipping` | the slice passed: in the queue (`ahead`), while the candidate is tested (`candidate`, `run`) or while a run ships (`runs`; with `commit`: this landing has landed and waits for its run's `ship / ...` jobs before it releases the queue: strictly one land run at a time). The place and the candidate are kept: **rerun the same command at once**, as often as it takes |
+| 6 | `waiting`, `testing`, `shipping` | the slice passed: in the queue (`ahead`), while the candidate is tested (`candidate`, `run`) or while a run ships (`runs`; with `commit`: this landing has landed and waits for its run's `ship / ...` jobs before it releases the queue: strictly one land run at a time). The place and the candidate are kept: **rerun the same command at once**, as often as it takes, without reserve or `land-runs.sh` before it |
 | 4 | `gate_failed` | the candidate is red; the queue stays held for this worktree (`released: false`): [fix it](#red) and run again at once, the rerun adopts the hold at the head of the queue. Never release it yourself while you can fix: it is released when the branch lands. An older hal2-cli-git answers `released: true`: rerun at once all the same (it queues again) |
 | 3 | `conflict` | merging the default branch in conflicts (`files`): resolve as the [mfm](../../mfm/SKILL.md) skill's **Conflicts** says, commit, rerun (the queue stays held for this worktree meanwhile: go straight on) |
 | 5 | `stopped`, `cancelled`, `interrupted` | the user ended it: report and stop, never rerun on your own (your own shell's time limit is no user stop: rerun) |

@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (every new plan gets one autogrill round first, then the offer: run now, another autogrill round, manual grill; once started, it runs step after step autonomously, commits after every step, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2, and when its last step is done lands itself with /mtm (`Landing: auto`, what `new` writes for an implementation plan; `manual`, every research plan's, waits for the user's /mtm or lands with the implementation plan that follows)), mark steps done, or switch plans. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
+description: Lean planning for a repo — one self-contained folder per plan, plans/<NNNN>-<slug>/plan.md plus the plan's helper files (goal, context links, a step table with a done-when check and status per step, decisions), with plans/CURRENT_PLAN naming the active plan so the statusline shows it; a research plan (research, not implementation) gets the slug <NNNN>-research-<topic>. Create a plan, show where it stands, run it (every new plan gets one autogrill round first, then the offer: run now, another autogrill round, manual grill; once started, it runs step after step autonomously, commits after every step, when the context window passes 35% before a new step, hands off, clears its own session and continues with /handoff c on its own through hal2, and when its last step is done lands itself with /mtm (`Landing: auto`, what `new` writes for an implementation plan; `manual`, every research plan's, waits for the user's /mtm or lands with the implementation plan that follows)), mark steps done, or switch plans. A parallel plan (`new --parallel`: Needs, Touches, Who) runs independent steps at once in subagents and in subservant sessions in worktree slots 30-99 that never land (`ready`, `assign`, `brief`, `report`, `reports`, `watch`); a slot with plans/LEAD does its one step only. Execution uses the agent's built-ins (subagents, /goal), not plan machinery. Use when the user wants to plan a feature, asks what's next on the plan, or finishes a step. `/plan h` shows help.
 ---
 
 # plan
@@ -45,6 +45,11 @@ feature shotfile (`Shotfile:`). A research plan has no UATs (`new --research` le
 
 **The step table is the plan's state.** `/plan`, `/handoff` and the statusline all read it; nothing else tracks
 progress. Update it the moment a step's check passes, never later.
+
+**Parallel plans** (`new --parallel`) run independent steps at once, in subagents and in subservant sessions in
+worktree slots 30-99 that never land: their table adds Needs, Touches and Who, and the lead runs them as in
+[Run a parallel plan](#run-a-parallel-plan). A slot with `plans/LEAD` is such a subservant: it does one step only
+([Work as a subservant](#work-as-a-subservant)).
 
 **Good steps** fit one session (split a step that doesn't) and have a **Done when** that is a runnable command
 where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise one observable behaviour.
@@ -96,6 +101,12 @@ and its steps are not committed (the folder is no repository) unless the user ke
 | `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
 | `/plan uat` | | `python3 $S/plan.py uat`: scaffold the current plan's `uat.md` (see above) |
 | `/plan landing auto\|manual` | `/plan l a\|m` | `python3 $S/plan.py landing <auto\|manual>`: whether the current plan lands itself at its end |
+| `/plan new --parallel <idea>` | `/plan p <idea>` | a parallel plan: the step table gets Needs, Touches and Who; it runs as in [Run a parallel plan](#run-a-parallel-plan) |
+| `/plan ready` | | `python3 $S/plan.py ready --json`: the parallel plan's steps that can start now, and why the others wait |
+| `/plan assign <n> <who>` | | `python3 $S/plan.py assign <n> <who>`: lead, subagent, user or `slot NN` (30-99) |
+| `/plan brief <n>` | | `python3 $S/plan.py brief <n>`: scaffold the step's brief and print the subservant's first prompt |
+| `/plan report <n>` | | `python3 $S/plan.py report <n>`: a subservant scaffolds its report ([Work as a subservant](#work-as-a-subservant)) |
+| `/plan reports` | | `python3 $S/plan.py reports`: the subservants' reports arrived on their branches |
 | `/plan new -g <title>` | `/plan r -g <topic>` | a global plan (see "Global plans" above; `--research` works too) |
 | `/plan s -g <n>`, `/plan n -g <n>`, `/plan d -g <n> [<step>]` | | status, run, finish a step of global plan `<n>` |
 | `/plan check` | `/plan c` | `python3 $S/plan.py check`: report plan numbers used twice |
@@ -190,7 +201,9 @@ no approval, no plan mode and no per-step grill offer until the plan's end. What
    [New plan](#new-plan) step 7 (Run now, Another autogrill round, Manual grill). A grilled plan the user asked to run
    just starts. After the start nothing is asked any more (see above).
 
-2. For each step, starting with the one marked `next`:
+2. A parallel plan (`parallel` in the JSON) runs as [Run a parallel plan](#run-a-parallel-plan) says; in a
+   subservant's slot (`lead` in the JSON) only its one step runs, as [Work as a subservant](#work-as-a-subservant)
+   says. Otherwise, for each step, starting with the one marked `next`:
    1. Detail it for yourself: the files it touches, the approach, the tests. Use subagents (with worktree
       isolation) for independent parallel parts.
    2. Implement it until its done-when check passes.
@@ -201,6 +214,135 @@ no approval, no plan mode and no per-step grill offer until the plan's end. What
    - `manual`: say the plan is done and that the user's `/mtm` (or, for a research plan, the implementation plan
      after it) lands it; never start `/mtm` yourself and ask nothing.
    - `none` (a global plan): say it is done.
+
+## Run a parallel plan
+
+A big plan runs its independent steps at once: the **lead** (the session that runs the plan, in the plan's own
+worktree) dispatches them to subagents and to **subservants**, agent sessions in worktree slots 30-99 that do one
+step each, never land and report back. Everything below that is bookkeeping is code (`plan.py`, parallel.py); the
+lead's model only judges (the brief's task, the merge, the review). Design: hal2 plan 0149's
+`one-plan-answer.md`, sections D and G.
+
+**The table** (`plan.py new --parallel` writes it): `| # | Step | Needs | Touches | Who | Done when | Status |`, the
+plan's first table with `#`, `Step` and `Status`. A plan without the Needs column is sequential and works as above.
+
+- **#**: integers, appended, never renumbered, so Needs stay valid when steps are added.
+- **Step**: a short title; the full task lives in the step's brief `steps/<n>.md`, written when it becomes ready.
+  Write a `|` inside a cell as `\|` (`plan.py` reads and writes it so; a row with too few cells is a clean error).
+- **Needs**: the steps that must be done first, comma-separated ids and ranges (`1, 3-7`); blank or `-` is none.
+- **Touches**: what the step changes, comma-separated: crates, packages and contracts (`rust:<crate>`,
+  `ts:<package>`, `proto:<package>`, `docs`) and pseudo-resources a machine has once (`@hub-stack`, `@vault-test`,
+  `@stripe-mock`, `@vm`, `@quiet-mac`, `@ci`, `@deploy`, `@land`). Two steps that share one never run at once. Each
+  has room for one step, `@vm` for two; a `Capacity: @vm=3, @x=2` line under the title changes that. A row whose
+  Step starts with `Milestone <n>` touches `@land`, so one land run goes at a time. Resources compare without
+  backticks, spaces and case (`` `@VM` `` is `@vm`), the Capacity line's too.
+- **Who**: `lead`, `subagent`, `user` (a batched physical action) or `slot NN` (a subservant, NN 30-99).
+- **Status**: blank (open), `running`, `blocked <why>`, `done`; a step another plan absorbed is
+  `done (absorbed into <NNNN> step <n>)`. A `blocked` step with a Who keeps its Touches and its slot like a running
+  one.
+
+`problems` names ids that are no integer or used twice, Needs no row has, bad Needs tokens and cycles; fix them
+before dispatching.
+
+**The commands** (the JSON of a parallel plan adds `parallel`, `running` and `ready`):
+
+```bash
+python3 $S/plan.py ready [--limit <n>] [--json]   # what can start now (open, Needs done, Touches free; greedy in table order); --json: why the others wait
+python3 $S/plan.py assign <n> <who> [--force]     # set Who and `running`; refuses a step that is not ready and a taken slot; `slot NN` only 30-99
+python3 $S/plan.py brief <n>                      # scaffold steps/<n>.md (templates/step-brief.md, never overwritten), print the subservant's first prompt
+python3 $S/plan.py reports [--no-fetch]           # the running subservants' reports that arrived on origin/NN
+python3 $S/plan.py watch [--interval 60]          # one line per newly arrived report: the lead's background Monitor
+```
+
+**Subagent or subservant.** A **subagent** takes a short step (about 30 minutes) that needs no build or test cycle
+of its own (docs, briefs, research, plan text) or whose files are disjoint from everything running: it works in the
+lead's tree, the lead runs its builds one at a time and commits its work. Give it worktree isolation only when the
+repo's tracked `.claude/settings.json` sets `"worktree": {"baseRef": "head"}` (otherwise the isolated tree branches
+from the default branch, not from the plan's work). A **subservant** takes everything else: any step with its own
+build or test cycle, or longer than about 30 minutes. It runs in slot 30-99, never below (the user: "helper sessions
+(subservants) only work in the worktrees 30+").
+
+**The lead's loop** (the model wakes for judgment only):
+
+1. `plan.py ready --json`. For each ready step up to the limits below: detail its brief (`plan.py brief <n>`, then
+   fill in the task, files and approach in `steps/<n>.md`), commit and push the brief to `origin/<lead>`, then
+   assign it:
+   - a subagent: `plan.py assign <n> subagent`, then start it with the brief as its prompt;
+   - a subservant: **reuse before create**: a slot 30+ whose last step is merged (and marked done) gets the next one:
+     `plan.py assign <n> slot <NN>` rewrites its `plans/LEAD`, then its session is told to `git reset --hard
+     origin/<lead>` and read the new brief, so its build cache stays warm. Only when none is free start one first,
+     then assign the step to the slot create.py's JSON names (`"slot"`):
+     ```bash
+     python3 <create-worktree-session>/scripts/create.py --from 30 --base origin/<lead> \
+       --lead "<lead-slot> <plan-slug> <n>" --exact --prompt "<the prompt plan.py brief printed>"
+     python3 $S/plan.py assign <n> slot <NN>   # NN: the "slot" of create.py's JSON
+     ```
+     `assign` refuses a slot another running or blocked step holds, whose `plans/LEAD` names other work (another
+     lead or plan, or a step not done) or where a farmer servant runs (a `running` entry of the farmer's
+     `delegations.jsonl`); `--force` only after checking the slot by hand;
+   - `lead` or `user`: `plan.py assign <n> lead|user`, then do it yourself, or batch it for the user (F of the
+     design: physical actions only).
+2. Run `plan.py watch` as a background Monitor; it prints a line when a subservant's report arrives on its branch.
+3. For each report, one branch at a time: `git fetch`, `git merge --no-ff origin/NN`, resolve the shared files
+   (below), regenerate what is generated (Cargo.lock, the workspace-hack, openapi.json), run the build check, the
+   step's done-when and the gate jobs the merge touches (`hal2-cli-git changes --job` where hal2 runs the gates).
+   Review the diff (a review subagent for a large one), take the report's lines for AGENTS.md and INTENT.md into
+   them, push `origin/<lead>`, `plan.py status <n> done`, then dispatch again (point 1).
+4. A subservant reports **blocked**: answer it from the plan and its decisions, or decide it and record it; a
+   user-only question goes to the farmer like any other.
+5. While a milestone lands, merge nothing: the candidate is fixed.
+
+**Shared files are the lead's.** Only the lead writes `plan.md`, `INTENT.md`, `AGENTS.md`, lockfiles and generated
+files (regenerated on merge), CI and gate config (`@ci`). A subservant puts the lines it wants there into its report.
+Budgets and workspace member lists a subservant may append to; the lead resolves them on merge. A new protobuf
+package in new files is free; a change to an existing package is `proto:<package>`, one step at a time.
+
+**Milestones** land the plan's work in parts when the plan is too big to land once: a row "Milestone n: land ...",
+whose Needs name what it carries, so the DAG covers it. Before asking to land, the lead runs every gate job the
+candidate touches locally until it is green (a red landing holds the repository's merge queue). Then it asks the
+farmer (or the user) for "land now"; a batch's pre-authorization may let it land after a silence it names. It lands
+with `/mtm milestone` (the mtm skill's milestone mode: the queue is not kept, `CURRENT_PLAN` stays, no cleanup, so
+the build cache stays warm), marks the row done, and the subservants merge `origin/<lead>` before they next report.
+A milestone is a coherent set, about one or two days of work. Only the plan's last landing is the plan's own (`Land
+the plan`).
+
+**Limits**: subservants up to the farmer's `servant_limit` (by load) and only while the disk has room (a new slot
+needs `create.py`'s `--min-free-gb`, 50 by default: a slot's Rust target is 10-30 GB); one step per `@` resource
+(`@vm` two); one land run at a time. The farmer prunes a slot 30+ once its branch is in `origin/<lead>` and it
+has been idle over an hour.
+
+**The never-land guard** has three layers: code (hal2-git's queue refuses a slot with `plans/LEAD`; `plan.py`
+refuses a subservant's writes to `plan.md`; the mtm skill's `subservant-guard.sh`), the farmer (it skips marked
+slots: no "land now", no restart with `/mtm`, only with `/handoff c`; its `follow_up` never tracks a subservant, so
+the lead watches and stops its own) and this prose.
+
+**Hand-off.** The state is the step table, `steps/`, `reports/` and the lead's `HANDOFF.md`, which lists what is in
+flight (step, who, since). The context check runs between merges instead of between steps; stop the `watch`
+Monitor before a clear. After `/handoff c`: `plan.py current` and `ready --json`, `plan.py reports`, then the loop
+again. The subservants keep working meanwhile; their reports wait on their branches.
+
+## Work as a subservant
+
+A slot with `plans/LEAD` (one line `<lead-slot> <plan-slug> <step>`, gitignored like `CURRENT_PLAN`, which names
+the lead's plan so the statusline and autoclear work) runs **one step of the lead's plan and nothing else**.
+`plan.py current` shows it as `lead`. Its brief `plans/<plan>/steps/<step>.md` holds the task and these rules:
+
+1. **Start**: `git fetch origin`; when the slot's branch is already in `origin/<lead>` (a reused slot),
+   `git reset --hard origin/<lead>`, else `git merge origin/<lead>`. Never run `/mfm` (the lead's branch is the
+   base, not the default branch).
+2. **Only this step**: commit as you go, each message ending `(plan <NNNN> step <n>)`. Never edit `plan.md` (hal2
+   would show the subservant's copy; `plan.py` refuses `new`, `status`, `assign`, `grilled`, `landing`, `uat` and
+   `brief` here), the briefs or another step's report; never run another step, even when it is ready.
+3. **Before reporting**: merge `origin/<lead>` again, run the step's done-when and the gate jobs the change touches
+   until green.
+4. **Report**: `plan.py report <step>` scaffolds `plans/<plan>/reports/<step>.md` (`templates/report.md`): what
+   changed, the checks and their results, the lines for the lead's shared files, follow-ups. Commit it,
+   `git push -u origin HEAD`, then one line to the session `ListAgents` shows in the lead's slot (look it up by slot:
+   names change after a clear): `step <n> reported: <one line>`.
+5. **Never land**: no `/mtm`, no merge queue, no push to the default branch; the lead merges the branch.
+6. **Blocked**: one line to the lead's session, then wait for its answer; never ask the user.
+7. **After a clear**: `/handoff c` continues this one step only, never the plan and never a landing. The context
+   check and the hand-off work as in [Finish a step](#finish-a-step), without the table update.
 
 ## Land the plan
 

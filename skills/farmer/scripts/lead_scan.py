@@ -25,6 +25,8 @@ import sys
 import time
 from pathlib import Path
 
+import lead_marker
+import mtm_scan
 import roles
 
 DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
@@ -101,9 +103,13 @@ def classify(agent: dict, said: str, now: float) -> tuple[str, str] | None:
     if state == "failed":
         return "failed", "its turn failed (API error, limit or crash)"
     if state in ("done", "idle", "sleeping"):
+        if agent.get("lead") and agent.get("step_done"):  # a subservant done with its step waits for its lead
+            return None
         tail = said[-600:]
         if said.startswith("AskUserQuestion") or WAITS_FOR_USER.search(tail):
             return "asks", f"waits for an answer for {age // 60} min"
+        if (lead := agent.get("lead")) and age >= IDLE_IN_PLAN_AFTER:  # a subservant: its one step, never a landing
+            return "idle-in-plan", f"idle for {age // 60} min inside its step, {mtm_scan.subservant(lead)}"
         if agent.get("plan") and age >= IDLE_IN_PLAN_AFTER:
             return "idle-in-plan", f"idle for {age // 60} min inside plan {agent['plan']}"
     if (agent.get("context_percent") or 0) >= CONTEXT_HIGH and not agent.get("autoclear"):
@@ -128,6 +134,16 @@ def handled(main: str, now: float | None = None) -> set[tuple[str, int]]:
     return out
 
 
+def with_marker(agent: dict, checkout: Path) -> dict:
+    """The agent with its checkout's CURRENT_PLAN, its subservant marker (`lead`, skills plan 0013) and whether that
+    subservant has finished its step (`step_done`: its report on origin/NN, or merged into origin/<lead>): an idle
+    subservant done with its step waits for its lead and wakes nobody."""
+    plan_file = checkout / "plans/CURRENT_PLAN"
+    lead = mtm_scan.lead_of(checkout)
+    return {**agent, "current_plan": plan_file.read_text().strip() if plan_file.exists() else "", "lead": lead,
+            "step_done": bool(lead) and lead_marker.step_done(checkout, checkout.name, lead)}
+
+
 def scan(repo: str, show_all: bool) -> dict:
     now, main = time.time(), main_checkout(repo)
     agents = run_json(["hal2-cli-agents", "list", "--json"]) or []
@@ -137,8 +153,8 @@ def scan(repo: str, show_all: bool) -> dict:
     for a in agents:
         if a.get("project") != main or not a.get("session_id") or a.get("session_id") == own:
             continue
-        plan_file = Path(a.get("checkout") or a.get("cwd") or "/nonexistent") / "plans/CURRENT_PLAN"
-        a = {**a, "current_plan": plan_file.read_text().strip() if plan_file.exists() else ""}
+        checkout = Path(a.get("checkout") or a.get("cwd") or "/nonexistent")
+        a = with_marker(a, checkout)
         said = last_assistant_text(transcript(a.get("cwd") or a.get("checkout") or "", a["session_id"]))
         hit = classify(a, said, now)
         if not hit:
@@ -149,8 +165,8 @@ def scan(repo: str, show_all: bool) -> dict:
         out.append({
             "kind": hit[0], "why": hit[1], "slot": a.get("slot"), "pane": a.get("pane_id"),
             "session": a["session_id"], "since": int(a.get("since") or 0), "state": a.get("state"),
-            "plan": a.get("plan"), "context_percent": a.get("context_percent"), "handled": key in done,
-            "said": said[-1200:],
+            "plan": a.get("plan"), "lead": a["lead"], "context_percent": a.get("context_percent"),
+            "handled": key in done, "said": said[-1200:],
         })
     order = {"blocked": 0, "asks": 1, "failed": 2, "idle-in-plan": 3, "context-high": 4, "no-plan": 5}
     out.sort(key=lambda x: (order[x["kind"]], x["slot"] or ""))
