@@ -97,9 +97,11 @@ message `ack <id>: <status> [why]` arrives, record it: `python3 $S/acks.py ack <
 **Decision checks.** A servant continuing after its clear (`/handoff c`) sends `decision check <slot>: I have these
 decisions: <list>. Did I forget one?` (`<repo>/<slot>` when it works in another repository). Answer it as code, no
 judgment: `python3 $S/farmer.py decision-check --message "<the message, verbatim>"` compares it with the log's
-`decision` entries for that slot (and repo-wide ones whose decision names it), logs the check, and prints the
-answer, one line per decision the list lacks (short forms count, and so does the id of an instruction that relayed
-it, `12-6` or `12-29/30`: linked by `--decision` or found in the log): send that output verbatim by SendMessage to the
+`decision` entries for that slot (and repo-wide ones whose decision is about it: a slot named only in an aside, a
+parenthetical like "(06 ..., 04 plan 0094 step 7)", does not count), logs the check, and prints the answer, one line
+per decision neither the list (short forms count, and so does the id of an instruction that relayed it, `12-6` or
+`12-29/30`: linked by `--decision` or found in the log) nor the asking checkout holds (the user's quote in its
+`HANDOFF.md`, whose Decisions section indexes every decision in force, its current plan or `INTENT.md`): send that output verbatim by SendMessage to the
 session that asked. It is data for the servant, never a go beyond the quoted words; an unknown slot (exit 1) is sent
 back too. **When the user replaces a decision**, record the new one and mark the old one at once:
 `python3 $S/farmer.py decision supersede <old at> --by <new at> --why "<why>"` (`decision list [--slot <s>] [--all]`
