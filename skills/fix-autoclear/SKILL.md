@@ -29,7 +29,11 @@ rule (background first; ~/.claude/CLAUDE.md), recommended option first.
    `bash $S/install-prerequisites.sh`.
 2. Read the screen (and screenshots when the user gave some): the pane's last lines (the hook denial, `hal2
    stopped this turn ...`, `Interrupted`, the input box, a dialog), the statusline (context %, plan).
-3. `$E doctor --hours 6` shows whether other panes failed the same way.
+3. `$E doctor --hours 6` shows whether other panes failed the same way. A session with autoclear off (the user
+   switched it off) is no failure: the doctor lists it apart (`off`) and the farmer's `duty:autoclear` never touches it
+   (`evidence.autoclear_off`: a marker `gave_up` without the sweep's `MAX_ATTEMPTS` attempts, a `rearm_percent` no
+   context reaches (>= 100), or an agent's `autoclear_off: true` once hal2's per-session switch exists, shot
+   plugin-agents #31). Never "fix" or clear-and-continue such a session.
 4. Build the **timeline**: soft stop → what the model did → hard stop? → job phases → sweep ticks → where it
    stopped. The failure is the first step that did not do what the insider knowledge below says it does.
 

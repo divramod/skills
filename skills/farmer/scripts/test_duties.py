@@ -96,18 +96,33 @@ class Autoclear(unittest.TestCase):
         p = {"what": "job", "pane": "%4", "session": "s1", "who": "hal2 wt 04", "reason": "ignored-soft-stop",
              "message": "m"}
         agents = {"%4": {"slot": "04", "session_id": "s1", "state": "done"}}
-        plan = duties.plan_autoclear({}, ctx(agents_by_pane=agents), [p])
+        plan = duties.plan_autoclear({}, ctx(agents_by_pane=agents), [p], set())
         self.assertEqual(kinds(plan), [("run", "continue", "04"), ("delegate", "fix", "04")])
         moved = {"%4": {"slot": "04", "session_id": "s2", "state": "done"}}
         log = [{"at": NOW.isoformat(), "key": "autoclear-fix:ignored-soft-stop"}]
-        self.assertEqual(kinds(duties.plan_autoclear({}, ctx(agents_by_pane=moved), [p]), log), [])
+        self.assertEqual(kinds(duties.plan_autoclear({}, ctx(agents_by_pane=moved), [p], set()), log), [])
 
 
     def test_a_job_blocked_by_a_draft_is_left_to_sanity_watch(self):
         p = {"what": "blocked", "pane": "%4", "session": "s1", "who": "hal2 wt 04", "reason": "continue-blocked",
              "message": "a draft in the input box since 08:15"}
         agents = {"%4": {"slot": "04", "session_id": "s1", "state": "done"}}
-        self.assertEqual(duties.plan_autoclear({}, ctx(agents_by_pane=agents), [p]), [])
+        self.assertEqual(duties.plan_autoclear({}, ctx(agents_by_pane=agents), [p], set()), [])
+
+    def test_a_session_the_user_switched_off_is_never_cleared_or_delegated(self):
+        # hal2 wt 02, 2026-10-06 (plan 0011): the user's "disable the autoclear in 02" as a hand-written marker; the
+        # doctor took it for a give-up, this duty ran clear-and-continue on the idle session (job 171).
+        marker = {"session_id": "227f49f1-0b95-4ea0-af2f-b55a9b6a9917", "pane": "%171", "stage": "cancelled",
+                  "percent": 22.0, "threshold": 35, "soft_at": 1791272539541, "rearm_percent": 1000.0, "gave_up": True}
+        p = {"what": "marker", "pane": "%171", "session": marker["session_id"], "who": "hal2 wt 02", "attempts": 0,
+             "gave_up": True}
+        agents = {"%171": {"slot": "02", "session_id": marker["session_id"], "state": "idle"}}
+        self.assertTrue(duties.evidence.autoclear_off(marker))
+        self.assertEqual(duties.plan_autoclear({}, ctx(agents_by_pane=agents), [p], {marker["session_id"]}), [])
+        switched = {"%171": {**agents["%171"], "autoclear_off": True}}
+        self.assertEqual(duties.plan_autoclear({}, ctx(agents_by_pane=switched), [p], set()), [])
+        self.assertEqual(kinds(duties.plan_autoclear({}, ctx(agents_by_pane=agents), [p], set())),
+                         [("run", "continue", "02"), ("delegate", "fix", "02")])  # a real give-up still is acted on
 
     def test_continue_blocked_wakes_the_farmer(self):
         i = {"id": "F13:s1:1", "class": "F13", "name": "continue blocked", "action": "judge", "slot": "04",
