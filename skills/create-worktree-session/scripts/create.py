@@ -2,6 +2,7 @@
 """Start an agent session in the repository's first free and clean worktree slot.
 
   create.py [--repo DIR] [--agent claude|codex|opencode] [--model ID] [--tmux] [--prompt TEXT] [--exact]
+            [--from NN] [--base REV] [--lead "<lead-slot> <plan> <step>"] [--min-free-gb 50]
 
 The slot, counting from 01: no agent session runs in it (no live agent of the repository, no live terminal host
 of its worktree, no window of tmux session hal-<repo>), and its worktree is clean or missing: plans/CURRENT_PLAN
@@ -10,6 +11,13 @@ fine: the first prompt runs /mfm). The agent starts detached through `hal2-cli-g
 a hal2 terminal host (`--tmux`: a window of hal-<repo>), with a new session whose first prompt runs /mfm, then the
 given prompt (`--exact`: the prompt as given, without /mfm). Prints JSON: slot, pane, worktree, the attach
 command and the slots skipped for their work. Exit 2 when a hal2 CLI is missing, 1 when no slot is left.
+
+A parallel plan's subservant (skills plan 0013): `--from NN` starts the search at slot NN (30 for subservants);
+`--base REV` branches the slot from REV instead of main (`git fetch origin` first for `origin/...`; `git branch -f
+NN REV` for a new slot, `git reset --hard REV` in a reused clean one; a slot whose leftover branch NN holds commits
+neither in REV nor on origin's default branch is skipped); `--lead` writes the marker `plans/LEAD` and
+`plans/CURRENT_PLAN` (into the clone's info/exclude when the repo does not ignore them) and implies `--exact` (no
+/mfm: the lead's branch is the base). A new worktree needs `--min-free-gb` free disk (default 50).
 """
 import json
 import os
@@ -83,21 +91,81 @@ def work(entry: dict, landing: str | None) -> str | None:
     return f"its landing is {landing} in the merge queue" if landing else None
 
 
-def choose(repo: Path) -> tuple[str, list[dict]]:
+def default_branch(repo: Path) -> str:
+    """origin's default branch as `origin/<name>`, else the local main or master."""
+    head = run("git", "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD", cwd=repo, check=False).strip()
+    if head:
+        return head.removeprefix("refs/remotes/")
+    for ref in ("origin/main", "origin/master", "main", "master"):
+        if run("git", "rev-parse", "--verify", "--quiet", ref, cwd=repo, check=False):
+            return ref
+    return "HEAD"
+
+
+def leftover(repo: Path, slot: str, base: str) -> str | None:
+    """Why branch `slot` (no worktree) must not be moved to `base`: commits in neither `base` nor the default."""
+    if not run("git", "rev-parse", "--verify", "--quiet", f"refs/heads/{slot}", cwd=repo, check=False):
+        return None
+    out = run("git", "rev-list", "--count", slot, "--not", base, default_branch(repo), cwd=repo, check=False)
+    count = int(out.strip() or 0)
+    return f"branch {slot} holds {count} commit{'s' if count != 1 else ''} in neither {base} nor main" if count else None
+
+
+def choose(repo: Path, first: int = 1, base: str | None = None) -> tuple[str, list[dict], dict | None]:
     listed = json.loads(run("hal2-cli-git", "worktree", "list", "--json", cwd=repo)).get("worktrees", [])
     worktrees = {w["name"]: w for w in listed if not w.get("main")}
     queue = json.loads(run("hal2-cli-git", "worktree", "queue", "--json", cwd=repo)).get("queue", [])
     landings = {t.get("slot"): t.get("state") or "queued" for t in queue if t.get("repo") == repo.name}
     busy, skipped = taken(repo), []
-    for n in range(1, 100):
+    for n in range(first, 100):
         slot = f"{n:02d}"
         if slot in busy:
             continue
-        why = work(worktrees[slot], landings.get(slot)) if slot in worktrees else None
+        if slot in worktrees:
+            why = work(worktrees[slot], landings.get(slot))
+        else:
+            why = leftover(repo, slot, base) if base else None
         if why is None:
-            return slot, skipped
+            return slot, skipped, worktrees.get(slot)
         skipped.append({"slot": slot, "why": why})
-    die("no free and clean slot from 01 to 99")
+    die(f"no free and clean slot from {first:02d} to 99")
+
+
+def free_gb(repo: Path) -> float:
+    """Free disk where the worktrees live (hal2: ~/.hal/git/worktree)."""
+    folder = Path.home() / ".hal" / "git" / "worktree"
+    return shutil.disk_usage(folder if folder.exists() else repo).free / 2**30
+
+
+def prepare(repo: Path, slot: str, entry: dict | None, base: str | None, min_gb: float) -> None:
+    """Before the start: free disk for a new worktree, then the slot's branch at `base`."""
+    if entry is None and free_gb(repo) < min_gb:
+        die(f"only {free_gb(repo):.0f} GB free, a new worktree needs {("%f" % min_gb).rstrip("0").rstrip(".")} (--min-free-gb): prune a slot first")
+    if not base:
+        return
+    if base.startswith("origin/"):
+        run("git", "fetch", "--quiet", "origin", cwd=repo)
+    if entry is None:
+        run("git", "branch", "-f", slot, base, cwd=repo)
+    else:
+        run("git", "reset", "--quiet", "--hard", base, cwd=Path(entry["path"]))
+
+
+def write_lead(worktree: Path, lead: str) -> None:
+    """The subservant marker plans/LEAD (`<lead-slot> <plan> <step>`) and CURRENT_PLAN, both ignored."""
+    parts = lead.split()
+    if len(parts) != 3:
+        die(f"--lead needs '<lead-slot> <plan> <step>', not '{lead}'")
+    (worktree / "plans").mkdir(exist_ok=True)
+    (worktree / "plans" / "LEAD").write_text(lead + "\n")
+    (worktree / "plans" / "CURRENT_PLAN").write_text(parts[1] + "\n")
+    common = Path(run("git", "rev-parse", "--git-common-dir", cwd=worktree).strip())
+    exclude = (common if common.is_absolute() else worktree / common) / "info" / "exclude"
+    for name in ("plans/LEAD", "plans/CURRENT_PLAN"):
+        if subprocess.run(["git", "check-ignore", "-q", name], cwd=worktree).returncode != 0:
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with exclude.open("a") as f:
+                f.write(name + "\n")
 
 
 def start(repo: Path, slot: str, argv: list[str], prompt: str) -> dict:
@@ -138,8 +206,18 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         return 0
     repo = main_checkout(Path(arg(argv, "--repo") or ".").expanduser().resolve())
-    slot, skipped = choose(repo)
-    report = start(repo, slot, argv, first_prompt(arg(argv, "--prompt"), "--exact" in argv))
+    first, base, lead = arg(argv, "--from") or "1", arg(argv, "--base"), arg(argv, "--lead")
+    if not first.isdigit() or not 1 <= int(first) <= 99:
+        die(f"--from needs a slot from 01 to 99, not '{first}'")
+    slot, skipped, entry = choose(repo, int(first), base)
+    prepare(repo, slot, entry, base, float(arg(argv, "--min-free-gb") or 50))
+    if lead and entry:
+        write_lead(Path(entry["path"]), lead)
+    report = start(repo, slot, argv, first_prompt(arg(argv, "--prompt"), "--exact" in argv or bool(lead)))
+    if lead and not entry:
+        if not report.get("worktree"):
+            die(f"hal2-cli-git worktree run {slot} reported no worktree: write plans/LEAD there by hand")
+        write_lead(Path(report["worktree"]), lead)
     result = {
         "repo": repo.name,
         "slot": report.get("slot") or slot,
@@ -148,6 +226,8 @@ def main(argv: list[str]) -> int:
         "worktree": report.get("worktree"),
         "attach": f"hal2-cli-agents attach {repo.name}/{slot}",
         "skipped": skipped,
+        "base": base,
+        "lead": lead,
     }
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
