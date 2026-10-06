@@ -14,6 +14,15 @@ is no attempts counter and no `reserve`: SKILL.md's steps 2 and 5 to 8 apply as 
 
 Run in the worktree (SKILL.md step 2 first: everything committed and pushed):
 
+**First wait until no land run is unfinished**, before every `merge-to-main` below (the first and every rerun: each
+takes the queue and pushes a candidate): `bash $S/land-runs.sh`, in the background like the landing. It runs
+`gh run list --workflow land.yml --limit 10 --json databaseId,headBranch,status --jq '.[] | select(.status !=
+"completed")'` every minute and exits 0 once that prints nothing; while it lists a run, another landing still runs
+or ships (`queued` counts too: a run whose ship job waits for a runner is queued), so never push meanwhile.
+`--once` checks a single time (exit 6: runs listed); exit 1: gh failed, nothing is known, check again before
+pushing. hal2-cli-git's own check misses queued runs (the user, 2026-10-06: "the mtm skill should have a mention of
+the command on how to check in the gh workflow list, if he can start now or needs to wait").
+
 `hal2-cli-git worktree merge-to-main --max-wait 100m --keep-reserved --json [<slot>]`, in the background with the
 shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 7200000; a lower limit gets a
 `--max-wait` 20 minutes below it). It needs `gh` logged in to GitHub (`gh auth status`).

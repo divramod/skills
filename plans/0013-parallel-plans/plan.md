@@ -136,6 +136,11 @@ answered before implementation, with the user's words and the date; the run acts
   itself (`git worktree add` on branch NN, a best-effort `git push -u origin NN`, `hal2-cli-secrets reveal` when
   `.secrets/` exists), writes the marker, then runs `worktree run` on it; a bad `--lead` is refused before any slot
   is picked. Plain sessions still let hal2 create the worktree.
+- 2026-10-06 (the user, via the farmer's instruction skills/30-1): before landing, mtm's CI landing waits until no
+  `land.yml` run is unfinished (`gh run list --workflow land.yml --limit 10 --json databaseId,headBranch,status --jq
+  '.[] | select(.status != "completed")'`, queued runs too) before taking the queue and before every candidate push;
+  `skills/mtm/scripts/land-runs.sh`, references/ci.md's Land. User: "the mtm skill should have a mention of the
+  command on how to check in the gh workflow list, if he can start now or needs to wait".
 
 ## Notes
 

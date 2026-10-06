@@ -1,0 +1,58 @@
+#!/usr/bin/env bats
+# land-runs.sh: no reserve or candidate push while a land.yml run is unfinished.
+
+setup() {
+  here="$BATS_TEST_DIRNAME"
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/bin"
+  # A fake gh: prints the lines of $tmp/runs (one per call, consumed), applying no filter.
+  cat > "$tmp/bin/gh" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "$tmp/calls"
+[ -f "$tmp/fail" ] && exit 1
+if [ -s "$tmp/runs" ]; then head -n 1 "$tmp/runs" | tr '|' '\n'; sed -i.bak 1d "$tmp/runs"; fi
+exit 0
+EOF
+  chmod +x "$tmp/bin/gh"
+  : > "$tmp/runs"
+  export PATH="$tmp/bin:$PATH"
+}
+
+teardown() { rm -rf "$tmp"; }
+
+@test "no unfinished run: go at once" {
+  run bash "$here/land-runs.sh" --once "$tmp"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  grep -q -- "--workflow land.yml" "$tmp/calls"
+  grep -q 'select(.status != "completed")' "$tmp/calls"
+}
+
+@test "--once lists an unfinished run and exits 6" {
+  echo "68 land/04 queued" > "$tmp/runs"
+  run bash "$here/land-runs.sh" --once "$tmp"
+  [ "$status" -eq 6 ]
+  [[ "$output" == *"68 land/04 queued"* ]]
+}
+
+@test "without --once it waits until the runs are done" {
+  printf '%s\n' "68 land/04 in_progress|69 land/02 queued" "68 land/04 queued" > "$tmp/runs"
+  run bash "$here/land-runs.sh" --interval 0 "$tmp"
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$tmp/calls")" -eq 3 ]
+  [[ "$output" == *"68 land/04 in_progress, 69 land/02 queued"* ]]
+}
+
+@test "a failing gh is no go" {
+  touch "$tmp/fail"
+  run bash "$here/land-runs.sh" --once "$tmp"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"do not push"* ]]
+}
+
+@test "a missing gh exits 2 naming the install" {
+  rm "$tmp/bin/gh"
+  PATH="$tmp/bin:/usr/bin:/bin" run bash "$here/land-runs.sh" --once "$tmp"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"brew install gh"* ]]
+}
