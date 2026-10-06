@@ -177,6 +177,22 @@ def landings_summary(landings: list[dict], since: float) -> tuple[list[dict], di
     return recent, tests
 
 
+def reservation_waits(head: dict, w: dict, now: float) -> dict | None:
+    """The queue waits at the front for a reserved slot that does not come: reserved over an hour ago, its slot
+    without an agent or with one not busy for an hour. The boss tells the user; it never releases a reservation."""
+    since = parse_time((head.get("reserved") or {}).get("since"))
+    if since is None or now - since < RESERVATION_WAITS_AFTER:
+        return None
+    agent = w.get("agent_state")
+    if agent in BUSY or (agent and w.get("agent_idle_seconds", 0) < RESERVATION_WAITS_AFTER):
+        return None
+    idle = f" for {w.get('agent_idle_seconds', 0) // MINUTE} min" if agent else ""
+    return {"kind": "reservation-waits", "slot": head["slot"], "seq": head.get("seq"),
+            "why": f"the queue waits at the front for slot {head['slot']}'s reservation since "
+                   f"{int((now - since) // MINUTE)} min ({head['reserved'].get('by')}), its agent is "
+                   f"{agent or 'none'}{idle}"}
+
+
 def findings(snap: dict) -> list[dict]:
     """What the boss acts on, most urgent first."""
     out, now = [], snap["now"]
@@ -332,6 +348,40 @@ def log(main: str, entry: dict) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
+def priority(main: str, slots: list[str], note: str = "", clear: bool = False, done: str = "") -> int:
+    """The user's landing order: hal2 orders the queue (`worktree queue order`), priority.json keeps the request.
+
+    `done` only takes a landed slot off priority.json: hal2 drops it from its own order when its turn ends."""
+    f = state_dir(main) / "priority.json"
+    if done:
+        kept = json.loads(f.read_text()) if f.exists() else {"slots": [], "note": ""}
+        kept["slots"] = [s for s in kept["slots"] if s != done]
+        if kept["slots"]:
+            f.write_text(json.dumps(kept))
+        else:
+            f.unlink(missing_ok=True)
+        log(main, {"kind": "priority", "slot": done, "what": "done", "note": ""})
+    else:
+        args = ["hal2-cli-git", "worktree", "queue", "order", *(["--clear"] if clear else slots), "--json"]
+        try:
+            r = subprocess.run(args, cwd=main, capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            print(f"scan.py: {' '.join(args)}: {e}", file=sys.stderr)
+            return 1
+        if r.returncode != 0:
+            print((r.stderr or r.stdout).strip() or f"{' '.join(args)} failed", file=sys.stderr)
+            return 1
+        order = (json.loads(r.stdout).get("priority") or {}).get("slots", []) if r.stdout.strip() else []
+        if clear or not order:
+            f.unlink(missing_ok=True)
+        else:
+            f.write_text(json.dumps({"slots": order, "note": note}))
+        log(main, {"kind": "priority", "slot": ",".join(order or slots), "what": "cleared" if clear else "set",
+                   "note": note})
+    print(f.read_text() if f.exists() else "no priority")
+    return 0
+
+
 def summary_dir(main: str) -> Path:
     """The round summaries: summaries/ in the state folder (ignored with the rest of roles/farmer/)."""
     d = state_dir(main) / "summaries"
@@ -419,10 +469,8 @@ def main(argv: list[str]) -> int:
     pr.add_argument("slots", nargs="*")
     pr.add_argument("--note", default="")
     pr.add_argument("--clear", action="store_true")
+    pr.add_argument("--done", default="", metavar="SLOT", help="take a landed slot off priority.json")
     pr.add_argument("--repo", default=os.getcwd())
-    fr = sub.add_parser("front")
-    fr.add_argument("slots", nargs="+")
-    fr.add_argument("--repo", default=os.getcwd())
     sm = sub.add_parser("summary")
     sm.add_argument("--repo", default=os.getcwd())
     sm.add_argument("--hours", type=float, default=24)
@@ -445,18 +493,9 @@ def main(argv: list[str]) -> int:
         if not args.json:
             print_text(snap)
     elif args.cmd == "priority":
-        f = state_dir(main_dir) / "priority.json"
-        if args.clear:
-            f.unlink(missing_ok=True)
-        elif args.slots:
-            f.write_text(json.dumps({"slots": args.slots, "note": args.note}))
-        log(main_dir, {"kind": "priority", "slot": ",".join(args.slots), "what": "cleared" if args.clear else "set",
-                       "note": args.note})
-        print(f.read_text() if f.exists() else "no priority")
-    elif args.cmd == "front":
-        order = front(main_dir, args.slots)
-        log(main_dir, {"kind": "front", "slot": ",".join(args.slots), "what": "moved to the front", "note": ""})
-        print("waiting now: " + " ".join(order))
+        if not (args.slots or args.clear or args.done) or (args.clear and args.slots):
+            p.error("priority takes slots, --clear or --done <slot>")
+        return priority(main_dir, args.slots, args.note, args.clear, args.done)
     elif args.cmd == "summary":
         snap = snapshot(args.repo, args.hours)
         (state_dir(main_dir) / "last-scan.json").write_text(json.dumps(snap, indent=1))

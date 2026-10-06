@@ -3,7 +3,8 @@
 The duty `mtm` of the [farmer](../../SKILL.md): every worktree's finished work lands on the default branch soon, in
 any order (the user, 2026-10-03). Throughput beats order and retries: a test that fails only under load is disabled
 and the work lands. Its rule-based part runs as code in the farmer's tick (`boss.py` over `mtm_scan.py`: wake failed
-landings and release held queues, priority first, pause heavy work under load and send go after it, waiter-gone,
+landings and release held queues, landed priority slots done (hal2 keeps the order), a reservation waiting at the front
+reported to the user, pause heavy work under load and send go after it, waiter-gone,
 orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs judgment wakes the farmer session with
 [instructions/mtm.md](../../instructions/mtm.md), which links the procedures below. Why landings fail:
 [reasons.md](reasons.md).
@@ -40,7 +41,8 @@ all slots trip on) gets a servant: [Delegate a fix](../../reference.md#delegate-
 
 1. **Faster:** when the queue head's session can make the fix in its own landing, it rides along. Tell that session
    the change, or hand it a patch from `pending/`. No extra gate run is needed.
-2. Otherwise start a servant, and once its `reserve` waits, put it first with `$B front <slot>`.
+2. Otherwise start a servant and put it first: `$B priority <slot> --note "<why>"` (hal2 reserves its place at
+   the front, also before its `reserve` runs).
 3. When nothing should land before the fix (several landings fail on it), pause: `$B pause --note "<why>"`. Tell the
    waiters to hold their reruns until the fix has landed, then `$B resume` and tell everyone "go: /mfm before your
    next landing attempt".

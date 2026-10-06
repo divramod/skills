@@ -52,7 +52,7 @@ and itself, so the slot's `git status` stays clean ([reference](reference.md#the
 | `/farmer handoff` | [hand off, then clear](#handoff): typed by the tick once the context reaches 40% |
 | `/farmer` | one tick now: `python3 $S/farmer.py tick` |
 | `/farmer check` | `python3 $S/due.py check`: roles/farmer/ROLE.md valid? Each duty and task with its cron and mode (machine or prose) |
-| `/farmer first <slot>... [why]` | the user's priority: these slots land first (`python3 $S/mtm_scan.py priority ...`; `first clear` ends it) |
+| `/farmer first <slot>... [why]` | the user's priority: these slots land first, each place reserved (`python3 $S/mtm_scan.py priority <slot>... --note <why>` wraps `hal2-cli-git worktree queue order`; `first clear` ends it: `priority --clear`); to tell the slots their places too, use the skill `adapt-merge-queue` |
 | `/farmer status [<hours>]` | `farmer.py timer status`, `mtm_scan.py status`, the log's last hours (default 6), delegations, `latest.md` |
 | `/farmer h`, `/farmer help` | print this table and stop |
 
