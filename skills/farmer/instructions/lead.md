@@ -16,7 +16,9 @@ After acting: `python3 $S/lead_scan.py record <session> <since> "<what you did>"
 **Subservants** (skills plan 0013): a slot whose worktree holds `plans/LEAD` (the evidence's `lead`) runs one step
 of its lead's plan and never lands. Stopped mid-step: tell it to continue its step `<n>` of plan `<plan>` and report
 to the lead (or, after a clear, `/handoff c`); never tell it to land. It waits for its lead: leave it to the lead
-(one line to the lead's session when it waits long). Its step reported: it is done, record it.
+(one line to the lead's session when it waits long). Its step reported (the report on `origin/NN`, or merged into
+`origin/<lead>`): it is done; the scan leaves such a slot out. A broken marker (`lead.bad`) still marks the slot:
+never tell it to continue its plan or land; ask its lead to rewrite `plans/LEAD`, else notify the user.
 
 A slot the boss paused (a `pause` entry in `log.jsonl` with no `go` after it) waits for that go, which the tick
 sends when the landing ends: leave it, record nothing. A slot with an open `ask` still wakes you (hourly while it stays idle): when the user has answered, log it as

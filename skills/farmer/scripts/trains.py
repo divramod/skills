@@ -20,6 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import lead_marker
 import mtm_ci
 import mtm_scan
 from tick import act, default_ref, git
@@ -77,10 +78,14 @@ def plan_done(worktree: str) -> bool | None:
 
 
 def slot_info(main: str, tickets: list[dict]) -> dict[str, dict]:
-    """Per waiting slot: finished (plan_done) and the files its branch changes against the default branch."""
+    """Per waiting slot: finished (plan_done) and the files its branch changes against the default branch. A
+    subservant's slot (plans/LEAD, even a broken one) never lands, so it never rides: `marked`, never finished."""
     base, out = default_ref(main), {}
     for t in tickets:
         if t.get("state") != "waiting" or not t.get("worktree") or not t.get("branch"):
+            continue
+        if lead_marker.marker(t["worktree"]) is not None:
+            out[t["slot"]] = {"finished": False, "files": set(), "current": "", "marked": True}
             continue
         files = git(main, "diff", "--name-only", f"{base}...{t['branch']}").split("\n")
         out[t["slot"]] = {"finished": plan_done(t["worktree"]) is True, "files": {f for f in files if f},
@@ -100,9 +105,11 @@ def under_way(log: list[dict], now: dt.datetime) -> dict[str, dict]:
 
 
 def group(tickets: list[dict], info: dict[str, dict], skip: set[str]) -> list[list[str]]:
-    """Trains of slots (carrier first) from the waiting tickets in queue order."""
+    """Trains of slots (carrier first) from the waiting tickets in queue order; a marked slot (a subservant) is
+    neither carrier nor passenger."""
     free = [t["slot"] for t in sorted(tickets, key=lambda t: t.get("position", 0))
             if t.get("state") == "waiting" and not t.get("holding") and t["slot"] not in skip
+            and not info.get(t["slot"], {}).get("marked")
             and info.get(t["slot"], {}).get("finished") and info[t["slot"]]["files"]]
     trains = []
     while free:

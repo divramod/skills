@@ -16,7 +16,8 @@ never touched.
   free once HEAD, `origin/NN` and every side branch `NN-*` are in `origin/<lead>`, nothing is uncommitted, no ticket
   or busy agent, no session active and no `plans/LEAD` written in the last hour, no build runs; `prune.py remove NN`
   fetches and checks again, runs `hal2-cli-git worktree remove NN --force` (its branch is not on main by design),
-  then `git push origin --delete NN` once `origin/NN` is in `origin/<lead>`. A marked slot below 30 is never pruned.
+  then `git push origin --delete NN` once `origin/NN` is in `origin/<lead>`. A marked slot below 30 is never pruned,
+  nor one whose marker is broken (still marked, its lead unknown).
 - **Disk**: every 6 hours a log line with the free disk and the 5 biggest worktrees (in the round summary), a notice
   for the user under 100 GB free. `du` over every worktree takes minutes, so the round starts it detached
   (`prune.py sizes`, one at a time, into `disk.json`) and the next round reports it.

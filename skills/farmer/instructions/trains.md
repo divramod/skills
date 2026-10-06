@@ -1,7 +1,8 @@
 # Woken for merge trains (trains)
 
 The tick groups finished, non-overlapping waiters into trains and tells carrier and passengers itself
-([merge-train](../subskills/merge-train/SUBSKILL.md)). You get what needs a look. Check it is still true
+([merge-train](../subskills/merge-train/SUBSKILL.md)); a parallel plan's subservant (a slot with `plans/LEAD`)
+never lands, so it never rides, as carrier or passenger. You get what needs a look. Check it is still true
 (`hal2-cli-git worktree queue --json`), act, then log it:
 `python3 $S/mtm_scan.py record <kind> <slot> "<what you did>" --note "<why>"`.
 

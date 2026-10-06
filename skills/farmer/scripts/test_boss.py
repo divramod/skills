@@ -152,13 +152,25 @@ class Work(unittest.TestCase):
         (self.tmp / "31").mkdir()
         (self.tmp / "31" / "HANDOFF.md").write_text("x")
         f = {"kind": "work-without-agent", "slot": "31", "why": "", "lead": LEAD}
-        w = wt("31", state=None, lead=LEAD, path=str(self.tmp / "31"))
+        w = wt("31", state=None, lead=LEAD, path=str(self.tmp / "31"), missing=["HEAD: 1 commit(s) not in origin/02"])
         planned = boss.plan(snap([f], [], [w]), {"now": NOW, "log": [], "main": "/x/hal2"})
         self.assertEqual([(a["do"], a["kind"]) for a in planned], [("run", "orphan")])
         self.assertEqual(planned[0]["argv"][-2:], ["--prompt", "/handoff c"])
         bare = boss.plan(snap([f], [], [dict(w, path="/nowhere")]), {"now": NOW, "log": [], "main": "/x/hal2"})
         self.assertEqual([(a["do"], a["kind"]) for a in bare], [("wake", "orphan")])
         self.assertNotIn("/mtm", json.dumps(planned + bare))
+
+    def test_a_marked_orphan_merged_into_its_lead_is_not_restarted_a_broken_marker_wakes(self):
+        # Review 1 findings 3 and 10: nothing missing in origin/<lead> means its step is done; a broken marker
+        # names no lead, so the farmer judges it.
+        (self.tmp / "31").mkdir()
+        (self.tmp / "31" / "HANDOFF.md").write_text("x")
+        f = {"kind": "work-without-agent", "slot": "31", "why": "", "lead": LEAD}
+        merged = wt("31", state=None, lead=LEAD, path=str(self.tmp / "31"), missing=[], ahead=5)
+        self.assertEqual(plan(snap([f], [], [merged])), [])
+        bad = {"bad": True, "text": "x", "error": "plans/LEAD is not `<lead-slot> <plan> <step>`: 'x'"}
+        broken = dict(merged, lead=bad, missing=[bad["error"], "HEAD: 5 commit(s) not in origin/main"])
+        self.assertEqual(plan(snap([dict(f, lead=bad)], [], [broken])), [("wake", "orphan", "31")])
 
     def test_judgment_kinds_wake_at_most_hourly(self):
         f = {"kind": "long-queue", "slot": "01,02,03", "why": "3 waiting"}

@@ -141,6 +141,12 @@ answered before implementation, with the user's words and the date; the run acts
   '.[] | select(.status != "completed")'`, queued runs too) before taking the queue and before every candidate push;
   `skills/mtm/scripts/land-runs.sh`, references/ci.md's Land. User: "the mtm skill should have a mention of the
   command on how to check in the gh workflow list, if he can start now or needs to wait".
+- 2026-10-06 (servant, step 10, findings 3, 10-12) `skills/farmer/scripts/lead_marker.py` reads `plans/LEAD` for
+  mtm_scan, lead_scan, trains and prune; a broken marker is `{bad: true}` and keeps the slot marked everywhere (no
+  /mtm, no `/handoff c`, a wake; decisions.py prints `lead: broken marker`). A marked slot is restarted only when
+  `origin/<lead>` lacks some of its work (`missing`). An idle subservant stops waking the farmer once its report is
+  on `origin/NN`, or HEAD is in `origin/<lead>` and holds the report: HEAD in `origin/<lead>` alone is also true of a
+  freshly created subservant.
 
 ## Notes
 

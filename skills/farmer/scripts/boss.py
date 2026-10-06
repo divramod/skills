@@ -139,9 +139,17 @@ class Planner:
 
     def orphan(self, f: dict) -> None:
         """Orphaned work with a HANDOFF.md gets a session with /handoff c, else the farmer is woken. A subservant's
-        (plans/LEAD) restart is the same /handoff c, which continues its one step; never /mtm."""
+        (plans/LEAD) restart is the same /handoff c, which continues its one step; never /mtm. A subservant whose work
+        is all in its lead's branch (no `missing`) is done: never restarted. One with a broken marker wakes the
+        farmer: its lead is unknown."""
         slot, w = f["slot"], self.wt.get(f["slot"], {})
-        if (w.get("plan") or w.get("lead")) and (Path(w.get("path", "")) / "HANDOFF.md").exists():
+        lead = w.get("lead") or f.get("lead")
+        if lead and not w.get("missing"):
+            return
+        if lead and lead.get("bad"):
+            self.add("orphan", "wake", slot, REWAKE, key=f"orphan:{slot}", text=f"orphaned work: {f['why']}",
+                     evidence=f)
+        elif (w.get("plan") or lead) and (Path(w.get("path", "")) / "HANDOFF.md").exists():
             self.add("orphan", "run", slot, ORPHAN, key=f"orphan:{slot}",
                      argv=["hal2-cli-git", "worktree", "run", slot, "--agent", "claude", "--detach", "--prompt",
                            "/handoff c"], text=f"started a session in {slot} with /handoff c")

@@ -48,6 +48,12 @@ class Lead(unittest.TestCase):
         waiting = helper("idle-in-plan", "Next I'll continue once the lead answers.", slot="31", lead=lead)
         self.assertEqual(kinds(self.plan(waiting)), [("wake", "idle-in-plan", "31")])
 
+    def test_a_subservant_with_a_broken_marker_is_judged_never_told_to_continue_the_plan(self):
+        # Review 1 finding 10: bad but marked, no step to continue.
+        bad = {"bad": True, "text": "x", "error": "plans/LEAD is not `<lead-slot> <plan> <step>`: 'x'"}
+        going = helper("idle-in-plan", "Tests written.\n\nNext I'll run the gate.", slot="31", lead=bad)
+        self.assertEqual(kinds(self.plan(going)), [("wake", "idle-in-plan", "31")])
+
     def test_the_farmers_own_session_is_never_told_or_woken_about(self):
         self.assertEqual(kinds(self.plan(helper("asks", slot="farmer"), helper("no-plan", slot="farmer"))),
                          [])

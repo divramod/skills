@@ -20,9 +20,12 @@ orphans with a HANDOFF.md. You get what needs a look. Goal: every finished workt
 
 **Subservants** (skills plan 0013): a slot whose worktree holds `plans/LEAD` (`<lead-slot> <plan> <step>`, the
 scan's `lead`) runs one step of its lead's plan and never lands; the lead merges its branch. Skip it for every
-landing: no `work-not-queued`, never `/mtm` or "land now", never an okay to land. An orphan there is restarted only
-with `--prompt "/handoff c"` (it continues that one step); its step reported: leave it (prune removes the slot);
-unclear: notify the user. `subservant-holds`
+landing: no `work-not-queued`, never `/mtm` or "land now", never an okay to land. Its work is measured against
+`origin/<lead>` (the scan's `missing`), never main: a slot whose work is all there is done, never an orphan. An
+orphan there is restarted only with `--prompt "/handoff c"` (it continues that one step); its step reported: leave it
+(prune removes the slot); unclear: notify the user. A broken marker (`lead.bad`, its `error`) still marks the slot:
+never land it, never restart it; ask its lead (the slot whose plan names it) to rewrite `plans/LEAD`, else notify
+the user. `subservant-holds`
 (its ticket is in the merge queue): tell the session in one line that a subservant never lands and to report to its
 lead instead; when it holds the queue and no landing runs, release it (`hal2-cli-git worktree release <NN>`).
 A landing of it that has merged into main stays: notify the user.

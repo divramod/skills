@@ -75,8 +75,10 @@ def plan_lead(item: dict, ctx: dict, scan: dict | None = None) -> list[dict]:
             text = TEXT["context-high"].format(percent=n.get("context_percent"))
         elif kind == "idle-in-plan" and GOING_ON.search(said) and not WAITS.search(said):
             lead = n.get("lead")  # a subservant continues its one step, never the plan to its landing
-            text = (TEXT["continue-step"].format(**lead) if lead
-                    else TEXT["continue"].format(plan=n.get("plan") or "your plan"))
+            if not lead:
+                text = TEXT["continue"].format(plan=n.get("plan") or "your plan")
+            elif not lead.get("bad"):  # a broken marker names no step: the farmer judges it (a wake)
+                text = TEXT["continue-step"].format(**lead)
         elif kind == "failed" and "watch" not in ctx.get("duties", ()):
             text = TEXT["failed"].format(why=n.get("why", "failed"))
         if text is None:

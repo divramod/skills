@@ -39,6 +39,7 @@ import sys
 import time
 from pathlib import Path
 
+import lead_marker
 import roles
 
 import mtm_ci
@@ -143,17 +144,20 @@ def worktrees(main: str) -> list[dict]:
 
 def lead_of(path: str | Path) -> dict | None:
     """A parallel plan's subservant marker (skills plan 0013): <worktree>/plans/LEAD, one line `<lead-slot> <plan>
-    <step>`, as {slot, plan, step}; None without one (or a broken one). A marked slot never lands."""
-    f = Path(path) / "plans" / "LEAD"
-    try:
-        parts = f.read_text().split() if f.is_file() else []
-    except OSError:
-        parts = []
-    return {"slot": parts[0], "plan": parts[1], "step": parts[2]} if len(parts) >= 3 else None
+    <step>`, as {slot, plan, step}; a broken one as {bad: True, error, text} (still marked); None without one. A
+    marked slot never lands."""
+    return lead_marker.marker(path)
 
 
 def subservant(lead: dict) -> str:
-    return f"subservant of slot {lead['slot']} (plan {lead['plan']} step {lead['step']})"
+    return lead_marker.describe(lead)
+
+
+def fetch_leads(main: str, paths: list[str]) -> None:
+    """The lead branches of the marked worktrees, fresh: a subservant's work is measured against origin/<lead>."""
+    leads = {lead["slot"] for p in paths if (lead := lead_of(p)) and not lead.get("bad")}
+    for slot in sorted(leads):
+        run(["git", "fetch", "--quiet", "origin", f"+refs/heads/{slot}:refs/remotes/origin/{slot}"], main)
 
 
 def unmerged(path: str, default: str) -> int:
@@ -208,6 +212,13 @@ def reservation_waits(head: dict, w: dict, now: float) -> dict | None:
                    f"{agent or 'none'}{idle}"}
 
 
+def orphaned_subservant(w: dict) -> dict:
+    """A marked slot without a session whose work its lead's branch lacks: restarted only with /handoff c, never
+    /mtm (boss.orphan); a slot whose work is all in origin/<lead> is done (prune removes it), never restarted."""
+    return {"kind": "work-without-agent", "slot": w["slot"], "lead": w["lead"],
+            "why": f"{subservant(w['lead'])}: {'; '.join(w['missing'])}, no agent session"}
+
+
 def findings(snap: dict) -> list[dict]:
     """What the boss acts on, most urgent first."""
     out, now = [], snap["now"]
@@ -228,7 +239,8 @@ def findings(snap: dict) -> list[dict]:
         if lead := marked.get(t["slot"]):
             out.append({"kind": "subservant-holds", "slot": t["slot"], "seq": t.get("seq"), "lead": lead,
                         "why": f"{subservant(lead)} has a merge-queue ticket (#{i}, {t['state']}): a subservant "
-                               f"never lands, its lead in slot {lead['slot']} merges it"})
+                               f"never lands, its lead{'' if lead.get('bad') else ' in slot ' + lead['slot']} "
+                               f"merges it"})
     if head and head.get("awaiting_slot"):
         if f := reservation_waits(head, by_slot.get(head["slot"], {}), now):
             out.append(f)
@@ -269,14 +281,15 @@ def findings(snap: dict) -> list[dict]:
                         "why": f"{name} failed {t['failures']}x in {len(t['slots'])} slot(s)", "test": name})
     queued = {t["slot"] for t in queue}
     for w in snap["worktrees"]:
-        if w["ahead"] and w["slot"] not in queued and w.get("agent_state") is None:
-            f = {"kind": "work-without-agent", "slot": w["slot"],
-                 "why": f"{w['ahead']} commits not on main, plan {w.get('plan') or '-'}, no agent session"}
-            if w.get("lead"):  # restarted only with /handoff c, never /mtm (boss.orphan)
-                f.update(lead=w["lead"], why=f"{subservant(w['lead'])}: {f['why']}")
-            out.append(f)
+        if w.get("lead"):  # a subservant: measured against its lead's branch, never main
+            if w.get("missing") and w["slot"] not in queued and w.get("agent_state") is None:
+                out.append(orphaned_subservant(w))
             continue
-        if w["ahead"] and not w.get("lead") and w["slot"] not in queued and w.get("agent_state") not in BUSY \
+        if w["ahead"] and w["slot"] not in queued and w.get("agent_state") is None:
+            out.append({"kind": "work-without-agent", "slot": w["slot"],
+                        "why": f"{w['ahead']} commits not on main, plan {w.get('plan') or '-'}, no agent session"})
+            continue
+        if w["ahead"] and w["slot"] not in queued and w.get("agent_state") not in BUSY \
                 and w.get("agent_idle_seconds", 0) > IDLE_WITH_WORK_AFTER:
             out.append({"kind": "work-not-queued", "slot": w["slot"],
                         "why": f"{w['ahead']} commits not on main, plan {w.get('plan') or '-'}, "
@@ -285,6 +298,23 @@ def findings(snap: dict) -> list[dict]:
         out.append({"kind": "long-queue", "slot": ",".join(t["slot"] for t in waiting),
                     "why": f"{len(waiting)} waiting: consider a merge train (see SKILL.md)"})
     return out
+
+
+def worktree_entry(w: dict, a: dict, default: str, now: float) -> dict:
+    """One worktree of the snapshot: its work not on main, its plan, its agent; a marked slot (plans/LEAD) also
+    `missing`, what its lead's branch lacks (lead_marker.missing), which alone decides whether it has work left."""
+    path, slot = w["path"], Path(w["path"]).name
+    plan_file = Path(path) / "plans/CURRENT_PLAN"
+    since = (a.get("since") or 0) / 1000
+    lead = lead_of(path)
+    return {
+        "slot": slot, "path": path, "branch": w.get("branch"), "ahead": unmerged(path, default),
+        "plan": plan_file.read_text().strip() if plan_file.exists() else "", "lead": lead,
+        **({"missing": lead_marker.missing(path, slot, lead, f"origin/{default}")} if lead else {}),
+        "agent_state": a.get("state"), "pane": a.get("pane_id"),
+        "agent_idle_seconds": int(now - since) if since and a.get("state") not in BUSY else 0,
+        "context_percent": a.get("context_percent"),
+    }
 
 
 def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
@@ -315,21 +345,11 @@ def snapshot(repo: str, hours: float, fetch: bool = True) -> dict:
             "active_seconds": int(now - (landing_start(t.get("landing")) or now)),
         })
     own = run(["git", "rev-parse", "--show-toplevel"], repo).strip()
-    wts = []
-    for w in worktrees(main):
-        path, slot = w["path"], Path(w["path"]).name
-        if slot.startswith(".") or path == own:  # hal2's own checkouts (.deliver, .bench), the farmer's slot
-            continue
-        a = by_checkout.get(path, {})
-        plan_file = Path(path) / "plans/CURRENT_PLAN"
-        since = (a.get("since") or 0) / 1000
-        wts.append({
-            "slot": slot, "path": path, "branch": w.get("branch"), "ahead": unmerged(path, default),
-            "plan": plan_file.read_text().strip() if plan_file.exists() else "", "lead": lead_of(path),
-            "agent_state": a.get("state"), "pane": a.get("pane_id"),
-            "agent_idle_seconds": int(now - since) if since and a.get("state") not in BUSY else 0,
-            "context_percent": a.get("context_percent"),
-        })
+    # hal2's own checkouts (.deliver, .bench) and the farmer's slot are left out
+    listed = [w for w in worktrees(main) if not Path(w["path"]).name.startswith(".") and w["path"] != own]
+    if fetch:
+        fetch_leads(main, [w["path"] for w in listed])
+    wts = [worktree_entry(w, by_checkout.get(w["path"], {}), default, now) for w in listed]
     load1 = os.getloadavg()[0]
     cores = os.cpu_count() or 1
     pause_file = state_dir(main) / "paused.json"

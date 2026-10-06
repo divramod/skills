@@ -85,6 +85,17 @@ class DecisionsTest(unittest.TestCase):
         text = subprocess.run(["python3", str(SCRIPT)], cwd=self.slot, env=ENV, text=True, capture_output=True).stdout
         self.assertIn("lead: slot 02, plan 0003-x, step 4: a subservant, continue that one step only", text)
 
+    def test_a_broken_marker_still_marks_the_slot(self):
+        # review 1 finding 10: bad but marked, as the farmer reads it (prune refuses it, mtm_scan skips its landing)
+        for broken in ("02 0003-x\n", "lead 0003-x 4\n", "\n"):
+            (self.slot / "plans" / "LEAD").write_text(broken)
+            lead = self.run_it()["lead"]
+            self.assertTrue(lead["bad"], broken)
+            self.assertIn("plans/LEAD is not `<lead-slot> <plan> <step>`", lead["error"])
+        text = subprocess.run(["python3", str(SCRIPT)], cwd=self.slot, env=ENV, text=True, capture_output=True).stdout
+        self.assertIn("lead: broken marker (plans/LEAD is not", text)
+        self.assertIn("never the plan, never a landing", text)
+
     def test_current_plan_and_no_farmer_mean_this_repos_farmer(self):
         (self.slot / "plans" / "CURRENT_PLAN").write_text("0003-x\n")
         r = self.run_it()

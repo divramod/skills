@@ -40,6 +40,20 @@ class Group(unittest.TestCase):
         i = info(**{"01": (False, ["a"]), "02": (True, []), "03": (True, ["c"])})
         self.assertEqual(trains.group(q, i, set()), [])
 
+    def test_a_subservants_slot_is_neither_carrier_nor_passenger(self):
+        # Review 1 finding 11: a slot with plans/LEAD (even a broken one) never lands, so it never rides.
+        with tempfile.TemporaryDirectory() as d:
+            q = [dict(ticket(s, n), worktree=str(Path(d) / s)) for n, s in enumerate(("31", "01", "32", "02"))]
+            for s in ("31", "32"):
+                (Path(d) / s / "plans").mkdir(parents=True)
+            (Path(d) / "31/plans/LEAD").write_text("05 0013-parallel-plans 4\n")
+            (Path(d) / "32/plans/LEAD").write_text("broken\n")
+            got = trains.slot_info(d, q)
+        self.assertEqual({s for s, i in got.items() if i.get("marked")}, {"31", "32"})
+        i = {**info(**{s: (True, [s]) for s in ("31", "01", "32", "02")}),
+             **{s: dict(got[s], finished=True, files={s}) for s in ("31", "32")}}  # even when finished
+        self.assertEqual(trains.group(q, i, set()), [["01", "02"]])
+
     def test_slots_already_riding_are_skipped(self):
         q = [ticket("01", 1), ticket("02", 2), ticket("03", 3)]
         i = info(**{s: (True, [s]) for s in ("01", "02", "03")})

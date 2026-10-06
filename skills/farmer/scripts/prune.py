@@ -42,6 +42,7 @@ import time
 from pathlib import Path
 
 import deliver
+import lead_marker
 import logstate
 import mtm_scan
 import tick
@@ -57,8 +58,7 @@ GONE = {"ended", "failed"}
 QUIET = 30 * 60  # a 10-99 session active more recently is left alone
 SUBSERVANT_QUIET = 3600  # a marked 30-99 slot: the lead may reuse it with its warm build cache meanwhile
 SUBSERVANTS_FROM = 30  # subservants work only in slots 30-99 (the user, skills plan 0013)
-LEAD = Path("plans/LEAD")
-IGNORED = (":!plans/LEAD", ":!plans/CURRENT_PLAN")  # a marked slot's runtime files, ignored or not
+LEAD = lead_marker.LEAD
 LOW_DISK_GB = 100
 SIZES_EVERY = 6 * 3600  # du over every worktree takes minutes
 SIZES_TOP = 5
@@ -90,35 +90,19 @@ def unsaved(path: str, slot: str, base: str) -> list[str]:
 
 
 def marker(path: str) -> dict | None:
-    """The subservant marker plans/LEAD as {slot, plan, step, at}; {"bad": text} when it is malformed; None when
-    the slot has none. `at` is its mtime: the lead's `plan.py assign` rewrites it when it reuses the slot."""
-    f = Path(path) / LEAD
-    try:
-        text, at = f.read_text().strip(), f.stat().st_mtime
-    except OSError:
+    """lead_marker's plans/LEAD with `at`, its mtime: the lead's `plan.py assign` rewrites it when it reuses the
+    slot. A malformed marker is {bad: True, error, text}: still marked, never pruned."""
+    lead = lead_marker.marker(path)
+    if lead is None:
         return None
-    parts = text.split()
-    if len(parts) < 3 or not NUMBERED.fullmatch(parts[0]):
-        return {"bad": text}
-    return {"slot": parts[0], "plan": parts[1], "step": parts[2], "at": at}
+    try:
+        return {**lead, "at": (Path(path) / LEAD).stat().st_mtime}
+    except OSError:
+        return {**lead, "at": time.time()}
 
 
-def ref_exists(path: str, ref: str) -> bool:
-    return bool(git(path, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"))
-
-
-def unsaved_for_lead(path: str, slot: str, lead: str) -> list[str]:
-    """What a subservant's slot holds that `lead` (origin/<lead-slot>) lacks: commits on HEAD, origin/NN or a side
-    branch, changes (plans/LEAD and plans/CURRENT_PLAN aside: they mark the slot, they are not work)."""
-    out = []
-    for ref in ["HEAD", *([f"origin/{slot}"] if ref_exists(path, f"origin/{slot}") else []),
-                *git(path, "for-each-ref", "--format=%(refname:short)", f"refs/heads/{slot}-*").split()]:
-        n = git(path, "rev-list", "--count", f"{lead}..{ref}")
-        if n != "0":
-            out.append(f"{ref}: {n or 'some'} commit(s) not in {lead}")
-    if git(path, "status", "--porcelain", "--untracked-files=all", "--", ".", *IGNORED):
-        out.append("uncommitted changes")
-    return out
+ref_exists = lead_marker.ref_exists
+unsaved_for_lead = lead_marker.unsaved_for_lead
 
 
 def build_running(path: str) -> bool:
@@ -163,8 +147,8 @@ def refusal(w: dict, ctx: dict, agents: list[dict], now_ms: float, build=build_r
 def subservant_refusal(w: dict, lead: dict, ctx: dict, agents: list[dict], now_ms: float, build) -> str | None:
     """`refusal` for a slot marked plans/LEAD: its work belongs in origin/<lead>, never on main."""
     slot, path = w["slot"], w["path"]
-    if "bad" in lead:
-        return f"plans/LEAD is not `<lead-slot> <plan> <step>`: '{lead['bad']}'"
+    if lead.get("bad"):
+        return lead["error"]
     if int(slot) < SUBSERVANTS_FROM:
         return f"a subservant's slot below {SUBSERVANTS_FROM} (lead {lead['slot']}) is never pruned"
     base = f"origin/{lead['slot']}"
@@ -347,7 +331,7 @@ def act_on(main: str, slot: str, what: str, dry: bool) -> tuple[int, str]:
     if (what == "clean") != (int(slot) < 10):
         return 1, f"{what} is for slots {'00-09' if what == 'clean' else '10-99'}"
     lead = marker(w["path"])
-    if lead and "bad" not in lead and what == "remove" and not dry:
+    if lead and not lead.get("bad") and what == "remove" and not dry:
         tick.git(main, "fetch", "--quiet", "--prune", "origin")  # checked again against the lead's newest branch
     ctx, agents = live(main)
     why = refusal(w, ctx, agents, time.time() * 1000)

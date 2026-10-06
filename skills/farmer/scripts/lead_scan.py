@@ -25,6 +25,7 @@ import sys
 import time
 from pathlib import Path
 
+import lead_marker
 import mtm_scan
 import roles
 
@@ -102,6 +103,8 @@ def classify(agent: dict, said: str, now: float) -> tuple[str, str] | None:
     if state == "failed":
         return "failed", "its turn failed (API error, limit or crash)"
     if state in ("done", "idle", "sleeping"):
+        if agent.get("lead") and agent.get("step_done"):  # a subservant done with its step waits for its lead
+            return None
         tail = said[-600:]
         if said.startswith("AskUserQuestion") or WAITS_FOR_USER.search(tail):
             return "asks", f"waits for an answer for {age // 60} min"
@@ -131,6 +134,16 @@ def handled(main: str, now: float | None = None) -> set[tuple[str, int]]:
     return out
 
 
+def with_marker(agent: dict, checkout: Path) -> dict:
+    """The agent with its checkout's CURRENT_PLAN, its subservant marker (`lead`, skills plan 0013) and whether that
+    subservant has finished its step (`step_done`: its report on origin/NN, or merged into origin/<lead>): an idle
+    subservant done with its step waits for its lead and wakes nobody."""
+    plan_file = checkout / "plans/CURRENT_PLAN"
+    lead = mtm_scan.lead_of(checkout)
+    return {**agent, "current_plan": plan_file.read_text().strip() if plan_file.exists() else "", "lead": lead,
+            "step_done": bool(lead) and lead_marker.step_done(checkout, checkout.name, lead)}
+
+
 def scan(repo: str, show_all: bool) -> dict:
     now, main = time.time(), main_checkout(repo)
     agents = run_json(["hal2-cli-agents", "list", "--json"]) or []
@@ -141,9 +154,7 @@ def scan(repo: str, show_all: bool) -> dict:
         if a.get("project") != main or not a.get("session_id") or a.get("session_id") == own:
             continue
         checkout = Path(a.get("checkout") or a.get("cwd") or "/nonexistent")
-        plan_file = checkout / "plans/CURRENT_PLAN"
-        a = {**a, "current_plan": plan_file.read_text().strip() if plan_file.exists() else "",
-             "lead": mtm_scan.lead_of(checkout)}
+        a = with_marker(a, checkout)
         said = last_assistant_text(transcript(a.get("cwd") or a.get("checkout") or "", a["session_id"]))
         hit = classify(a, said, now)
         if not hit:
