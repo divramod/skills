@@ -91,7 +91,7 @@ answered before implementation, with the user's words and the date; the run acts
   origin when the rev is `origin/...`, then `git branch -f NN <rev>` for a new slot or `reset --hard <rev>` for a
   reused clean one, and skips a slot whose leftover branch NN holds commits neither in the rev nor on origin's
   default branch; `--lead "<slot> <plan> <step>"` writes the marker and CURRENT_PLAN (before the start in an
-  existing worktree, right after `worktree run` created a new one); a new worktree needs `--min-free-gb` free disk
+  existing worktree; a new one create.py adds itself before the start, see step 10's decision); a new worktree needs `--min-free-gb` free disk
   (default 50: a slot's Rust target is 10-30 GB).
 - 2026-10-06 (autogrill 1) **mtm**: `scripts/subservant-guard.sh` exits 1 naming the lead in a marked slot, 0
   silently elsewhere; mtm runs it before step 1. Milestone mode is `/mtm milestone`, run only by a lead for a
@@ -131,6 +131,11 @@ answered before implementation, with the user's words and the date; the run acts
   decisions.py; 11 merge trains take marked slots; 12 finished idle subservants wake the farmer hourly; 13
   `plan.py --root <lead>` from a marked slot edits the lead's plan. 14: milestone rows' done-whens start "landed:",
   no change. 1-6 must be fixed, 7-13 as I see fit: all 13 get fixed. 1-2 fixed in `ebcb0f6`.
+- 2026-10-06 (servant, step 10, finding 6) `worktree run --detach` returns before the terminal host creates the
+  worktree and hal2 has no create-without-start for a chosen slot, so for `--lead` create.py adds the worktree
+  itself (`git worktree add` on branch NN, a best-effort `git push -u origin NN`, `hal2-cli-secrets reveal` when
+  `.secrets/` exists), writes the marker, then runs `worktree run` on it; a bad `--lead` is refused before any slot
+  is picked. Plain sessions still let hal2 create the worktree.
 
 ## Notes
 

@@ -17,7 +17,7 @@ description: Start a new agent session (Claude by default) in the current reposi
 | `... --exact` | the first prompt exactly as given, without `/mfm` first |
 | `... --from <NN>` | start the slot search at `<NN>` instead of 01 (subservants: `--from 30`) |
 | `... --base <rev>` | branch the slot from `<rev>` (e.g. `origin/02`) instead of main: `git branch -f NN <rev>` for a new slot, `git reset --hard <rev>` in a reused clean one; a leftover branch `NN` with commits in neither `<rev>` nor main is skipped |
-| `... --lead "<lead-slot> <plan> <step>"` | a parallel plan's subservant: writes `plans/LEAD` and `plans/CURRENT_PLAN` (ignored through the clone's `info/exclude` when the repo does not ignore them), implies `--exact` |
+| `... --lead "<lead-slot> <plan> <step>"` | a parallel plan's subservant: writes `plans/LEAD` and `plans/CURRENT_PLAN` (ignored through the clone's `info/exclude` when the repo does not ignore them) before the agent starts (a new slot's worktree is created first, as hal2 creates it), implies `--exact` |
 | `... --min-free-gb <n>` | free disk a new worktree needs (default 50: a slot's build cache takes 10-30 GB) |
 | `/create-worktree-session h` | print this table and stop |
 

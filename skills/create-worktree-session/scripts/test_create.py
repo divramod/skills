@@ -37,6 +37,9 @@ elif args[:2] == ["worktree", "run"]:
     if os.environ.get("FAKE_WT"):  # create the worktree like hal2's ensure: an existing branch is kept
         import subprocess
         path = os.path.join(os.environ["FAKE_WT"], args[2])
+        lead = os.path.join(path, "plans", "LEAD")
+        with open(os.environ["FAKE_LOG"], "a") as f:  # what the agent finds when it starts
+            f.write(json.dumps(["lead-at-run", open(lead).read() if os.path.exists(lead) else None]) + "\n")
         if not os.path.isdir(path):
             has = subprocess.run(["git", "rev-parse", "--verify", "--quiet", "refs/heads/" + args[2]], cwd=repo,
                                  capture_output=True).returncode == 0
@@ -63,8 +66,9 @@ class TestCreate(unittest.TestCase):
         (self.bin / "fakeshell").write_text(SHELL)
         (self.bin / "fakeshell").chmod(0o755)
         self.log = t / "log"
-        self.wt = t / "wt"
-        self.wt.mkdir()
+        self.home = t / "home"
+        self.wt = self.home / ".hal" / "git" / "worktree" / "app"  # hal2's worktree base of the repo app
+        self.wt.mkdir(parents=True)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -82,7 +86,7 @@ class TestCreate(unittest.TestCase):
     def run_raw(self, *args, extra="") -> subprocess.CompletedProcess:
         env = dict(os.environ, PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}", FAKE_LOG=str(self.log),
                    FAKE_REPO=str(self.repo.resolve()), SHELL=str(self.bin / "fakeshell"), TMUX="/tmp/x,1,0",
-                   FAKE_WT=str(self.wt), FAKE_EXTRA=extra)
+                   FAKE_WT=str(self.wt), FAKE_EXTRA=extra, HOME=str(self.home))
         return subprocess.run([sys.executable, str(HERE / "create.py"), "--repo", str(self.repo), *args],
                               capture_output=True, text=True, env=env)
 
@@ -151,6 +155,16 @@ class TestCreate(unittest.TestCase):
         self.assertEqual(self.git("status", "--porcelain", cwd=slot), "")  # both ignored through info/exclude
         run = self.run_call()
         self.assertEqual(run[run.index("--prompt") + 1], "brief")  # --lead implies --exact: no /mfm
+        self.assertEqual(self.git("rev-parse", "origin/30"), sha)  # published like hal2's ensure
+
+    def test_a_new_subservant_slot_is_marked_before_the_agent_starts(self):
+        self.with_origin()
+
+        self.run_create("--from", "30", "--base", "origin/02", "--lead", "02 0005-big 3")
+
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertIn(["lead-at-run", "02 0005-big 3\n"], calls)
+        self.assertEqual(self.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.wt / "30"), "30")
 
     def test_a_leftover_branch_with_own_commits_is_skipped(self):
         self.with_origin()
@@ -189,6 +203,15 @@ class TestCreate(unittest.TestCase):
         error = self.refused("--from", "30", "--lead", "02 0005-big", extra="30")
 
         self.assertIn("--lead needs '<lead-slot> <plan> <step>'", error)
+
+    def test_a_bad_lead_creates_no_worktree(self):
+        self.with_origin()
+
+        error = self.refused("--from", "31", "--lead", "02 0005-big")
+
+        self.assertIn("--lead needs '<lead-slot> <plan> <step>'", error)
+        self.assertFalse((self.wt / "31").exists())
+        self.assertFalse(self.log.exists() and "run" in self.log.read_text())
 
 
 if __name__ == "__main__":

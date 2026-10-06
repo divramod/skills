@@ -16,8 +16,9 @@ A parallel plan's subservant (skills plan 0013): `--from NN` starts the search a
 `--base REV` branches the slot from REV instead of main (`git fetch origin` first for `origin/...`; `git branch -f
 NN REV` for a new slot, `git reset --hard REV` in a reused clean one; a slot whose leftover branch NN holds commits
 neither in REV nor on origin's default branch is skipped); `--lead` writes the marker `plans/LEAD` and
-`plans/CURRENT_PLAN` (into the clone's info/exclude when the repo does not ignore them) and implies `--exact` (no
-/mfm: the lead's branch is the base). A new worktree needs `--min-free-gb` free disk (default 50).
+`plans/CURRENT_PLAN` (into the clone's info/exclude when the repo does not ignore them) before the agent starts (a
+new slot's worktree is created first, as hal2 creates it) and implies `--exact` (no /mfm: the lead's branch is the
+base). A new worktree needs `--min-free-gb` free disk (default 50).
 """
 import json
 import os
@@ -140,7 +141,8 @@ def free_gb(repo: Path) -> float:
 def prepare(repo: Path, slot: str, entry: dict | None, base: str | None, min_gb: float) -> None:
     """Before the start: free disk for a new worktree, then the slot's branch at `base`."""
     if entry is None and free_gb(repo) < min_gb:
-        die(f"only {free_gb(repo):.0f} GB free, a new worktree needs {("%f" % min_gb).rstrip("0").rstrip(".")} (--min-free-gb): prune a slot first")
+        needed = ("%f" % min_gb).rstrip("0").rstrip(".")
+        die(f"only {free_gb(repo):.0f} GB free, a new worktree needs {needed} (--min-free-gb): prune a slot first")
     if not base:
         return
     if base.startswith("origin/"):
@@ -151,11 +153,37 @@ def prepare(repo: Path, slot: str, entry: dict | None, base: str | None, min_gb:
         run("git", "reset", "--quiet", "--hard", base, cwd=Path(entry["path"]))
 
 
-def write_lead(worktree: Path, lead: str) -> None:
-    """The subservant marker plans/LEAD (`<lead-slot> <plan> <step>`) and CURRENT_PLAN, both ignored."""
+def create_worktree(repo: Path, slot: str) -> Path:
+    """Slot `slot`'s new worktree, as hal2's `worktree::ensure` makes it, before any agent runs in it.
+
+    `worktree run --detach` creates it only inside the host it starts, after returning, and hal2 has no command
+    that creates a given slot without an agent (`worktree new` takes the lowest free one), so a subservant's
+    worktree is made here: `~/.hal/git/worktree/<repo>/<NN>` on branch NN (kept when it exists, else forked from
+    the local default branch), published with `push -u` and its secrets revealed (both best effort)."""
+    worktree = Path.home() / ".hal" / "git" / "worktree" / repo.name / slot
+    run("git", "worktree", "prune", cwd=repo)
+    if run("git", "rev-parse", "--verify", "--quiet", f"refs/heads/{slot}", cwd=repo, check=False):
+        run("git", "worktree", "add", "--quiet", str(worktree), slot, cwd=repo)
+    else:
+        default = default_branch(repo).removeprefix("origin/")
+        run("git", "worktree", "add", "--quiet", str(worktree), "-b", slot, default, cwd=repo)
+    if "origin" in run("git", "remote", cwd=repo, check=False).split():
+        run("git", "push", "--quiet", "-u", "origin", slot, cwd=worktree, check=False)
+    if (worktree / ".secrets").is_dir() and shutil.which("hal2-cli-secrets"):
+        run("hal2-cli-secrets", "reveal", "--repo", str(worktree), check=False)
+    return worktree
+
+
+def lead_parts(lead: str) -> list[str]:
     parts = lead.split()
     if len(parts) != 3:
         die(f"--lead needs '<lead-slot> <plan> <step>', not '{lead}'")
+    return parts
+
+
+def write_lead(worktree: Path, lead: str) -> None:
+    """The subservant marker plans/LEAD (`<lead-slot> <plan> <step>`) and CURRENT_PLAN, both ignored."""
+    parts = lead_parts(lead)
     (worktree / "plans").mkdir(exist_ok=True)
     (worktree / "plans" / "LEAD").write_text(lead + "\n")
     (worktree / "plans" / "CURRENT_PLAN").write_text(parts[1] + "\n")
@@ -209,15 +237,13 @@ def main(argv: list[str]) -> int:
     first, base, lead = arg(argv, "--from") or "1", arg(argv, "--base"), arg(argv, "--lead")
     if not first.isdigit() or not 1 <= int(first) <= 99:
         die(f"--from needs a slot from 01 to 99, not '{first}'")
+    if lead:
+        lead_parts(lead)
     slot, skipped, entry = choose(repo, int(first), base)
     prepare(repo, slot, entry, base, float(arg(argv, "--min-free-gb") or 50))
-    if lead and entry:
-        write_lead(Path(entry["path"]), lead)
+    if lead:  # the marker before the start: the subservant never runs unmarked
+        write_lead(Path(entry["path"]) if entry else create_worktree(repo, slot), lead)
     report = start(repo, slot, argv, first_prompt(arg(argv, "--prompt"), "--exact" in argv or bool(lead)))
-    if lead and not entry:
-        if not report.get("worktree"):
-            die(f"hal2-cli-git worktree run {slot} reported no worktree: write plans/LEAD there by hand")
-        write_lead(Path(report["worktree"]), lead)
     result = {
         "repo": repo.name,
         "slot": report.get("slot") or slot,
