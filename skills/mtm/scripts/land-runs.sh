@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Wait until no land.yml run is unfinished in the repository of <dir> (default .),
-# so a landing through CI never reserves the queue or pushes a candidate while
-# another landing still runs or ships (references/ci.md). A run counts until its
+# so a landing through CI (which reserves the queue first) never pushes a
+# candidate while another landing still runs or ships (references/ci.md). A run counts until its
 # status is `completed`: `queued` too (a ship job waiting for a runner is queued).
 #   land-runs.sh [--once] [--interval <s>] [--max-wait <minutes>] [<dir>]
 # Exit 0: none unfinished. --once: exit 6 and list them instead of waiting.
 # Exit 7: still unfinished after --max-wait (default 60): a run stuck queued or
 # waiting (a parked runner, a pending approval); tell the farmer, do not push.
-# Exit 2: gh is missing. Exit 1: gh failed, nothing is known: do not push.
+# Exit 2: gh is missing, or --max-wait/--interval is no whole number. Exit 1: gh failed, nothing is known: do not push.
 set -euo pipefail
 once=0
 interval=60
@@ -21,6 +21,11 @@ while [ $# -gt 0 ]; do
     *) dir="$1" ;;
   esac
   shift
+done
+for n in "$max_wait" "$interval"; do
+  case "$n" in
+    ''|*[!0-9]*) echo "land-runs.sh: --max-wait (minutes) and --interval (seconds) take whole numbers, not '$n'" >&2; exit 2 ;;
+  esac
 done
 if ! command -v gh >/dev/null 2>&1; then
   echo "land-runs.sh: gh is missing -> brew install gh (or: bash $(dirname "$0")/install-prerequisites.sh)" >&2

@@ -1,5 +1,7 @@
 # Plan 0013: parallel plans
 
+Finished: 2026-10-06
+
 Grilled: 2026-10-06 (autogrill ×1)
 
 Landing: auto
@@ -44,7 +46,7 @@ starting "after the landing: ...".
 | 7 | farmer skips marked slots: mtm_scan (no work-not-queued, the marker in each worktree), boss (no /mtm text to a marked slot, a holder wakes the farmer), lead_scan and duties.plan_lead (a stop mid-step gets "continue your step", never "land"), instructions/mtm.md and lead.md | `cd skills/farmer/scripts && python3 -m unittest` green with the new tests | done |
 | 8 | farmer prune and delegation: a marked 30+ slot is removed once origin/NN and HEAD are in origin/<lead> and it has been idle over an hour (origin/NN deleted then); the farmer's own servants start in 30+ (`--from 30`, free sessions from 30 only); SKILL.md and reference.md | the same farmer test run green with tests for the prune rule and the delegation's slots | done |
 | 9 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks; `python3 scripts/check-plugins.py` ok; every scripts folder's tests green | done |
-| 10 | hal2's 02 reviews the diff: a summary to the session in hal2 slot 02, its findings fixed, its okay recorded under Decisions | the okay quoted under Decisions | next |
+| 10 | hal2's 02 reviews the diff: a summary to the session in hal2 slot 02, its findings fixed, its okay recorded under Decisions | the okay quoted under Decisions | done |
 
 ## Pre-authorized
 
@@ -155,6 +157,9 @@ answered before implementation, with the user's words and the date; the run acts
   reserve), never before an exit-6 rerun. `land-runs.sh --max-wait <min>` (default 60) exits 7: tell the farmer.
   The guard resolves `<slot>` through `hal2-cli-git worktree list --json`, else by folder name compared as text
   (`main`: the main checkout).
+- 2026-10-06 (hal2's 02, step 10 review 3): "okay: 4a9716b fixes review 2's findings 1-4"; two nits fixed in
+  passing, "no re-review needed": land-runs.sh's header says a CI landing never pushes a candidate while a run is
+  unfinished, and a --max-wait/--interval that is no whole number exits 2.
 
 ## Notes
 

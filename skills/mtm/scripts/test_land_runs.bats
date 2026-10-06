@@ -63,3 +63,9 @@ teardown() { rm -rf "$tmp"; }
   [ "$status" -eq 7 ]
   [[ "$output" == *"tell the farmer"* ]]
 }
+
+@test "a --max-wait that is no whole number exits 2" {
+  run bash "$here/land-runs.sh" --max-wait 1h "$tmp"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"whole numbers, not '1h'"* ]]
+}
