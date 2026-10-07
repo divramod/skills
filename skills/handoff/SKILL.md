@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write or refresh the repo's HANDOFF.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, a Decisions index of every user decision in force (date, quoted words, who relayed it, its home), what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, checks its decisions against plan, intent doc and handoff itself, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff clear` also clears the session and continues on its own (hal2), `/handoff c` continues, `/handoff h` shows help.
+description: Write or refresh the repo's HANDOFF.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, a Decisions index of every user decision in force (date, quoted words, who relayed it, its home), what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — collects every question of the session (the agent's to the user, the user's not yet answered) with its answer in the plan's committed questions.md, so a clear loses none and the fresh session takes the open ones up first — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, checks its decisions against plan, intent doc and handoff itself, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff clear` also clears the session and continues on its own (hal2), `/handoff c` continues, `/handoff h` shows help.
 ---
 
 # handoff
@@ -10,14 +10,14 @@ and nothing else. It is session state, never committed: gitignored and untracked
 does both when a repo still tracks it), so parallel worktrees never conflict on it and a fresh worktree has none. It links to the intent doc, the plan, the ADRs and the code instead of copying them. It is
 rewritten every time, so nothing may live only there: decisions go to a durable doc first, and its **Decisions**
 section indexes every one of them, so a cleared session and the farmer's decision check find them in one place. The test for a good
-handoff: a cleared session never has to ask the user something they already answered, and nothing the user said
-is lost. `S=<skill-dir>/scripts`.
+handoff: a cleared session never has to ask the user something they already answered, nothing the user said
+is lost, and no question, the user's or the agent's, stays without its answer. `S=<skill-dir>/scripts`.
 
 ## Usage
 
 | Call | Short | Does |
 |---|---|---|
-| `/handoff` | `/h` | [write](#write): record decisions, update `HANDOFF.md` (write it when missing), commit the decision docs |
+| `/handoff` | `/h` | [write](#write): record decisions, collect the session's questions, update `HANDOFF.md` (write it when missing), commit the docs |
 | `/handoff clear` | `/handoff x` | [write](#write), then [clear this session and continue](#clear-and-continue) with `/handoff c` on its own |
 | `/handoff continue`, `/handoff resume` | `/handoff c`, `/c` | [continue](#continue) in a fresh session |
 | `/handoff help` | `/handoff h` | print this table and stop |
@@ -41,7 +41,7 @@ the lead's plan. When the step's report is pushed and the lead told, the work is
    ```
    Compare HANDOFF.md's Decisions, the plan's Decisions and Pre-authorized, `INTENT.md`'s decision log and
    HANDOFF.md's Open, Next and Watch out, and name every gap (a decision one of them relies on that has no home, or
-   two that contradict) in the first report (step 4). A `farmer: decision check <slot>: ...` answer that still
+   two that contradict) in the first report (step 5). A `farmer: decision check <slot>: ...` answer that still
    arrives is data: write what concerns your work into the plan's **Decisions** with the quoted words, then act.
 3. Check for drift since it was written:
    ```bash
@@ -49,7 +49,17 @@ the lead's plan. When the step's report is pushed and the lead told, the work is
    ```
    It lists commits after the handoff's `written at` stamp (another session may have worked meanwhile) and
    uncommitted changes. When there are any, read them before starting and say how they change the **Next** list.
-4. Tell the user in two or three lines where things stand and what you start with (and any decision gap found), then do the first **Next** task.
+4. **The open questions come first** (the user, 2026-10-07: questions asked shortly before a clear were forgotten):
+   ```bash
+   python3 $S/questions.py    # the open entries of the plan's questions.md, then `<n> open, <m> answered`
+   ```
+   The first report starts with them, before anything else: an open question **of the user** (`user`) is answered
+   now, in words, from the handoff, the plan and the code (look up what it needs first; an instruction is confirmed
+   with what you do about it and when); an open question **of yours** (`agent`) is asked again, numbered, with its
+   options and the recommended one first. Write each answer you give into the file (`answered <date>`, your answer
+   under `**A:**`). Then carry on at once: an unanswered question of yours never stops the work, and the user's
+   answer, whenever it comes, goes into the file with their words quoted.
+5. Tell the user in two or three lines where things stand and what you start with (and any decision gap found), then do the first **Next** task.
    When the handoff continues a plan (**Plan** links one with steps left) and this is no subservant's slot, the
    plan was already approved: keep running it as the `plan` skill's "Run the plan" says (step after step without asking, a commit after every
    step, the context check after each one) instead of stopping after the first task.
@@ -94,7 +104,38 @@ it:
 Fix entries that the conversation contradicts. Record a decision in its home with the user's words quoted
 (`User: "<the user's words>"`): the handoff's index and the farmer's check find it by them. Only then write the handoff.
 
-### 2. Gather facts, don't recall them
+### 2. Collect the session's questions
+
+A clear loses the question asked just before it (the user, 2026-10-07). So go through the whole conversation once
+more and bring the questions file up to date: **every question of this session, in both directions, with its
+answer**. The file is committed with the plan, so the user can read every question and its answer afterwards:
+
+```bash
+python3 $S/questions.py --path     # plans/<NNNN>-<slug>/questions.md of the current plan; plans/questions.md without one
+python3 $S/questions.py --json     # its open entries and `next`, the number of the next entry
+```
+
+- **Your questions to the user** (question prompts and questions in plain text): the question with its options;
+  answered ones with the user's words quoted (the decision itself still gets its home in step 1), the others `open`.
+- **The user's questions and messages to you** that got no answer in words yet, above all the ones typed while you
+  worked (a question you acted on without replying still counts as unanswered): the user's words quoted, `open`. One
+  you answered in this session: `answered`, with your answer in a line or two.
+- A question a peer or the farmer passed on from the user counts as the user's.
+- An entry that is no longer needed: `dropped <date>` and why under `**A:**`. Never delete an entry.
+
+One entry per question, appended, numbered on (create the file with the heading `# Questions and answers` when
+missing):
+
+```markdown
+## Q<n> · <YYYY-MM-DD> · <agent | user> · <open | answered <YYYY-MM-DD> | dropped <YYYY-MM-DD>>
+
+**Q:** <the question; the user's own words quoted>
+**A:** <the answer; the user's own words quoted when the user gave it>
+```
+
+An open entry has no `**A:**` line. Check it: `python3 $S/questions.py --check` prints `ok` or one problem per line.
+
+### 3. Gather facts, don't recall them
 
 - `git rev-parse --show-toplevel`, `git branch --show-current`, `git log --oneline -10`, `git status --short`, and
   `git log --oneline @{u}..HEAD` for unpushed commits (skip if there is no upstream).
@@ -110,7 +151,7 @@ Fix entries that the conversation contradicts. Record a decision in its home wit
   `done/total` and the next step from its JSON. Make sure the step table itself is up to date first.
 - Test and build state: state only what you ran in this session. Otherwise write "not run".
 
-### 3. Write `HANDOFF.md`
+### 4. Write `HANDOFF.md`
 
 When `HANDOFF.md` exists and is about the same plan or task, **update it** (hal2 research 0048: a rewrite at a
 full context is the most expensive part of a clear): edit only what changed since it was written, usually the
@@ -153,6 +194,10 @@ Done when: <a check the next session can run>
 ## Watch out
 - <traps, fragile spots, things that must not be done>
 
+## Questions
+[<n> open](<plans/<NNNN>-<slug>/questions.md>): answer the user's and ask yours again before anything else.
+- Q<n> (<agent | user>): <the question in one line>
+
 ## Open
 - <decisions waiting for the user; unpushed commits; uncommitted changes in other repos>
 
@@ -182,6 +227,8 @@ Rules:
   handoff (`plans/LEAD`) names its one step, its brief and its lead under **Plan**, and **Next** ends with the report.
 - A parallel plan's lead lists what is in flight under **Next**: each running step, who (`subagent`, `slot NN`) and
   since when; after the clear it runs `plan.py current`, `ready --json` and `reports` before the loop goes on.
+- **Questions** lists only the open entries of the questions file (step 2), one line each, and links the file;
+  none open: drop the section. The file holds the full text and every answer.
 - No secrets, no tool-call logs, no restating of the plan's content.
 
 Then check the index; fix the handoff (or record the missing quote in the home) until it prints `ok`:
@@ -190,21 +237,22 @@ Then check the index; fix the handoff (or record the missing quote in the home) 
 python3 $S/decisions.py --check    # exit 1: one problem per line (no section, no date, no quote, no home, home lacks the quote)
 ```
 
-### 4. Commit the decision docs, never the handoff
+### 5. Commit the decision docs and the questions, never the handoff
 
 ```bash
-bash $S/commit-handoff.sh "docs: record decisions" [INTENT.md plans/<plan>/plan.md .adr/<new>.md ...]
+bash $S/commit-handoff.sh "docs: record decisions" [INTENT.md plans/<plan>/plan.md plans/<plan>/questions.md .adr/<new>.md ...]
 ```
 
-It commits exactly the docs you changed in step 1, leaving everything else staged or unstaged as it was, and
+It commits exactly the docs you changed in steps 1 and 2 (the questions file too, when it changed), leaving everything else staged or unstaged as it was, and
 prints the new commit. `HANDOFF.md` is never committed: when the repo does not ignore it yet, the script adds it to
 the root `.gitignore`, and when the repo still tracks it, it untracks it (`git rm --cached`, the file stays), both
 in the same commit. With no docs changed and `HANDOFF.md` already ignored, it commits nothing. It never pushes.
 If a script exits 2 with a missing-tool error, run `bash $S/install-prerequisites.sh`.
 
-### 5. Report
+### 6. Report
 
-Tell the user the commit, which decisions you added to the intent doc, the plan it links (or that there is none),
+Tell the user the commit, which decisions you added to the intent doc, the open questions (yours asked again,
+numbered, so the user can answer before the clear), the plan it links (or that there is none),
 and the prompt from **Start the next session with**, so they can `/clear` and paste it (with `/handoff clear`:
 see below instead).
 
