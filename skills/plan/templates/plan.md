@@ -1,8 +1,15 @@
+---
+type: Plan
+schema: 1
+id: {id}
+title: {quoted_title}
+description: {description}
+status: open
+landing: {landing}
+created: {date}
+---
+
 # Plan {number}: {title}
-
-Landing: {landing}
-
-Created {date}. `plans/CURRENT_PLAN` names the active plan; helper files for this plan live next to this file.
 
 ## Goal
 
@@ -10,12 +17,13 @@ Created {date}. `plans/CURRENT_PLAN` names the active plan; helper files for thi
 
 ## Context
 
-- <links to the intent doc, ADRs, research or code this plan builds on>
+- <links to the intent doc, decision records, research or code this plan builds on>
+- The ledgers: [decisions.md](decisions.md), [questions.md](questions.md); the state: [handoff.md](handoff.md).
 
 ## Steps
 
 Each step is detailed when it is next; keep one line per step here. The plan lands once, after all its steps
-(`Landing: auto`: the plan skill runs `/mtm` then); steps checked only after the landing come last, their done-when
+(`landing: auto`: the plan skill runs `/mtm` then); steps checked only after the landing come last, their done-when
 starting "after the landing: ...".
 
 | # | Step | Done when | Status |
@@ -26,13 +34,10 @@ starting "after the landing: ...".
 ## Pre-authorized
 
 User-only decisions (money, production deploys, accounts and secrets, paid resources, product choices), asked and
-answered before implementation, with the user's words and the date; the run acts on them without asking again.
+answered before implementation; each is an entry of [decisions.md](decisions.md) with the user's words, named here
+by its number. The run acts on them without asking again.
 
 - <none: the plan needs no user-only decision>
-
-## Decisions
-
-- <decisions taken while planning or grilling, with dates>
 
 ## Notes
 
