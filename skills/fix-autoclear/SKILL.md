@@ -100,26 +100,38 @@ the case added and what changed in this skill.
 ## Insider knowledge
 
 As of hal2 plan 0057 (the job), research 0010, plan 0066 (guard and sweep), plan 0077 (reports, early retries) and
-plan 0174 (a clear from outside, the effort level). Keep this true: `$E selfcheck`.
+plan 0174 (a clear from outside, the effort level) and plan 0181 (every Claude session: kinds, tickets, the queued
+clear). Keep this true: `$E selfcheck`.
 
 **Three parts, one flow.**
 
 1. **The guard** (`code/rust/libs/hal2-agents/src/guard.rs`), inside Claude's `PreToolUse` hook
    (`hal2-cli-agents hook claude PreToolUse`): a main session (no `agent_id`) at or above `[autoclear] percent`
-   whose checkout runs a plan with steps left (`plan_guard.rs`: `plans/CURRENT_PLAN` names a plan with an open
-   step) and is not landing gets a **soft stop**: the tool is denied once with "run /handoff now", the marker
+   gets a **soft stop**, with or without a plan with steps left and with or without a merge-queue ticket (plan
+   0181; `plan_guard.rs`'s open plan only goes to the log): the tool is denied once with "run /handoff now" (the
+   command of the session's kind, `code/rust/libs/hal2-agents/src/autoclear/kind.rs`: the plain kind `/handoff`,
+   `HANDOFF.md`, `/handoff c`; the role slot `farmer-<repo>` `/farmer handoff`, `roles/farmer/handoff.md`,
+   `/farmer act`; agents.toml's `[[autoclear.kinds]]` overrides), the marker
    `<state>/agents/autoclear/<session>.guard` is written (stage `soft`) and the job is started detached with
    `--await-handoff`. After it, **hand-off tools pass** (`handoff_tool`: Read/Grep/Glob, the handoff skill,
    Write/Edit of `HANDOFF.md`, `INTENT.md`, `plans/`, `.adr/`, TaskStop, Bash whose every segment starts with a
    `HANDOFF_PROGRAMS` entry — git, cat, ls, grep, sed, cut, tr, hal2-cli-agents, ...; never awk — or runs a `HANDOFF_SCRIPTS`
-   script). Anything else is a **hard stop**: denied with `continue: false`, the turn ends (stage `hard`). A landing
-   (`Skill` mtm, `hal2-cli-git worktree reserve|merge-to-main|...`, a merge-queue ticket) always passes. A cancelled
-   job re-arms the guard `REARM_POINTS` (5) higher.
+   script; a kind adds its own skill, its file's folder and its skill's scripts:
+   `code/rust/libs/hal2-agents/src/guard/tools.rs`). Anything else is a **hard stop**: denied with `continue:
+   false`, the turn ends (stage `hard`). **A landing's own commands**
+   (`code/rust/libs/hal2-agents/src/guard/landing.rs`): `hal2-cli-git worktree queue|release|stop` always pass;
+   `hal2-cli-git worktree reserve|merge-to-main` and `Skill` mtm pass only while the checkout holds a ticket (the log's `pass (a
+   landing's own command)`), without one they would start a landing and are stopped like any tool; every other tool
+   of a checkout with a ticket is stopped, and both stop texts end with `This checkout holds a merge-queue ticket
+   (<state>, pid <n>): ...` (the hand-off names it, never stops it). Still passing: a subagent's tool, a session in
+   neither tmux nor a hal2 terminal, a marker with `gave_up`, a cancelled marker below its rearm percent,
+   `[autoclear] enabled = false`. A cancelled job re-arms the guard `REARM_POINTS` (5) higher.
 2. **The job** (`autoclear.rs`, `hal2-cli-agents clear-and-continue`, one per pane, lock `<n>.lock`): record
    `<state>/agents/autoclear/<n>.json`, log `<n>.log` (pane `%<n>`, or `<id>` for a terminal host `t:<id>`).
    Phases: `interrupting` (sweep's `--interrupt`: Escape) → `waiting` (turn over: a `Stop` record, or the screen
    reading `hook stopped continuation`/`Interrupted` twice; a session idle before the request: idle twice; box
-   empty; no landing; a user's draft is waited out `Timings::draft_wait` (60 min), then `box-not-ready`, and past
+   empty; a merge-queue ticket is only logged, `landing: the checkout has a ticket in the merge queue (...): not
+   waited for`; a user's draft is waited out `Timings::draft_wait` (60 min), then `box-not-ready`, and past
    `Timings::draft_alert` (3 min) raises one alert per draft: the record's `waiting_on`/`waiting_since`, a chronicle
    line with `note: continue-blocked: ...`, a notification (`draft_alert.rs`, plan 0139; `evidence.py doctor` lists
    it as `blocked`); hal2's own request left in the box (begins `hal2 stopped this turn:` or ends `hal2 then clears
@@ -132,7 +144,18 @@ plan 0174 (a clear from outside, the effort level). Keep this true: `$E selfchec
    failed read-back empties the box), waits for that turn;
    a second turn without a hand-off fails `ignored-soft-stop`) → `clearing` (`i` in vim mode, `/clear` typed and
    read back, Enter; confirmed by a `SessionStart` record, source `clear`) → `continuing` (the effort level, see
-   below; then `DEFAULT_PROMPT` `/handoff c` typed, read back, sent) → `continued`.
+   below; then the kind's prompt, `DEFAULT_PROMPT` `/handoff c`, typed, read back, sent) → `continued`. The job
+   needs no open plan (the refusal no-open-plan is gone since plan 0181; `--without-plan` does nothing).
+   **The busy path** (`code/rust/libs/hal2-agents/src/autoclear/busy.rs`, `queued.rs` and `queued_clear.rs` beside
+   it, the queue read by `code/rust/libs/hal2-agents/src/scrape/queued.rs`; plan 0181): a session that is never
+   idle (a farmer under a stream of messages). While the job waits for the turn's end it looks every 5 s; once it
+   has wanted the same thing for `Timings::busy_wait` (60 s) and the session works with an empty box (a draft or a
+   dialog restarts the clock), it types into the running turn: with the hand-off written `/clear` and behind it
+   the prompt, which Claude Code lists as queued input above the spinner (lines starting `❯`/`›`, the box reading
+   `Press up to edit queued messages`) and runs at the turn's end; after a cut-off turn the hand-off request. The
+   new session's start is adopted like a clear from outside. No `/effort` on this path (logged).
+   `Timings::queued_wait` (10 min) bounds it: `queue-unconfirmed` (Enter did not send, the lines do not show
+   queued in order, or the clear did not run in time); queued input is never taken back.
    **A clear from outside** (`code/rust/libs/hal2-agents/src/autoclear/outside.rs`, plan 0174): when the old
    session's `SessionEnd` record comes while the job waits (a `/clear` someone else typed, or one Claude Code had
    queued), the job looks `Timings::clear_confirm` (30 s) for the pane's new session (`SessionStart`, source
@@ -140,7 +163,7 @@ plan 0174 (a clear from outside, the effort level). Keep this true: `$E selfchec
    <id>`, the record gets `new_session`, and the job waits `Timings::outside_prompt_wait` (20 s) for whoever cleared
    to send their own prompt: the new session past `SessionStart` ends the job `cancelled` with `resolved: cleared and
    continued from outside`, a draft in its box `cancelled` with `... left to its writer`, a checkout without an open
-   plan `cancelled` with `cleared from outside, no prompt typed: ...`; otherwise the job goes on with `continuing`
+   plan went on like any other since plan 0181; otherwise the job goes on with `continuing`
    (no hand-off before the clear is only logged). Not found, a `SessionStart` with source `resume`, or the agent's
    process gone: `session-ended`, message `the session ended (reason <SessionEnd's reason>), no new session in the
    pane`.
@@ -152,7 +175,9 @@ plan 0174 (a clear from outside, the effort level). Keep this true: `$E selfchec
    effort: `effort: not set to <level> (<why>): the prompt goes out anyway`, never a fail reason; every step is an
    `effort: ...` line in the job log. `/effort` also rewrites the user's default in `~/.claude/settings.json`.
 3. **The sweep** (`sweep.rs`, run by hal2-api every `sweep_minutes`, log `~/Library/Logs/hal2-api.log`, lines
-   `hal2_api::sweep`): S1 a turn ended above the threshold without a running job → starts the job; S13 a soft stop
+   `hal2_api::sweep`): takes a session that runs a plan with steps left or has a guard marker (plan or not); an
+   idle session without both is left alone (`no plan with steps left`), a merge-queue ticket skips nothing (also
+   not the resume). S1 a turn ended above the threshold without a running job → starts the job; S13 a soft stop
    older than `grace_minutes` still working without a hand-off → the job with `--interrupt`. After `MAX_ATTEMPTS`
    (3) jobs for a session it gives up (`attempts` job record, marker `gave_up`: the guard then lets everything pass).
 4. **Reports and early retries** (`report.rs`, hal2-api's `apps/hal2-api/src/sweep.rs`): every 10 s (`CHECK`)
@@ -169,7 +194,7 @@ states `waiting`, `requesting`, `interrupting`, `clearing`, `continuing`, `conti
 reasons `ignored-soft-stop` (the session did not hand off after the typed request: often the guard denied the
 hand-off's own tool, or the model answered "already done" for a hand-off the check did not accept), `typing-mismatch` (the box did not read back what was typed: screen scraping, vim mode),
 `clear-unconfirmed`, `prompt-unconfirmed` (no `SessionStart`/prompt seen in time), `box-not-ready`,
-`not-insert-mode`, `not-interrupted`, `agent-gone`, `session-ended`, `already-running`, `invalid-request`,
+`not-insert-mode`, `not-interrupted`, `queue-unconfirmed` (the busy path's queued `/clear` or prompt), `agent-gone`, `session-ended`, `already-running`, `invalid-request`,
 `job-gone` (the job's process died), `attempts` (the sweep gave up), `tmux`, `io`
 <!-- /names -->
 

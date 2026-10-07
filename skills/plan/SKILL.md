@@ -380,14 +380,17 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
    ```bash
    python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] percent, else 35; percent as the statusline shows it
    ```
-   - No step is left that you run now (this was the last step, or only steps checked after the landing remain):
-     skip the check, never hand off or clear here: the plan's end ("Run the plan" point 3: the plan lands itself,
-     or it is done and the user's `/mtm` lands it) and its report must stay on screen. hal2 refuses to clear then too (`no-open-plan`).
-   - `stop` is false: continue with the next step.
-   - `stop` is true (and steps are left that you run now): stop the plan here and hand off:
+   - No step is left that you run now (this was the last step, or only steps checked after the landing remain) and
+     nothing is left to do after it (a `manual` plan that waits for the user's `/mtm`, a plan that has landed): skip
+     the check and never hand off or clear there: its report stays on screen.
+   - `stop` is false: continue with the next step, or with the plan's end ("Run the plan" point 3).
+   - `stop` is true: stop the plan here and hand off. Also before an auto plan's landing (hal2 plan 0181: hal2's
+     guard stops the `/mtm` that would start a landing above the threshold): the handoff's Next is then `/mtm` (the
+     plan's own landing, "Land the plan"), and the continued session lands with a fresh context.
      1. Stop your background work (TaskStop every background shell, subagent, workflow and monitor you started):
         after a clear their notifications would wake the fresh session. Note in the handoff what was stopped and
-        must be rerun.
+        must be rerun. **Never a landing or a waiting reserve** (`hal2-cli-git worktree merge-to-main|reserve`): it
+        goes on across the clear; name it in the handoff (the command, the slot, its ticket's state) instead.
      2. Run `/handoff` (it records decisions, writes `HANDOFF.md` with the plan's next step and commits them).
      3. `autoclear` is true: start the automatic clear-and-continue, then end your turn with one line saying the
         session clears and continues with `/handoff c`; do nothing after it (the clear waits for your turn to end,
@@ -396,8 +399,8 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
         hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
         ```
         `already-running` is fine: hal2's guard already started the job (it stops a session above the threshold at
-        its next tool, research 0010 in hal2): just end your turn. When it fails to start otherwise (`no-open-plan`,
-        ...), say so and fall back to the next point.
+        its next tool, research 0010 in hal2): just end your turn. When it fails to start otherwise (autoclear
+        disabled, ...), say so and fall back to the next point.
      A tool denied with "hal2: context at N% ... run /handoff now" is that guard: stop the step where it is, do
      points 1-2 (only the hand-off's tools run now; name in the handoff what was cut off), then end your turn: the
      job is already waiting, so skip point 3.

@@ -61,6 +61,17 @@ the lead's plan. When the step's report is pushed and the lead told, the work is
    plan was already approved: keep running it as the `plan` skill's "Run the plan" says (step after step without asking, a commit after every
    step, the context check after each one) instead of stopping after the first task.
 
+**A landing named in the handoff** (hal2 plan 0181: a session is cleared although its checkout lands or waits in
+the merge queue; the landing's process goes on across the clear):
+
+- **Next is `/mtm`** for a finished `Landing: auto` plan (it was handed off before its landing started): that is
+  the plan's own landing (the plan skill's "Land the plan"), run it.
+- **A reserve or landing in flight**: look before you start anything (`hal2-cli-git worktree queue --json`). While
+  its ticket is waiting or active, its shell's end reaches this session as a task notification: wait for it (and
+  work on what does not depend on it), or rerun the same `reserve` (the rerun takes the old ticket's place, the old
+  process ends `cancelled`, exit 5: that one is no failure). A held landing is fixed and rerun as the mtm skill
+  says. Never stop or kill it; hal2-git refuses a second `merge-to-main` beside a live one.
+
 If there is no handoff file, say so and ask what to work on.
 
 ## Write
@@ -206,7 +217,10 @@ see below instead).
 then lets hal2 clear this Claude Code session and type `/handoff c` into the fresh one:
 
 1. Stop your background work first (TaskStop every background shell, subagent, workflow and monitor you started;
-   the handoff names what must be rerun): their notifications would wake the fresh session.
+   the handoff names what must be rerun): their notifications would wake the fresh session. **Never a landing or a
+   waiting reserve** (`hal2-cli-git worktree merge-to-main|reserve`, the merge queue policy: a started landing is
+   never aborted): it goes on across the clear, the handoff's **Next** names it (the command, the slot, the ticket's
+   state) and its end wakes the fresh session.
 2. Start it and end your turn right after with one line ("clearing, continuing with /handoff c"):
    ```bash
    hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
@@ -214,9 +228,10 @@ then lets hal2 clear this Claude Code session and type `/handoff c` into the fre
    It waits for your turn to end, waits out a draft the user is typing (and the user's own turns), types `/clear`
    only into an empty prompt, confirms the new session through its hook record, then types `/handoff c`; the
    job shows on the agent in hal2's Agents pane, where it can be cancelled (`--cancel`).
-3. It clears only while the checkout's `plans/CURRENT_PLAN` names a plan with steps left, and checks again right
-   before it types `/clear` (a finished plan's last output, e.g. the merge-to-main report, stays on screen). It
-   exits non-zero when it cannot start (`no-open-plan`, autoclear disabled in agents.toml, not Claude Code, neither
-   in tmux nor a hal2 terminal, no hal2): report its message and fall back to telling the user to `/clear` and paste the prompt.
+3. It clears every Claude session, with or without a plan with steps left and with or without a merge-queue ticket
+   (hal2 plan 0181; a session that is never idle gets `/clear` and the prompt as queued input). A finished plan
+   that has landed has nothing to continue: do not start it there, its report stays on screen. It
+   exits non-zero when it cannot start (autoclear disabled in agents.toml, not Claude Code, neither
+   in tmux nor a hal2 terminal, no hal2; an older hal2 also `no-open-plan`): report its message and fall back to telling the user to `/clear` and paste the prompt.
    `already-running` is no failure: a job waits already (hal2's guard started it when it stopped the session at the
    threshold); just end the turn.

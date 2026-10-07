@@ -3,6 +3,24 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-07 · sessions the guard never covered: a queue ticket, no open plan, never idle (hal2 wt 02, 05, farmer)
+
+- **Signature**: no failed job at all. A session far over the threshold (the farmer's slot at 55 %, a carrier at
+  49 %) whose `guard.log` lines read `pass (a landing)` or `pass (no plan with steps left)`; or a job `waiting` with
+  the message `waiting for the landing` for hours (global shot 12: a train's carrier with a waiting reserve); or a
+  finished `Landing: auto` plan whose `/mtm` the guard locked out (shot 11); or a refusal `no-open-plan`; or a
+  farmer whose every turn's end started the next, so the job never saw an idle box.
+- **Cause**: by design until then (INTENT 2026-09-29: never a landing, never without a plan with steps left), and
+  the job typed only into an idle session.
+- **Fix**: hal2 plan 0181 (`815fccd9f` kinds and sessions without a plan, `9b5ef0d50` tickets, `3efc72bc3` the
+  queued clear): every Claude session is stopped and cleared; tests `incident_11_tests.rs`, `incident_12_tests.rs`,
+  `autoclear/queued_tests.rs`.
+- **Recovered**: by hand (`/handoff clear`, the farmer's `/farmer handoff`).
+- **Would have caught it sooner**: `evidence.py doctor` listing sessions over the threshold whose guard only passes.
+- **Benign look-alike**: `pass (a landing's own command)` beside stops of the same session is the new rule (the
+  reserve or merge-to-main of a checkout with a ticket); an idle session without a plan and without a marker over
+  the threshold is left alone on purpose (its next tool is stopped); `landing: ... not waited for` in a job log.
+
 ## 2026-10-06 · a /clear from outside the job taken for the session ending (hal2 wt 35)
 
 - **Signature**: job `failed` `session-ended` ("the session ended") within a second of the turn's end; its log has

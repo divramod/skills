@@ -125,7 +125,12 @@ the log as well. A peer's message after a clear: read `handoff.md` and the log's
    branch: the farmer commits nothing but `roles/farmer/ROLE.md`.
 3. `python3 $S/farmer.py handoff --clear`: refuses a handoff.md not written for this handoff; else starts hal2's
    `clear-and-continue --without-plan --prompt "/farmer act" --detach` (it waits for this turn to end, types
-   `/clear`, then `/farmer act`) and logs it. Then end the turn with one line, doing nothing after it. Refused
+   `/clear`, then `/farmer act`) and logs it. `already-running` counts as started: hal2's context guard
+   stops the farmer's session like every other (hal2 plan 0181: the farmer slot's kind hands off with `/farmer
+   handoff`, counts `roles/farmer/handoff.md` and continues with `/farmer act`; under a stream of messages the job
+   queues `/clear` and the prompt behind the running turn) and its job already waits. A tool denied with "hal2:
+   context at N% ..." is that guard: do points 1 and 2, then end the turn. Then end the turn with one line, doing
+   nothing after it. Refused
    otherwise: say why in one line and end the turn; the tick's 15-minute fallback clears plainly.
 
 ## Authority
