@@ -12,8 +12,10 @@ are in use than that, the window must be the 1M one.
 `percent` is measured against the usable window, i.e. without Claude Code's auto-compact buffer (16.5% of the
 window), exactly like the Claude Code statusline shows it; `raw_percent` is against the whole window.
 
-The threshold is --threshold, else hal2's `[autoclear] percent` (`hal2-cli-agents settings --json`, agents.toml),
-else 35. `autoclear` says whether the session can clear and continue on its own after a hand-off
+The threshold is --threshold, else hal2's `[autoclear]` settings (`hal2-cli-agents settings --json`, agents.toml):
+`step_percent` when it is set (`step_tokens`: the plan runs this check at a step boundary, where a clear is cheapest,
+so it stops earlier there than the guard's ceiling does mid-step; hal2 research 0048), else `percent` (the ceiling,
+the lower of `percent` and `tokens`), else 35. `autoclear` says whether the session can clear and continue on its own after a hand-off
 (`hal2-cli-agents clear-and-continue --detach`): hal2's autoclear is enabled and the agent is Claude Code in a tmux
 pane or a hal2 terminal host ($CLAUDE_CODE_SESSION_ID, and $TMUX_PANE or $HAL2_TERMINAL: clear-and-continue takes
 the pane `%<n>` or `t:<id>` from them itself); `autoclear_reason` says why not. $HAL2_CLI_AGENTS names the program
@@ -113,8 +115,9 @@ def measure(args: argparse.Namespace, home: Path) -> dict:
     settings, why = autoclear_settings()
     threshold = args.threshold
     if threshold is None:
-        percent_setting = (settings or {}).get("percent")
-        threshold = float(percent_setting) if isinstance(percent_setting, (int, float)) else DEFAULT_THRESHOLD
+        numbers = [(settings or {}).get(key) for key in ("step_percent", "percent")]
+        numbers = [float(n) for n in numbers if isinstance(n, (int, float)) and not isinstance(n, bool)]
+        threshold = numbers[0] if numbers else DEFAULT_THRESHOLD
     can_clear, clear_why = autoclear(settings, why)
     result = {"known": False, "used": None, "window": None, "percent": None, "raw_percent": None,
               "threshold": threshold, "stop": None, "source": None,

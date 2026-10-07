@@ -115,6 +115,11 @@ class ContextTest(unittest.TestCase):
         self.assertTrue(result["stop"])
         self.assertTrue(result["autoclear"])
         self.assertEqual(result["autoclear_reason"], "")
+        # A step boundary's own threshold wins over the ceiling (hal2 research 0048).
+        step = self.fake_agents('{"autoclear": {"enabled": true, "percent": 24, "step_percent": 14}}')
+        self.assertEqual(self.run_context("--transcript", str(path), env={**env, "HAL2_CLI_AGENTS": step})["threshold"], 14.0)
+        unset = self.fake_agents('{"autoclear": {"enabled": true, "percent": 24, "step_percent": null}}')
+        self.assertEqual(self.run_context("--transcript", str(path), env={**env, "HAL2_CLI_AGENTS": unset})["threshold"], 24.0)
         # --threshold still wins.
         self.assertEqual(self.run_context("--transcript", str(path), "--threshold", "50", env=env)["threshold"], 50.0)
 

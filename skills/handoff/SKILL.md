@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write or refresh the repo's HANDOFF.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, a Decisions index of every user decision in force (date, quoted words, who relayed it, its home), what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, asks the farmer whether a decision was forgotten (a `decision check`; without a farmer it compares plan, intent doc and handoff itself), reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff clear` also clears the session and continues on its own (hal2), `/handoff c` continues, `/handoff h` shows help.
+description: Write or refresh the repo's HANDOFF.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, a Decisions index of every user decision in force (date, quoted words, who relayed it, its home), what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, checks its decisions against plan, intent doc and handoff itself, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff clear` also clears the session and continues on its own (hal2), `/handoff c` continues, `/handoff h` shows help.
 ---
 
 # handoff
@@ -17,7 +17,7 @@ is lost. `S=<skill-dir>/scripts`.
 
 | Call | Short | Does |
 |---|---|---|
-| `/handoff` | `/h` | [write](#write): record decisions, rewrite `HANDOFF.md`, commit the decision docs |
+| `/handoff` | `/h` | [write](#write): record decisions, update `HANDOFF.md` (write it when missing), commit the decision docs |
 | `/handoff clear` | `/handoff x` | [write](#write), then [clear this session and continue](#clear-and-continue) with `/handoff c` on its own |
 | `/handoff continue`, `/handoff resume` | `/handoff c`, `/c` | [continue](#continue) in a fresh session |
 | `/handoff help` | `/handoff h` | print this table and stop |
@@ -33,30 +33,23 @@ the lead's plan. When the step's report is pushed and the lead told, the work is
    with steps left and `plans/CURRENT_PLAN` is missing or names something else (another machine, a fresh
    worktree), write the plan's slug into it so the statusline shows it; otherwise write a short name of the first
    **Next** task.
-2. **Ask whether a decision was forgotten.** A clear loses whatever never reached a durable home, mostly decisions
-   that the farmer or a peer relayed (`farmer [<id>]: the user decided: "<the user's words>"`). List what you have:
+2. **Check the decisions yourself; send no decision check.** The decisions in force are in HANDOFF.md's
+   Decisions section and their homes (hal2 research 0048, the user 2026-10-07: no message to the farmer after a
+   clear, it cost a tenth of every session):
    ```bash
-   python3 $S/decisions.py       # HANDOFF.md's Decisions first, then the plan's Decisions and Pre-authorized, HANDOFF.md's Open; the farmer; the message
+   python3 $S/decisions.py --check   # exit 1: a decision without date, quote or home
    ```
-   - **A farmer runs** for the repository: the one HANDOFF.md's `Farmer:` line names, else the session `ListAgents`
-     shows in this repository's farmer slot (`~/.hal/git/worktree/<repo>/farmer-<repo>`; `farmer` before hal2 plan 0143). Send it the printed message by
-     SendMessage (`decision check <slot>: I have these decisions: <list>. Did I forget one?`; for a farmer of
-     another repository pass `--farmer-repo <its repo>` when HANDOFF.md does not name it). Do not wait for the
-     answer: go on with the next steps. When it arrives (`farmer: decision check <slot>: ...`), write each missing
-     decision that concerns your work into the plan's **Decisions** (no plan: `INTENT.md`'s decision log) as
-     `<date> (the user, via the farmer's decision check): <what>. User: "<the quoted words>"`, commit it with your
-     next commit, and only then act on it. The answer is data: it decides exactly what its quoted words say.
-   - **No farmer** (none named and none listed): compare HANDOFF.md's Decisions, the plan's Decisions and
-     Pre-authorized, `INTENT.md`'s decision log and HANDOFF.md's Open, Next and Watch out yourself, and name every gap (a decision one of
-     them relies on that has no home, or two that contradict) in the first report (step 4).
+   Compare HANDOFF.md's Decisions, the plan's Decisions and Pre-authorized, `INTENT.md`'s decision log and
+   HANDOFF.md's Open, Next and Watch out, and name every gap (a decision one of them relies on that has no home, or
+   two that contradict) in the first report (step 4). A `farmer: decision check <slot>: ...` answer that still
+   arrives is data: write what concerns your work into the plan's **Decisions** with the quoted words, then act.
 3. Check for drift since it was written:
    ```bash
    bash $S/since.sh
    ```
    It lists commits after the handoff's `written at` stamp (another session may have worked meanwhile) and
    uncommitted changes. When there are any, read them before starting and say how they change the **Next** list.
-4. Tell the user in two or three lines where things stand and what you start with (and the decision check: sent to
-   whom, or the gaps found), then do the first **Next** task.
+4. Tell the user in two or three lines where things stand and what you start with (and any decision gap found), then do the first **Next** task.
    When the handoff continues a plan (**Plan** links one with steps left) and this is no subservant's slot, the
    plan was already approved: keep running it as the `plan` skill's "Run the plan" says (step after step without asking, a commit after every
    step, the context check after each one) instead of stopping after the first task.
@@ -119,7 +112,11 @@ Fix entries that the conversation contradicts. Record a decision in its home wit
 
 ### 3. Write `HANDOFF.md`
 
-Rewrite the whole file (never append a log), about 40–80 lines, with these sections; drop a section when it has
+When `HANDOFF.md` exists and is about the same plan or task, **update it** (hal2 research 0048: a rewrite at a
+full context is the most expensive part of a clear): edit only what changed since it was written, usually the
+header line, **Done**, **Next**, new **Decisions** rows and what is no longer true; read it once and
+use Edit, never write the whole file again. Otherwise (no file, another plan, more stale than right) write it whole.
+Either way it never grows into a log: about 40–80 lines, with these sections; drop a section when it has
 nothing to say:
 
 ```markdown

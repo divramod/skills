@@ -53,6 +53,11 @@ worktree slots 30-99 that never land: their table adds Needs, Touches and Who, a
 
 **Good steps** fit one session (split a step that doesn't) and have a **Done when** that is a runnable command
 where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise one observable behaviour.
+A done-when tests only what the step changed: the crates or packages it touched (`cargo nextest run -p <crate>`), or
+a gate job for the branch's range (`gate/main.sh <job> --branch origin/main` in hal2). It never runs a whole-workspace
+test (`--workspace`, a bare `cargo nextest run`) or a full gate job (a release bundle, an e2e stack) on the Mac: those
+are the landing's CI; a check that needs one before then runs on the CI runner (hal2: `gh workflow run land.yml -f
+ref=<branch> -f jobs=<job>`; hal2 plan 0157).
 
 **A plan lands once, at its end.** `new` writes `Landing: auto` below the title: when the plan's last step is done,
 the plan lands itself with `/mtm` in the same run (the user's start of the plan is the consent to land it; hal2's
@@ -378,7 +383,7 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
    work in the tree stays as it was). Never push without the user's consent.
 5. **Check the context window** before starting the next step:
    ```bash
-   python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] percent, else 35; percent as the statusline shows it
+   python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] step_tokens (a step boundary clears earlier than the guard's ceiling), else its ceiling (tokens/percent), else 35; percent as the statusline shows it
    ```
    - No step is left that you run now (this was the last step, or only steps checked after the landing remain) and
      nothing is left to do after it (a `manual` plan that waits for the user's `/mtm`, a plan that has landed): skip
