@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import sys
 import tempfile
@@ -113,6 +114,82 @@ class AutoclearOff(unittest.TestCase):
                                     "autoclear_off": True}]
         self.write(f"{SWEEP_GAVE_UP['session_id']}.guard", SWEEP_GAVE_UP)
         self.assertEqual(evidence.doctor_items(24), [])
+
+
+# hal2 wt 02, 2026-10-06 17:55 (hal2 plan 0174): the weekly usage limit ended the turn, the session's process ended
+# with the tmux restart; the job's `session-ended` was right and hal2 reports no such reason, but the doctor listed
+# it and the farmer's autoclear duty delegated it.
+JOB_ENDED = {"state": "failed", "reason": "session-ended", "message": "the session ended", "pane": "%171",
+             "old_session": "5f157c8c-0000-4000-8000-000000000000", "prompt": "/handoff c"}
+
+
+class Quiet(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.jobs = Path(self.dir.name)
+        self.real = (evidence.JOBS, evidence.agents, evidence.session_label, evidence.markers)
+        evidence.JOBS, evidence.agents = self.jobs, lambda: []
+        evidence.session_label, evidence.markers = lambda session: "hal2 wt 02", lambda: []
+
+    def tearDown(self):
+        evidence.JOBS, evidence.agents, evidence.session_label, evidence.markers = self.real
+        self.dir.cleanup()
+
+    def test_a_session_that_ended_on_its_own_is_no_problem(self):
+        (self.jobs / "171.json").write_text(json.dumps(JOB_ENDED))
+        (self.jobs / "54.json").write_text(json.dumps(
+            {"state": "failed", "reason": "typing-mismatch", "pane": "%54", "old_session": "s1"}))
+        quiet = []
+        problems = evidence.doctor_items(24, quiet=quiet)
+        self.assertEqual([(p["pane"], p["reason"]) for p in problems], [("%54", "typing-mismatch")])
+        self.assertEqual([(q["who"], q["pane"], q["reason"]) for q in quiet],
+                         [("hal2 wt 02", "%171", "session-ended")])
+        self.assertEqual(len(evidence.doctor_items(24)), 1)  # what the farmer's duty calls: no list to collect
+
+    def test_every_reason_hal2_does_not_report_is_quiet_and_only_when_failed(self):
+        for n, reason in enumerate(sorted(evidence.QUIET)):
+            (self.jobs / f"{n}.json").write_text(json.dumps({**JOB_ENDED, "pane": f"%{n}", "reason": reason}))
+        # A job stuck in `waiting` for over 30 min stays a problem whatever its record's reason says.
+        stuck = self.jobs / "9.json"
+        stuck.write_text(json.dumps({**JOB_ENDED, "pane": "%9", "state": "waiting"}))
+        old = time.time() - 3600
+        os.utime(stuck, (old, old))
+        quiet = []
+        problems = evidence.doctor_items(24, quiet=quiet)
+        self.assertEqual([p["pane"] for p in problems], ["%9"])
+        self.assertEqual(sorted(q["reason"] for q in quiet), sorted(evidence.QUIET))
+
+    def test_the_doctor_prints_them_apart(self):
+        (self.jobs / "171.json").write_text(json.dumps(JOB_ENDED))
+        out, real_print = [], print
+        try:
+            evidence.print = lambda *a, **k: out.append(" ".join(map(str, a)))
+            evidence.doctor(type("A", (), {"hours": 24, "json": False})())
+            evidence.doctor(type("A", (), {"hours": 24, "json": True})())
+        finally:
+            evidence.print = real_print
+        self.assertEqual(out[0], "0 problem(s) in the last 24 h; ended on their own (not reported by hal2): "
+                                 "hal2 wt 02 session-ended")
+        data = json.loads(out[1])
+        self.assertEqual((data["problems"], [q["reason"] for q in data["quiet"]]), ([], ["session-ended"]))
+
+    def test_selfcheck_compares_the_quiet_reasons_with_hal2s_report(self):
+        with tempfile.TemporaryDirectory() as repo:
+            src = Path(repo) / evidence.SRC
+            src.mkdir(parents=True)
+            (src / "report.rs").write_text("FailReason::AgentGone | FailReason::SessionEnded | FailReason::AlreadyRunning")
+            skill = Path(repo) / "SKILL.md"
+            skill.write_text("nothing to check\n")
+            real_skill, real_print, out = evidence.SKILL_MD, print, []
+            try:
+                evidence.SKILL_MD = skill
+                evidence.print = lambda *a, **k: out.append(" ".join(map(str, a)))
+                evidence.selfcheck(type("A", (), {"repo": repo})())
+            finally:
+                evidence.SKILL_MD, evidence.print = real_skill, real_print
+            drift = [line for line in out if "QUIET" in line]
+            self.assertEqual(len(drift), 1)
+            self.assertIn("FailReason::InvalidRequest", drift[0])
 
 
 if __name__ == "__main__":

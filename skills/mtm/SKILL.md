@@ -109,6 +109,12 @@ command at once**; the rerun adopts the parked ticket at its place. Rerun as oft
 give up for taking long, and never kill a waiting reserve. One that does not know `--max-wait` yet (exit 2,
 `unknown argument`) is older: run it without, in the background with the tool's maximum timeout.
 
+**The context threshold does not stop it either** (hal2 plan 0181). Above it hal2's guard stops this session's
+other tools although the checkout waits or lands (the reserve, merge-to-main and `worktree queue|release|stop`
+still pass): write the handoff, naming the reserve or landing under **Next** (the command, the slot, the ticket's
+state), never `TaskStop` or kill it, and end the turn. Its process goes on across the clear and its end wakes the
+continued session, which carries on from that exit code; a rerun of the same `reserve` takes the old ticket's place.
+
 | Exit | JSON | Do |
 |---|---|---|
 | 0 | `status: reserved` | go to 2. `kept: true`: the worktree already held the queue (its `hold` says why: an earlier failed or interrupted landing, or a reservation); that is fine, go on |

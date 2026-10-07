@@ -53,6 +53,11 @@ worktree slots 30-99 that never land: their table adds Needs, Touches and Who, a
 
 **Good steps** fit one session (split a step that doesn't) and have a **Done when** that is a runnable command
 where possible (`cargo test -p x`, `grep -rn "old" src | wc -l` = 0), otherwise one observable behaviour.
+A done-when tests only what the step changed: the crates or packages it touched (`cargo nextest run -p <crate>`), or
+a gate job for the branch's range (`gate/main.sh <job> --branch origin/main` in hal2). It never runs a whole-workspace
+test (`--workspace`, a bare `cargo nextest run`) or a full gate job (a release bundle, an e2e stack) on the Mac: those
+are the landing's CI; a check that needs one before then runs on the CI runner (hal2: `gh workflow run land.yml -f
+ref=<branch> -f jobs=<job>`; hal2 plan 0157).
 
 **A plan lands once, at its end.** `new` writes `Landing: auto` below the title: when the plan's last step is done,
 the plan lands itself with `/mtm` in the same run (the user's start of the plan is the consent to land it; hal2's
@@ -378,16 +383,19 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
    work in the tree stays as it was). Never push without the user's consent.
 5. **Check the context window** before starting the next step:
    ```bash
-   python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] percent, else 35; percent as the statusline shows it
+   python3 $S/context.py            # threshold: hal2's agents.toml [autoclear] step_tokens (a step boundary clears earlier than the guard's ceiling), else its ceiling (tokens/percent), else 35; percent as the statusline shows it
    ```
-   - No step is left that you run now (this was the last step, or only steps checked after the landing remain):
-     skip the check, never hand off or clear here: the plan's end ("Run the plan" point 3: the plan lands itself,
-     or it is done and the user's `/mtm` lands it) and its report must stay on screen. hal2 refuses to clear then too (`no-open-plan`).
-   - `stop` is false: continue with the next step.
-   - `stop` is true (and steps are left that you run now): stop the plan here and hand off:
+   - No step is left that you run now (this was the last step, or only steps checked after the landing remain) and
+     nothing is left to do after it (a `manual` plan that waits for the user's `/mtm`, a plan that has landed): skip
+     the check and never hand off or clear there: its report stays on screen.
+   - `stop` is false: continue with the next step, or with the plan's end ("Run the plan" point 3).
+   - `stop` is true: stop the plan here and hand off. Also before an auto plan's landing (hal2 plan 0181: hal2's
+     guard stops the `/mtm` that would start a landing above the threshold): the handoff's Next is then `/mtm` (the
+     plan's own landing, "Land the plan"), and the continued session lands with a fresh context.
      1. Stop your background work (TaskStop every background shell, subagent, workflow and monitor you started):
         after a clear their notifications would wake the fresh session. Note in the handoff what was stopped and
-        must be rerun.
+        must be rerun. **Never a landing or a waiting reserve** (`hal2-cli-git worktree merge-to-main|reserve`): it
+        goes on across the clear; name it in the handoff (the command, the slot, its ticket's state) instead.
      2. Run `/handoff` (it records decisions, writes `HANDOFF.md` with the plan's next step and commits them).
      3. `autoclear` is true: start the automatic clear-and-continue, then end your turn with one line saying the
         session clears and continues with `/handoff c`; do nothing after it (the clear waits for your turn to end,
@@ -396,8 +404,8 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
         hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
         ```
         `already-running` is fine: hal2's guard already started the job (it stops a session above the threshold at
-        its next tool, research 0010 in hal2): just end your turn. When it fails to start otherwise (`no-open-plan`,
-        ...), say so and fall back to the next point.
+        its next tool, research 0010 in hal2): just end your turn. When it fails to start otherwise (autoclear
+        disabled, ...), say so and fall back to the next point.
      A tool denied with "hal2: context at N% ... run /handoff now" is that guard: stop the step where it is, do
      points 1-2 (only the hand-off's tools run now; name in the handoff what was cut off), then end your turn: the
      job is already waiting, so skip point 3.
