@@ -85,7 +85,7 @@ lands what the lead's branch holds like any landing, with four differences, so t
 - step 5 is skipped: nothing of the plan is finished here; the lead marks the milestone row done afterwards in its
   own branch (`plan.py status <n> done`, one commit, not landed again: the next milestone or the plan's own landing
   carries it), so the worktree may end with commits that are not on the default branch;
-- step 6 keeps `plans/CURRENT_PLAN` (and `HANDOFF.md`): the plan goes on;
+- step 6 keeps `plans/CURRENT_PLAN` (and the root `HANDOFF.md`): the plan goes on;
 - step 7 is skipped: no cleanup, the build cache stays warm for the next merges.
 
 ## 1. Reserve the merge queue
@@ -131,7 +131,7 @@ with the queue reserved and nobody landing (after a landing too: step 5 ends wit
 
 The queue is reserved now: work through this without pausing, every other landing waits.
 
-1. `git status --porcelain` lists what is uncommitted. Nothing, and `plans/CURRENT_PLAN` not tracked? Only push (item 5).
+1. `git status --porcelain` lists what is uncommitted. Nothing, and `plans/CURRENT_PLAN` not tracked? Only push (item 6).
 2. Sort every untracked file (open it when the name is not enough):
    - **junk** (build output, dependency and cache folders, coverage, logs, OS and editor files): add a pattern
      to the repo's `.gitignore` (the nearest one for a subproject); prefer folder or extension patterns over
@@ -145,9 +145,15 @@ The queue is reserved now: work through this without pausing, every other landin
 3. `plans/CURRENT_PLAN` is per-worktree runtime state (what the worktree works on, shown by the statusline) and is
    never committed: when the repo still tracks it or does not ignore it, `git rm --cached` it (if tracked), add
    `plans/CURRENT_PLAN` to the root `.gitignore` and commit that as its own change.
-4. Commit with messages in the repo's style (`git log --oneline -10`) that say why; one commit per independent
+4. **The plan folders are valid**: `python3 <plan-skill-dir>/scripts/plan.py check` (the `plan` skill next to
+   this one) prints one line per problem of a plan folder's records (plan.md, decisions.md, questions.md,
+   handoff.md in the record format; a plan without front matter is legacy and passes) and exits 1. Fix what this
+   worktree's plans show (an open question in a closed ledger is answered or `dropped`, a promoted decision links
+   its record, a status fits its step table) and commit it with the rest; a problem in a plan this worktree did not
+   touch is named in the report, never fixed in passing. A plan's `handoff.md` is work: commit it.
+5. Commit with messages in the repo's style (`git log --oneline -10`) that say why; one commit per independent
    change. Stage explicit paths, never `git add -A`. A failing git hook is fixed, never skipped (`--no-verify`).
-5. Push the branch: `git push` (`git push -u origin HEAD` when it has no upstream; nothing without an `origin`).
+6. Push the branch: `git push` (`git push -u origin HEAD` when it has no upstream; nothing without an `origin`).
 
 ## 3. Merge the default branch in
 
@@ -247,7 +253,9 @@ Then delete the file when the landed work is finished:
   current` shows `done` equal to `total`, the `plan` skill next to this one); a plan with open steps keeps it;
 - missing or empty: nothing to do.
 
-When it was deleted, delete `HANDOFF.md` too (the session state of the finished work), unless git tracks it.
+When it was deleted, delete the root `HANDOFF.md` too (the session state of the finished work), unless git tracks
+it. A plan's own `plans/<plan>/handoff.md` is a committed record of the plan folder and stays: `plan.py status`
+closed it with the plan's last step.
 
 ## 7. Clean up
 

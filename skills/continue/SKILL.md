@@ -17,7 +17,8 @@ The counterpart of the `pause` skill: it resumes every piece of work its record 
 ## 1. Read the record
 
 `$P status` prints the record's path and age, exit 1 when nothing is paused for this checkout: then say so. When
-the user says "continue" without a pause, look for `HANDOFF.md` and offer the `handoff` skill's continue
+the user says "continue" without a pause, look for a handoff (the current plan's `plans/<plan>/handoff.md`, else
+the root `HANDOFF.md`; the handoff skill's `where.py` names it) and offer the `handoff` skill's continue
 instead; otherwise ask what to work on. Read the whole record (every `## Paused again` section too) and
 the files its **Task** links (the plan, the step).
 

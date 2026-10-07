@@ -5,7 +5,7 @@ any order (the user, 2026-10-03). Throughput beats order and retries: a test tha
 and the work lands. Its rule-based part runs as code in the farmer's tick (`boss.py` over `mtm_scan.py`: wake failed
 landings and release held queues, landed priority slots done (hal2 keeps the order), a reservation waiting at the front
 reported to the user, pause heavy work under load and send go after it, waiter-gone,
-orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs judgment wakes the farmer session with
+orphaned work with a handoff (the plan's `handoff.md` or the root `HANDOFF.md`) restarted, flaky tests delegated). What needs judgment wakes the farmer session with
 [instructions/mtm.md](../../instructions/mtm.md), which links the procedures below. Why landings fail:
 [reasons.md](reasons.md).
 
