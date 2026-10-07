@@ -110,11 +110,12 @@ clear). Keep this true: `$E selfcheck`.
    gets a **soft stop**, with or without a plan with steps left and with or without a merge-queue ticket (plan
    0181; `plan_guard.rs`'s open plan only goes to the log): the tool is denied once with "run /handoff now" (the
    command of the session's kind, `code/rust/libs/hal2-agents/src/autoclear/kind.rs`: the plain kind `/handoff`,
-   `HANDOFF.md`, `/handoff c`; the role slot `farmer-<repo>` `/farmer handoff`, `roles/farmer/handoff.md`,
+   `HANDOFF.md` or the current plan's own `plans/<plan>/handoff.md` (hal2 plan 0206: the one written last),
+   `/handoff c`; the role slot `farmer-<repo>` `/farmer handoff`, `roles/farmer/handoff.md`,
    `/farmer act`; agents.toml's `[[autoclear.kinds]]` overrides), the marker
    `<state>/agents/autoclear/<session>.guard` is written (stage `soft`) and the job is started detached with
    `--await-handoff`. After it, **hand-off tools pass** (`handoff_tool`: Read/Grep/Glob, the handoff skill,
-   Write/Edit of `HANDOFF.md`, `INTENT.md`, `plans/`, `.adr/`, TaskStop, Bash whose every segment starts with a
+   Write/Edit of `HANDOFF.md`, `INTENT.md`, `plans/` (a plan's `handoff.md` and its ledgers), `.adr/`, TaskStop, Bash whose every segment starts with a
    `HANDOFF_PROGRAMS` entry — git, cat, ls, grep, sed, cut, tr, hal2-cli-agents, ...; never awk — or runs a `HANDOFF_SCRIPTS`
    script; a kind adds its own skill, its file's folder and its skill's scripts:
    `code/rust/libs/hal2-agents/src/guard/tools.rs`). Anything else is a **hard stop**: denied with `continue:
@@ -137,7 +138,7 @@ clear). Keep this true: `$E selfcheck`.
    it as `blocked`); hal2's own request left in the box (begins `hal2 stopped this turn:` or ends `hal2 then clears
    the session and continues.`), or text the pane's send log says hal2 typed (`submit::logged`: any source, 24 h),
    is no draft: emptied, C-u until empty, one row per press) → `requesting` (with
-   `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` written since the request, or current: written at most
+   `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` or the current plan's `handoff.md` written since the request, or current: written at most
    `CURRENT_WINDOW` (10 min) before it, not before the newest commit of real work, nothing uncommitted outside
    `HANDOFF_PATHS`; the log's `hand-off check:` line says which and why) → types the hand-off request (read back
    by words; a multi-row box showing only the request's last rows, a short pane scrolling it, counts as typed; a

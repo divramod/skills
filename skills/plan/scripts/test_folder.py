@@ -91,6 +91,16 @@ class FolderTest(unittest.TestCase):
         self.assertEqual(envelope.get((plan.parent / "handoff.md").read_text(), "status"), "open")
         self.assertEqual(self.check()[0], 0)
 
+    def test_a_step_between_first_and_last_leaves_the_handoff_untouched(self):
+        """hal2's autoclear counts a handoff.md written since its request as the hand-off."""
+        import os
+        plan = self.new("Tiny")
+        handoff = plan.parent / "handoff.md"
+        os.utime(handoff, (1_000_000_000, 1_000_000_000))
+        self.run_plan("status", "1", "done")
+        self.run_plan("status", "2", "next")
+        self.assertEqual(handoff.stat().st_mtime, 1_000_000_000)
+
     def test_scaffold_writes_a_missing_ledger_and_keeps_the_others(self):
         plan = self.new("Tiny")
         (plan.parent / "decisions.md").write_text((plan.parent / "decisions.md").read_text() + ENTRY)

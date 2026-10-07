@@ -47,21 +47,29 @@ def raw(value: str) -> str:
     return value if plain and value else envelope.quote(value)
 
 
+def write_key(path: Path, key: str, value: str | None) -> None:
+    """Set one front matter line; a file that already says so is not written (hal2's autoclear takes a handoff.md
+    written just now for a hand-off)."""
+    text = path.read_text()
+    new = envelope.set_key(text, key, value)
+    if new != text:
+        path.write_text(new)
+
+
 def set_header(path: Path, key: str, value: str | None) -> None:
-    path.write_text(envelope.set_key(path.read_text(), key.lower(), None if value is None else raw(value)))
+    write_key(path, key.lower(), None if value is None else raw(value))
 
 
 def sync_status(path: Path, finished: bool) -> None:
     """A record plan is `done` exactly when no step is open, and its ledgers and handoff are `closed` with it
     (an `abandoned` plan stays abandoned)."""
-    text = path.read_text()
-    if envelope.get(text, "status") == "abandoned":
+    if envelope.get(path.read_text(), "status") == "abandoned":
         return
-    path.write_text(envelope.set_key(text, "status", "done" if finished else "open"))
+    write_key(path, "status", "done" if finished else "open")
     for name in SIBLINGS:
         other = path.parent / name
         if other.is_file() and is_record(other.read_text()):
-            other.write_text(envelope.set_key(other.read_text(), "status", "closed" if finished else "open"))
+            write_key(other, "status", "closed" if finished else "open")
 
 
 def describe(goal: str, title: str) -> str:
