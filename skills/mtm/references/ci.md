@@ -63,7 +63,9 @@ right away.
 ## Red
 
 `gate_failed` lists the `red` jobs, each with its `url` (the job's log) and `reproduce`, the command that runs the
-same job in this checkout (`code/bash/scripts/gate/main.sh <job>`):
+same job in this checkout for only what this branch changed (`code/bash/scripts/gate/main.sh <job> --branch
+origin/main`; hal2 plan 0157). Never drop the `--branch`: without a range the job tests the whole workspace, which is
+the runner's work, not the Mac's:
 
 1. Read why: `gh run view <run id> --log-failed` (the run is the JSON's `run`), or the job's `url`.
 2. Reproduce locally with `reproduce` when the log does not make the cause plain (it runs the same script as CI;

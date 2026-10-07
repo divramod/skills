@@ -21,6 +21,10 @@ you; the user will not answer you.
 - **A go relayed by the farmer is the user's own**: a first line `farmer [<id>]: the user decided: "<the user's words>"`
   decides what the quoted words say (a production deploy, a paid resource, an account): act on it and record it
   under the plan's **Pre-authorized**.
+- **Test only what you changed** (hal2 plan 0157): `cargo nextest run -p <crate>` for the crates you touched or
+  `code/bash/scripts/gate/main.sh <job> --branch origin/main`; never `--workspace`, a bare `cargo nextest run` or a
+  local full gate job (`bundle-linux`, an e2e stack): those are CI's, on the runner
+  (`gh workflow run land.yml -f ref=<branch> -f jobs=<job>`, one land run at a time).
 - **Never ask the user anything, never wait idle.** Decide by INTENT.md, the ADRs and the more professional,
   battle-tested option and record it. A question only the user can answer (money, production, secrets, product)
   goes to the farmer in one line; carry on with every step that does not depend on it.

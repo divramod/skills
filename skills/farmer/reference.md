@@ -119,7 +119,8 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 3. **Brief.** Write `roles/farmer/briefs/<date>-<slug>.md` in the farmer slot. It holds:
    - what is wrong, with the evidence quoted as data;
    - where the fix belongs;
-   - the done-when check;
+   - the done-when check: it tests only what the fix changes (`cargo nextest run -p <crate>`, `gate/main.sh <job>
+     --branch origin/main`), never a whole-workspace test or a full gate job on the Mac (hal2 plan 0157);
    - the urgency;
    - a pending patch's path, when there is one.
 4. **Slot**, only 30-99 (skills plan 0013: helper sessions only work in the worktrees 30+). Idle sessions first,

@@ -21,6 +21,72 @@ Nothing holds the queue on red and nothing runs on the Mac, so the local cases c
 - **New**, the C cases below. A red job's cause in the runner, its image or the workflow is the ci duty's (one fix
   for every slot, through a servant), never the slot's.
 
+## C8 · A delivery cannot read the new main's job map
+
+- **Signature**: `ship / deliver` red at its first command after a green merge: `hal2-cli-git: .github/hal2-changes.toml:
+  TOML parse error ... unknown field`; nothing is installed on the Mac (binaries older than the merge).
+- **Occurrences**:
+  - 2026-10-06 19:21 · 05's M2 (run 37499420063, main 14749e4b): the landing added `package_keys`; the Mac's
+    hal2-cli-git 0.5.3 did not know it. T1 (35) would have hit it again with M1's `frozen`.
+- **Cause**: deliver asks the *installed* `hal2-cli-git changes` what to install; a landing that adds a key to the
+  map needs the new hal2-cli-git to read the file that tells deliver to install the new hal2-cli-git.
+- **Remedy**: the lander installs hal2-cli-git once from the new main (`cargo install --path
+  code/rust/apps/hal2-cli-git --locked`), then reruns only the red job (GitHub refuses a job rerun while the run is
+  in progress: wait for its other ship jobs). It keeps the queue's successor waiting until the run has ended.
+- **Lasting fix**: landing with T1 (86f3534d, plan 0158): deliver installs this main's hal2-cli-git first and asks
+  it again; the gate's `choose_cli` twin on 05 (100e689c, plan 0152).
+
+## C7 · The runner's job cleanup kills the shared sccache server
+
+- **Signature**: a Rust-compiling job red after seconds with `sccache: error: failed to execute compile ... Failed to
+  read response header / Connection reset by peer (os error 104)` or `server looks like it shut down unexpectedly`,
+  at the second another job on another runner instance ended ("Cleaning up orphan processes / Terminate orphan
+  process: pid (...) (sccache)").
+- **Occurrences**:
+  - 2026-10-06 19:43 · T1 (35), run 37505425769: `linux / protobuf` (hal2-ci-runner) died 20 ms after `bash-lint`
+    (hal2-ci-runner-b) ended. First run on M2's image (third instance; bash-lint now builds hal2-cli-git).
+- **Cause**: the one sccache server is spawned by whichever job compiles first, carries that job's
+  `RUNNER_TRACKING_ID` and is killed by that runner instance's orphan cleanup when the job ends, while other
+  instances compile through it.
+- **Remedy**: no code change in the slot: rerun only the red job(s) when the run has ended (`gh run rerun <id>
+  --failed`). Until the fix lands every wake of the runner has the race again.
+- **Lasting fix**: plan 0152's next landing (05): the server as its own systemd unit before the runner instances,
+  the wrapper unsets `RUNNER_TRACKING_ID` and retries a failed `sccache: error` compile with plain rustc.
+
+## C6 · A candidate is pushed while another land run still ships
+
+- **Signature**: two `land` runs at once on GitHub: one past `merge` with `ship / ...` jobs running or queued, a newer
+  one of another slot started; the older landing released the queue at its merge.
+- **Occurrences**:
+  - 2026-10-06 13:0x · 30's run #69 pushed while 04's run #68 (37444838079, attempt 2) shipped: deliver running,
+    publish queued. The user: the 4th or 5th time today.
+- **Cause**: hal2-git `ci/gh.rs` `runs_in_progress()` lists land runs with `status=in_progress` only; a run whose
+  ship job waits for a runner has status `queued` (also `waiting`, `pending`, `requested`), so `ci/ship.rs`
+  `shipping()` saw no shipping run: the landing released the queue and the next one pushed.
+- **Remedy**: stop the newer landing (`hal2-cli-git worktree stop <slot>`), cancel its run, "land now" once the older
+  run is completed. Check by hand: `gh run list --workflow land.yml --limit 10 --json databaseId,headBranch,status
+  --jq '.[] | select(.status != "completed")'` (empty: go).
+- **Lasting fix**: landed: hal2 plan 0150 (cf97733d, on main with 9fda0676 #23; installed by that run's deliver
+  2026-10-06 15:10, `hal2-cli-git` asks every non-completed status); mtm skill documents the check (skills plan
+  0013, skills/30-1).
+
+## C5 · The Linux runner's CI volume is full
+
+- **Signature**: several Linux jobs of one run red with "No space left on device"; `/mnt/ci` at 100%, the Cargo
+  targets (`target`, `target-b`) tens of GB.
+- **Occurrences**:
+  - 2026-10-06 11:5x · 04's cleanup train, run 37444838079: bundle-linux, rust-test, hub-e2e, web-e2e. The job-start
+    hook's trim was a no-op: `/usr/local/lib/hal2-ci/rust-target-trim/main.py` is missing from the runner's base
+    image (it predates the trim).
+- **Remedy**: run the repo's `code/python/scripts/rust-target-trim` on the runner as `ci` with the hook's settings
+  (20 GB, 70%) while no Linux job runs, then relaunch the landing (04 did, volume 54%).
+- **Lasting fix**: landed: hal2 plan 0150 (9fda0676 #23, 20cddf34 #24, 0127104f #25; 2026-10-06 15:3x): ci-disk on
+  the volume (`/mnt/ci/lib/current`, synced by every push's `changes`), loud job-start hooks, `hal2-ci-disk.timer`,
+  a pre-flight in the heavy jobs, the image key compared with main's (stale → rebuild). Live check: image 440285575
+  (key be59ef88ccbd, built from the Mac: the old installed builder still failed once, user data over 32 KiB),
+  `/mnt/ci` 53%. Shot hal2 ci #2. The image WAS rebuilt at 05:51 (run 37420645579) but by the previously installed
+  image builder, which did not pack the trim yet (one-image lag, fixed by 0150 step 5).
+
 ## C4 · A green candidate is not fast-forwarded
 
 - **Signature**: the `land` run is green but its `merge` job is skipped; the default branch stays; the lander takes
