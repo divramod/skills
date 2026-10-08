@@ -4,11 +4,13 @@
   stop.py list [--repo DIR]                              the repository's running agent sessions
   stop.py stop <NN|%N|t:<id>> [--repo DIR] [--force] [--wait SECONDS]
 
-`stop` ends the agent the way a person would: Ctrl-U, `/exit`, Enter typed into its prompt (hal2-cli-agents send).
-When it is still running after --wait seconds (default 15), its terminal host is killed (`t:<id>`) or its process
-gets SIGTERM, then SIGKILL (a tmux pane: the pane itself stays). It refuses (exit 3, `refused` names why) the
-session it runs in, a busy agent (working, starting, blocked) and a slot whose landing runs or waits in the merge
-queue, unless --force (never for its own session). Exit 4: several sessions in that slot (name the pane). Prints
+`stop` ends the agent by signal, never by typing `/exit` (hal2 plan 0212: a typed `/exit` was not taken, its
+"Exit and stop tasks" dialog and drafts left sessions running, 2026-10-08): `hal2-cli-agents stop <pane>` kills its
+terminal host (`t:<id>`) or sends SIGHUP, SIGTERM, SIGKILL to its tmux pane's process group, and refuses a draft in
+its box, running background tasks or a clear-and-continue job too; an older hal2 without `stop` cannot see a draft:
+refused, with --force its host killed or its process signalled here. It waits --wait seconds (default 15) for the session to be gone. It refuses (exit 3,
+`refused` names why) the session it runs in, a busy agent (working, starting, blocked) and a slot whose landing runs
+or waits in the merge queue, unless --force (never for its own session). Exit 4: several sessions in that slot (name the pane). Prints
 JSON. Exit 2 when a hal2 CLI is missing.
 """
 import json
@@ -109,19 +111,37 @@ def wait_gone(repo: Path, pane: str, seconds: float) -> bool:
 
 
 def hard_stop(agent: dict) -> str:
+    """The stop of an older hal2 without `hal2-cli-agents stop`: the host's kill, else SIGHUP, SIGTERM, SIGKILL."""
     pane, pid = agent["pane_id"], agent.get("pid")
     if pane.startswith("t:"):
         run("hal2-cli-agents", "terminal", "kill", pane[2:])
         return "terminal-kill"
     if not pid:
-        die(f"{pane} did not exit and has no pid to signal")
-    for sig in (signal.SIGTERM, signal.SIGKILL):
+        die(f"{pane} has no pid to signal")
+    for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGKILL):
         try:
             os.kill(int(pid), sig)
         except ProcessLookupError:
             break
         time.sleep(3)
     return "signal"
+
+
+def hal2_stop(agent: dict, force: bool) -> str | None:
+    """`hal2-cli-agents stop`: how it stopped; exit 3 when hal2 refused; None when hal2 has no `stop` yet."""
+    if not shutil.which("hal2-cli-agents"):
+        die("hal2-cli-agents is missing: run scripts/install-prerequisites.sh (needs hal2)", 2)
+    args = ["hal2-cli-agents", "stop", agent["pane_id"], "--json"] + (["--force"] if force else [])
+    r = subprocess.run(args, capture_output=True, text=True)
+    if r.returncode == 2 and "unknown command" in r.stderr:
+        return None
+    if r.returncode == 3:
+        refused = json.loads(r.stdout or "{}").get("refused") or r.stderr.strip()
+        print(json.dumps({"refused": refused, "session": agent}, indent=2, ensure_ascii=False))
+        sys.exit(3)
+    if r.returncode:
+        die(f"hal2-cli-agents stop {agent['pane_id']} failed: {(r.stderr or r.stdout).strip()}")
+    return json.loads(r.stdout)["how"]
 
 
 def cmd_stop(repo: Path, target: str, force: bool, wait: float) -> dict:
@@ -131,13 +151,13 @@ def cmd_stop(repo: Path, target: str, force: bool, wait: float) -> dict:
         print(json.dumps({"refused": why, "session": agent}, indent=2, ensure_ascii=False))
         sys.exit(3)
     pane = agent["pane_id"]
-    run("hal2-cli-agents", "send", pane, "C-u", "--key")
-    time.sleep(0.2)
-    run("hal2-cli-agents", "send", pane, "/exit")
-    time.sleep(0.2)
-    run("hal2-cli-agents", "send", pane, "enter", "--key")
-    how = "exit" if wait_gone(repo, pane, wait) else hard_stop(agent)
-    if how != "exit" and not wait_gone(repo, pane, 5):
+    how = hal2_stop(agent, force)
+    if how is None and not force:
+        print(json.dumps({"refused": "this hal2 has no `hal2-cli-agents stop` to check the box for a draft: install "
+                          "hal2 (plan 0212) or --force", "session": agent}, indent=2, ensure_ascii=False))
+        sys.exit(3)
+    how = how or hard_stop(agent)
+    if not wait_gone(repo, pane, wait):
         die(f"{pane} is still running after {how}")
     return {"stopped": pane, "slot": agent["slot"], "how": how, "plan": agent.get("plan")}
 
