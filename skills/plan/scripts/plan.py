@@ -234,8 +234,16 @@ def steps_table(lines: list[str]) -> tuple[int, dict[str, int]]:
     raise PlanError("no step table with columns '#', 'Step' and 'Status'")
 
 
+def run_default(text: str) -> tuple[str, str]:
+    """The plan's default model and effort: a record's `run` key, a legacy plan's `Run: <model> <effort>` line
+    (`-` for none); empty strings without it."""
+    words = [w.strip("`") for w in header_value(text, "Run").split()] + ["", ""]
+    return tuple("" if w == "-" else w for w in words[:2])
+
+
 def read_steps(text: str) -> list[dict]:
     lines = text.splitlines()
+    run_model, run_effort = run_default(text)
     try:
         header, cols = steps_table(lines)
     except PlanError:
@@ -253,6 +261,8 @@ def read_steps(text: str) -> list[dict]:
             "step": cells[cols["step"]],
             "done_when": cells[cols["done when"]] if "done when" in cols else "",
             "status": cells[cols["status"]],
+            "model": (cells[cols["model"]] if "model" in cols else "") or run_model,
+            "effort": (cells[cols["effort"]] if "effort" in cols else "") or run_effort,
         }
         if parallel.is_parallel(cols):
             parallel.enrich(step, cells, cols)

@@ -6,6 +6,7 @@ title: {quoted_title}
 description: {description}
 status: open
 landing: {landing}
+run: sonnet medium
 created: {date}
 ---
 
@@ -24,12 +25,13 @@ created: {date}
 
 Each step is detailed when it is next; keep one line per step here. The plan lands once, after all its steps
 (`landing: auto`: the plan skill runs `/mtm` then); steps checked only after the landing come last, their done-when
-starting "after the landing: ...".
+starting "after the landing: ...". `Model` and `Effort` are the session's for the step (empty: `run` above);
+the run switches the session before a step whose values differ (the skill's "Model and effort per step").
 
-| # | Step | Done when | Status |
-|---|---|---|---|
-| 1 | <step> | <a check anyone can run> | next |
-| 2 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | |
+| # | Step | Done when | Model | Effort | Status |
+|---|---|---|---|---|---|
+| 1 | <step> | <a check anyone can run> | | | next |
+| 2 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | sonnet | medium | |
 
 ## Pre-authorized
 

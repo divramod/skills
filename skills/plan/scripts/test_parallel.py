@@ -113,7 +113,7 @@ class ParallelTest(unittest.TestCase):
         info = self.plan("new", "more work", "--parallel")
 
         text = (self.root / info["path"]).read_text()
-        self.assertIn("| # | Step | Needs | Touches | Who | Done when | Status |", text)
+        self.assertIn("| # | Step | Needs | Touches | Who | Done when | Model | Effort | Status |", text)
         self.assertTrue(info["parallel"])
         uat = info["steps"][-1]
         self.assertEqual((uat["needs"], uat["touches"], uat["who"]), (["1"], ["docs"], "lead"))

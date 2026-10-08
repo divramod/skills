@@ -88,6 +88,26 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(info["next"]["done_when"], "")
         self.assertEqual(info["grilled"], "")
 
+    def test_each_step_names_its_model_and_effort_or_takes_the_run_default(self):
+        self.write_plan(text="# Plan 0002: x\n\nRun: sonnet medium\n\n## Steps\n\n"
+                             "| # | Step | Done when | Model | Effort | Status |\n|---|---|---|---|---|---|\n"
+                             "| 1 | a | t | opus | high | next |\n| 2 | b | t | | xhigh | |\n")
+        (self.plans / "CURRENT_PLAN").write_text("0002-migrate-daily-tools\n")
+
+        info = self.plan("current")
+
+        self.assertEqual([(s["model"], s["effort"]) for s in info["steps"]], [("opus", "high"), ("sonnet", "xhigh")])
+        self.assertEqual((info["next"]["model"], info["next"]["effort"]), ("opus", "high"))
+        self.write_plan()
+        self.assertEqual(self.plan("current")["next"]["model"], "", "a legacy table runs on the session's own")
+
+    def test_new_writes_the_run_default_and_the_columns(self):
+        info = self.plan("new", "deploy the hub")
+        text = (self.root / info["path"]).read_text()
+
+        self.assertIn("run: sonnet medium", text)
+        self.assertEqual((info["next"]["model"], info["next"]["effort"]), ("sonnet", "medium"))
+
     def test_status_updates_one_cell(self):
         self.write_plan()
         (self.plans / "CURRENT_PLAN").write_text("0002-migrate-daily-tools\n")
