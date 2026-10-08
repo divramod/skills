@@ -46,3 +46,8 @@ When a skill's scripts call external command-line tools (yt-dlp, ffmpeg, uvx, jq
 `python3 scripts/check-plugins.py` enforces 2–4 per folder (a folder counts as using tools when one of its own
 scripts contains `subprocess`, `shutil.which`, `command -v` or `os.system(`). Its tests:
 `python3 -m unittest discover -s scripts`.
+
+No skill script starts an agent session itself or types `/exit` (hal2 plan 0212): a session starts through hal2
+(`hal2-cli-git worktree run`, `hal2-cli-agents spawn`, create-worktree-session's create.py), so it is named and
+reachable by Remote Control, and stops through `hal2-cli-agents stop`. `python3 scripts/check-agent-starts.py`
+checks it; the same `unittest discover -s scripts` runs it over the repository.

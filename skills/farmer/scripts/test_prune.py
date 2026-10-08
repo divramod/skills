@@ -175,23 +175,22 @@ class Act(Slots):
         self.assertEqual(code, 0, text)
         self.assertFalse((self.base / "03/target").exists())
 
-    def test_remove_ends_the_idle_session_then_removes_with_the_remote_branch(self):
+    def test_remove_stops_the_idle_session_by_signal_then_removes_with_the_remote_branch(self):
         agent = {"pane_id": "%7", "checkout": str(self.base / "13"), "state": "idle", "since": 0}
-        calls, sessions = [], [[agent], [agent], []]
-        with mock.patch.object(prune, "live", side_effect=lambda main: ({}, sessions.pop(0) if sessions else [])), \
-                mock.patch.object(prune.deliver, "send", return_value=None) as send, \
-                mock.patch.object(prune.time, "sleep"), \
+        calls = []
+        with mock.patch.object(prune, "live", return_value=({}, [agent])), \
+                mock.patch.object(prune, "stop", return_value=None) as stop, \
                 mock.patch.object(tick, "sh", side_effect=lambda argv, cwd, timeout=900: calls.append((argv, cwd))
                                   or (0, "removed")):
             code, text = prune.act_on(str(self.main), "13", "remove", False)
         self.assertEqual((code, text), (0, "removed"))
-        send.assert_called_once_with("%7", "/exit")
+        stop.assert_called_once_with(str(self.main), "%7")
         self.assertEqual(calls, [(["hal2-cli-git", "worktree", "remove", "13", "--remote"], str(self.main))])
 
     def test_a_draft_in_the_prompt_refuses_the_removal(self):
         agent = {"pane_id": "%7", "checkout": str(self.base / "13"), "state": "idle", "since": 0}
         with mock.patch.object(prune, "live", return_value=({}, [agent])), \
-                mock.patch.object(prune.deliver, "send", return_value="draft"), \
+                mock.patch.object(prune, "stop", return_value="draft: the input box holds \"x\""), \
                 mock.patch.object(tick, "sh") as sh:
             code, text = prune.act_on(str(self.main), "13", "remove", False)
         self.assertEqual(code, 0)

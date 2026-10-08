@@ -8,8 +8,9 @@ running in it and no open question to the user. Main, the role slots (`farmer-<r
 never touched.
 
 - **00-09**: `prune.py clean NN` deletes the build artifacts (the cleanup skill), once per landing (keyed on HEAD).
-- **10-99**, one per round: `prune.py remove NN` types `/exit` into the idle session's empty prompt (a draft refuses
-  it), kills it only when it does not exit (delete-worktree-session's `stop.py`), then runs
+- **10-99**, one per round: `prune.py remove NN` stops the idle session by signal (delete-worktree-session's
+  `stop.py` through `hal2-cli-agents stop`, never a typed `/exit`: hal2 plan 0212; a draft or running background
+  tasks refuse it), then runs
   `hal2-cli-git worktree remove NN --remote` (the local branch, and `origin/NN` once merged). The user allowed
   stopping any idle session there holding no work, also their own (2026-10-06, answer 2a).
 - **Subservants' slots** (`plans/LEAD`, skills plan 0013): never measured against main. A marked slot 30-99 is
