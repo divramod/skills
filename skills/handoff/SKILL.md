@@ -119,7 +119,7 @@ it:
   section.
 - **A decision record** (`.adr/<slug>.md`) for what outlives the plan: a decision is promoted when a session that
   never reads this plan would have to know it to do its own work right (the `adr` skill: a new record with
-  `hal2-cli-adr add`, or a dated `## Amendment` of the record it changes); the ledger entry becomes `promoted` and
+  `hal2-cli-records add`, or a dated `## Amendment` of the record it changes); the ledger entry becomes `promoted` and
   links it with `**Record:**`, and the record's `origin` names the plan. **Never write a row into a generated
   decision log** (an `INTENT.md` whose log stands between `<!-- generated: decision-log -->` markers, as hal2's:
   it is generated from the records, and a row written by hand fails the landing).

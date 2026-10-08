@@ -1,19 +1,19 @@
 ---
 name: adr
-description: Decision records (ADRs) of a repository that keeps them in hal2's record format (`.adr/<slug>.md` with a front matter envelope) — decide whether a decision of the current work is promoted to a record (the decision ladder — question, plan decision, decision record), then write it with `hal2-cli-adr` — a new record (`add`) or a dated amendment of the record it changes, link it both ways with the plan's ledger entry, regenerate the index and INTENT.md's decision log and run the check; also find what binds a file (`for <path>`), search, list and show records. Use when the user says /adr, "write an ADR", "record this decision", "is there an ADR for", "which rules apply to this file", or when a plan decision outlives its plan. `/adr h` shows help.
+description: Decision records (ADRs) of a repository that keeps them in hal2's record format (`.adr/<slug>.md` with a front matter envelope) — decide whether a decision of the current work is promoted to a record (the decision ladder — question, plan decision, decision record), then write it with `hal2-cli-records` — a new record (`add`) or a dated amendment of the record it changes, link it both ways with the plan's ledger entry, regenerate the index and INTENT.md's decision log and run the check; also find what binds a file (`for <path>`), search, list and show records. Use when the user says /adr, "write an ADR", "record this decision", "is there an ADR for", "which rules apply to this file", or when a plan decision outlives its plan. `/adr h` shows help.
 ---
 
 # adr
 
 A decision record is the full form of a lasting decision: `.adr/<slug>.md` with the front matter envelope and the
 sections Context, Decision, Consequences, Confirmation, amendments appended. The format is hal2's decision record
-`.adr/record-formats.md`; **`hal2-cli-adr` does every deterministic part** (the template, the check, the index, the
+`.adr/record-formats.md`; **`hal2-cli-records` does every deterministic part** (the template, the check, the index, the
 generated decision log, the lookups). Your job is the judgment: whether a decision is promoted at all, whether it is
 a new record or an amendment, and the record's words.
 
-`A=hal2-cli-adr` (from the repository; `--repo <dir>` elsewhere). Missing: `cargo install --path apps/hal2-cli-adr`
-from hal2's `code/rust/`; inside a hal2 worktree whose branch is ahead of the installed one,
-`cargo run -q --manifest-path code/rust/Cargo.toml -p hal2-cli-adr -- <args>` runs the worktree's own.
+`A=hal2-cli-records` (from the repository; `--repo <dir>` elsewhere). Missing:
+`cargo install --path apps/hal2-cli-records` from hal2's `code/rust/`; inside a hal2 worktree whose branch is ahead of the installed one,
+`cargo run -q --manifest-path code/rust/Cargo.toml -p hal2-cli-records -- <args>` runs the worktree's own.
 
 | Call | Does |
 |---|---|
@@ -22,7 +22,7 @@ from hal2's `code/rust/`; inside a hal2 worktree whose branch is ahead of the in
 | `/adr search <words>` | `$A search <words>`: records holding every word (title hits first); then `$A show <slug>` for the ones that matter |
 | `/adr list [status]` | `$A list [--status proposed\|accepted\|deprecated\|superseded]` |
 | `/adr show <slug>` | `$A show <slug>` |
-| `/adr check` | `$A check && $A index --check && $A intent --check`: what the landing's gate job `adr-check` runs; fix every line it prints |
+| `/adr check` | `$A check && $A index --check && $A intent --check`: what the landing's gate job `records-check` runs; fix every line it prints |
 | `/adr help`, `/adr h` | print this table and stop |
 
 ## Promote a decision

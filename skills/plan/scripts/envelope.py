@@ -1,5 +1,5 @@
 """The envelope of a record (a plan, its two ledgers, its handoff): restricted YAML front matter, and the body's
-headings and links. The format is hal2's decision record `record-formats`; hal2-adr reads the same subset in Rust.
+headings and links. The format is hal2's decision record `record-formats`; hal2-records reads the same subset in Rust.
 
 The subset is its rule 2: `key: scalar`, `key: "quoted"`, `key: >-` with indented lines,
 `key: [a, b]`, `key: {a: 1}` (one level), `# comments`. Anything else is a FormatError.
