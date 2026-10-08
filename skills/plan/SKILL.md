@@ -23,8 +23,8 @@ create the plan with `--research`: its slug becomes `<NNNN>-research-<topic>`, s
 statusline show it as research (the number stays first, so numbering and `/plan use <n>` keep working; a title that
 already starts with "research" is not prefixed twice). Its deliverable is the research doc
 `research/<NNNN>-<topic>/research.md` (numbered on its own, next free number in `research/`), linked under
-**Context**; decisions it yields go to their one home. Research that gets no plan writes `research-<topic>` into
-`CURRENT_PLAN`. When unsure whether a request is research or implementation, ask.
+**Context**; decisions it yields go to their one home. There is no research without a plan: a single `/research`
+call creates its research plan first (the research skill). When unsure whether a request is research or implementation, ask.
 
 **A research plan never lands itself.** The user's workflow is research → an implementation plan → its landing:
 `new --research` writes `Landing: manual`, so a finished research plan stops at its end (no `/mtm`, not into the
