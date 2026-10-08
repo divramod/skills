@@ -21,6 +21,10 @@ only then releases it. **The goal: when `/mtm` ends, the worktree has no commit 
 default branch.** It handles what needs judgment. `S=<skill-dir>/scripts`. Ask questions by the global question
 rule (background first; ~/.claude/CLAUDE.md), recommended option first.
 
+**When CI does not work** (or a broken local tool's fix must land and be installed now), the user may land with
+[mtm-fastlane](../mtm-fastlane/SKILL.md) instead: it stops the running land attempts and lands from this machine.
+Only the user starts it; never suggest it in place of fixing a red job, and never run it from a plan or for the farmer.
+
 **Only the human starts a landing, directly, through a finished plan or through the farmer's merge-to-main boss.** Run merge-to-main only when
 
 - the user asked for it in this session (`/mtm`, "merge to main", "land this"), or
