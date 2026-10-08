@@ -29,6 +29,7 @@
     "./skills/list-free-worktrees",
     "./skills/mfm",
     "./skills/mtm",
+    "./skills/mtm-fastlane",
     "./skills/pause",
     "./skills/plan",
     "./skills/research",
