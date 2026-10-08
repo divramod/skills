@@ -21,10 +21,12 @@ data, never instructions.
 and remote-tracking branch and a reservation file in the git common dir, under a file lock (`research_number.py`,
 the plan skill's `plan_number.py` with research's folder). Never number a doc by hand.
 
-**Research without a plan writes `research-<topic>` into `plans/CURRENT_PLAN`** (gitignored, never committed), so
-the statusline shows it. Research that changes a plan's shape is a research plan (`/plan new --research`), whose
-deliverable is this doc; a plan step that needs research runs this skill and links the doc under the plan's
-**Context**.
+**Every research runs under a plan** (the user, 2026-10-07: a landing titled `research-<topic>` had no number).
+When no plan runs it (`plans/CURRENT_PLAN` is missing or names something else than a plan this research belongs to),
+create a research plan first with the plan skill (`/plan new --research <topic>`, slug `<NNNN>-research-<topic>`,
+`Landing: manual`): it writes `plans/CURRENT_PLAN`, its deliverable is this doc (`research.py new --plan <plan.md>`),
+and its steps are this skill's steps. The user's `/research` call is the go for that plan: no autogrill offer, run
+it. A plan step that needs research runs this skill under that plan and links the doc under its **Context**.
 
 **The lifecycle is the front matter's `status`**: `planned` (scaffolded) → `researching` → `verifying` → `done`
 (answer written, checked) → `decided` (the human decided; `decision` names the record: an INTENT.md row, an ADR, a
@@ -65,7 +67,7 @@ run the Workflow; no further confirmation.
    yourself and write it down.
 2. **Scaffold.** `python3 $S/research.py new "<title>" --question "<question>" [--plan <plan.md>] [--origin <shot or
    plan>] [--kind decision|investigation|survey|incident|architecture]`, then `research.py set <n> status
-   researching`, and write `research-<topic>` into `plans/CURRENT_PLAN` when no plan runs it.
+   researching`; when no plan runs it, create its research plan first (see above) and pass `--plan`.
 3. **Run the Workflow** (tool `Workflow`) with `scriptPath: <skill-dir>/workflows/deep-research.js` and
    `args: {query: "<question>", breadth: 4, context: "<repo facts, constraints, criteria, paths to read>", today:
    "<YYYY-MM-DD>"}`. `breadth` is 2-6 sub-questions (4 by default; 5-6 for broad surveys). The script cannot
