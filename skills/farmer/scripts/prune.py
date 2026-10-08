@@ -9,8 +9,9 @@
       the free disk and the biggest worktrees (du over every worktree: minutes) into disk.json in the farmer's state
       folder; the tick starts it in the background and reports it the next round (plan 0011)
   prune.py remove <NN> [--repo <dir>] [--dry-run]
-      a slot 10-99: checked again, its idle session ended (`/exit` typed only into an empty prompt, killed only when
-      it does not exit: delete-worktree-session's stop.py), then `hal2-cli-git worktree remove NN --remote`; a
+      a slot 10-99: checked again, its idle session stopped by signal (delete-worktree-session's stop.py through
+      `hal2-cli-agents stop`, never a typed `/exit`; a draft or background tasks leave it running), then
+      `hal2-cli-git worktree remove NN --remote`; a
       subservant's slot 30-99 (marked, below): fetched and checked again, `hal2-cli-git worktree remove NN --force`
       (its branch is not on main by design), then `git push origin --delete NN` once origin/NN is in origin/<lead>
 
@@ -41,7 +42,6 @@ import sys
 import time
 from pathlib import Path
 
-import deliver
 import lead_marker
 import logstate
 import mtm_scan
@@ -303,24 +303,28 @@ def live(main: str) -> tuple[dict, list[dict]]:
     return ctx, list(ctx["agents_by_pane"].values())
 
 
+def stop(main: str, pane: str) -> str | None:
+    """delete-worktree-session's stop.py on `pane`: by signal (hal2-cli-agents stop), never a typed `/exit`, which
+    was not taken (hal2 plan 0212, 2026-10-08); None when it is gone, else why not (a draft, background tasks)."""
+    p = subprocess.run([sys.executable, str(STOP), "stop", pane, "--repo", main, "--wait", str(EXIT_WAIT)],
+                       capture_output=True, text=True)
+    if p.returncode == 0:
+        return None
+    if p.returncode == 3:
+        return json.loads(p.stdout or "{}").get("refused") or "refused"
+    return f"did not stop: {(p.stdout + p.stderr).strip()[-300:]}"
+
+
 def end_sessions(main: str, path: str, slot: str, dry: bool) -> str | None:
-    """End every resting session in the slot: `/exit` into an empty prompt, stop.py when it does not exit."""
+    """End every resting session in the slot by signal; a draft or running background tasks leave it running."""
     for a in sessions(live(main)[1], path):
         pane = a["pane_id"]
         if dry:
-            print(f"would end {pane} in {slot}: /exit")
+            print(f"would stop {pane} in {slot}")
             continue
-        refused = deliver.send(pane, "/exit")
+        refused = stop(main, pane)
         if refused:
-            return f"{pane}: /exit not typed: {refused}"
-        end = time.monotonic() + EXIT_WAIT
-        while time.monotonic() < end and sessions(live(main)[1], path):
-            time.sleep(1)
-        if sessions(live(main)[1], path):
-            p = subprocess.run([sys.executable, str(STOP), "stop", pane, "--repo", main, "--wait", "5"],
-                               capture_output=True, text=True)
-            if p.returncode:
-                return f"{pane} did not exit: {(p.stdout + p.stderr).strip()[-300:]}"
+            return f"{pane}: not stopped: {refused}"
     return None
 
 
