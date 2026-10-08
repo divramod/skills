@@ -76,15 +76,19 @@ origin/main`; hal2 plan 0157). Never drop the `--branch`: without a range the jo
 the runner's work, not the Mac's:
 
 1. Read why: `gh run view <run id> --log-failed` (the run is the JSON's `run`), or the job's `url`.
-2. Reproduce locally with `reproduce` when the log does not make the cause plain (it runs the same script as CI;
-   a macOS-only job needs this Mac's Xcode, a stack job Docker).
+2. Reproduce locally with `reproduce` (it runs the same script as CI; a macOS-only job needs this Mac's Xcode, a
+   stack job Docker).
 3. Fix the cause in this worktree (the code, a test; the gate script or the workflow only when they are wrong, and
-   say so), commit with a real message, push, and run [Land](#land) again. Only the red jobs and what the fix
+   say so) and run `reproduce` again until the job is green locally. **Nothing goes up before that** (the user,
+   2026-10-08: "the failing jobs should be fixed and tested locally, before reuploading them"; hal2's ADR
+   `red-ci-fixed-locally-first`). Then commit with a real message, push, and run [Land](#land) again. Only the red jobs and what the fix
    changed run again: jobs and packages whose content key was green before are skipped (green markers).
 
-A job red for a reason outside the code (the runner offline, a network failure, a full disk) is no code fix: rerun
-the landing once; when it is red the same way again, report it and ask the user (the farmer's ci duty may already
-be on it). Keep going until the PR is merged: every fix is a new candidate, and the queue stays held for this worktree
+A job red for a reason outside the code (the runner offline, a network failure, a full disk, the runner's image) is
+no code fix and cannot be seen green locally: fix the environment (a runner image is built first:
+`code/bash/scripts/ci-runner-linux/main.sh image-build`), then check **that one job alone** on CI (`gh workflow run
+land.yml --ref <branch> -f ref=<sha> -f jobs=<job>`) and land only after it is green. Never rerun a whole landing on
+hope; when the job alone stays red, report it and ask the user (the farmer's ci duty may already be on it). Keep going until the PR is merged: every fix is a new candidate, and the queue stays held for this worktree
 meanwhile, so every other landing waits on you: fix and run again at once.
 
 ## After the landing
