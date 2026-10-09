@@ -45,6 +45,9 @@ works, read-only and advisory:
    binds work outside the plan's steps, or after the plan has landed. Never promoted: the plan's order and who does
    what, a go or a stop, a base, a number or a name reserved for the plan's branches. Not promoted: say so in one
    line and leave it in the ledger.
+   A new term (a word the project uses in one meaning) is no record: it is an entry of the root `GLOSSARY.md`
+   (`**Term**:` and one or two sentences, an optional `_Avoid_:` line; `hal2-cli-records check` holds its shape);
+   a term the user means the same way in every repository goes into `~/.claude/GLOSSARY.md`.
 2. **Is it already decided?** `$A search <its key words>` and `$A for <the files it binds>`. A record that says the
    same: link it from the ledger entry, write nothing. A record whose rule it changes in part: an **amendment**
    (step 4). A record it replaces as a whole: a **new record** that supersedes it (step 3).

@@ -123,6 +123,9 @@ it:
   links it with `**Record:**`, and the record's `origin` names the plan. **Never write a row into a generated
   decision log** (an `INTENT.md` whose log stands between `<!-- generated: decision-log -->` markers, as hal2's:
   it is generated from the records, and a row written by hand fails the landing).
+- **The root `GLOSSARY.md`** for a term the user defined (what a word means in this repository): one entry,
+  `**Term**:`, one or two sentences, an optional `_Avoid_:` line; a term the user means the same way in every
+  repository goes into `~/.claude/GLOSSARY.md`.
 - **The intent doc** only in a repository without decision records: `INTENT.md` at the repo root, or whatever the
   repo uses for purpose and decisions (a decision log, a README section). Add missing entries to its decision log
   with the date; when a decision replaced an earlier one, mark the old entry superseded instead of deleting it. If

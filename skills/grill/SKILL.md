@@ -95,6 +95,9 @@ others instead of repeating it:
 - a decision record (`.adr/`, the `adr` skill) for what outlives this plan: a rule a session that never reads the
   plan must know; the ledger entry becomes `promoted` and links it. Never a row in a generated decision log
   (hal2's `INTENT.md`); a repository without decision records keeps such decisions in its intent doc.
+- a term the user defines or sharpens (what a word means here): an entry of the repository's root `GLOSSARY.md`
+  (`**Term**:`, one or two sentences, an optional `_Avoid_:` line), or of `~/.claude/GLOSSARY.md` when the user
+  means it the same way in every repository.
 
 Mark superseded decisions instead of deleting them. Don't commit; the user or `/handoff` does.
 
