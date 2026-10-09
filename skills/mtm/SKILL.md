@@ -85,7 +85,7 @@ lands what the lead's branch holds like any landing, with four differences, so t
 - step 5 is skipped: nothing of the plan is finished here; the lead marks the milestone row done afterwards in its
   own branch (`plan.py status <n> done`, one commit, not landed again: the next milestone or the plan's own landing
   carries it), so the worktree may end with commits that are not on the default branch;
-- step 6 keeps `plans/CURRENT_PLAN` (and `HANDOFF.md`): the plan goes on;
+- step 6 keeps `plans/CURRENT_PLAN` (and the root `HANDOFF.md`): the plan goes on;
 - step 7 is skipped: no cleanup, the build cache stays warm for the next merges.
 
 ## 1. Reserve the merge queue
@@ -131,7 +131,7 @@ with the queue reserved and nobody landing (after a landing too: step 5 ends wit
 
 The queue is reserved now: work through this without pausing, every other landing waits.
 
-1. `git status --porcelain` lists what is uncommitted. Nothing, and `plans/CURRENT_PLAN` not tracked? Only push (item 5).
+1. `git status --porcelain` lists what is uncommitted. Nothing, and `plans/CURRENT_PLAN` not tracked? Only push (item 6).
 2. Sort every untracked file (open it when the name is not enough):
    - **junk** (build output, dependency and cache folders, coverage, logs, OS and editor files): add a pattern
      to the repo's `.gitignore` (the nearest one for a subproject); prefer folder or extension patterns over
@@ -145,9 +145,16 @@ The queue is reserved now: work through this without pausing, every other landin
 3. `plans/CURRENT_PLAN` is per-worktree runtime state (what the worktree works on, shown by the statusline) and is
    never committed: when the repo still tracks it or does not ignore it, `git rm --cached` it (if tracked), add
    `plans/CURRENT_PLAN` to the root `.gitignore` and commit that as its own change.
-4. Commit with messages in the repo's style (`git log --oneline -10`) that say why; one commit per independent
+4. **The plan folders are valid**: `python3 <plan-skill-dir>/scripts/plan.py check` (the `plan` skill next to
+   this one) prints one line per problem of a plan folder's records (plan.md, decisions.md, questions.md,
+   handoff.md in the record format; a plan without front matter is legacy and passes) and exits 1. It runs hal2's
+   records checker; where `hal2-cli-records` is not installed it prints `records unchecked: ...` and passes. Fix
+   what this worktree's plans show (an open question in a closed ledger is answered or `dropped`, a promoted decision links
+   its record, a status fits its step table) and commit it with the rest; a problem in a plan this worktree did not
+   touch is named in the report, never fixed in passing. A plan's `handoff.md` is work: commit it.
+5. Commit with messages in the repo's style (`git log --oneline -10`) that say why; one commit per independent
    change. Stage explicit paths, never `git add -A`. A failing git hook is fixed, never skipped (`--no-verify`).
-5. Push the branch: `git push` (`git push -u origin HEAD` when it has no upstream; nothing without an `origin`).
+6. Push the branch: `git push` (`git push -u origin HEAD` when it has no upstream; nothing without an `origin`).
 
 ## 3. Merge the default branch in
 
@@ -161,7 +168,10 @@ The default branch cannot move now, so what you merge in here is what the landin
 
 ## 4. Land
 
-1. `hal2-cli-git worktree merge-to-main --keep-reserved --json [<slot>]`. If the command is missing or has no
+1. `hal2-cli-git worktree merge-to-main --keep-reserved --json [<slot>]`; **without `--keep-reserved`** when nothing
+   follows the landing: the plan has no step whose done-when needs it (`after_landing` of `plan.py current` is
+   empty, or there is no plan), and always for the finish landing of [step 5](#5-finish-the-plan-and-land-it). The
+   tool then releases the queue itself the moment the landing ends. If the command is missing or has no
    `--json`, run `bash $S/install-prerequisites.sh` once and retry; one that does not know `--keep-reserved` yet
    (exit 2, `unknown argument`) is older: rerun without it (the queue is then released after the landing, see step
    5). It takes this worktree's reservation over at once (`took over
@@ -170,7 +180,11 @@ The default branch cannot move now, so what you merge in here is what the landin
    hal2-macos shows every repo's queue), then for its deliveries (the queue is already released or reserved then); never kill a waiting landing for taking long.
    While it waits the user may reorder the queue in hal2-macos: a line `moved to #n in the merge queue by <who>`
    is reported, not acted on. Run it like the reserve: in the background with your shell tool's maximum timeout
-   (Claude Code: `timeout` 7200000) and wait for it; its gates may take long, and there is no limit on that. When
+   (Claude Code: `timeout` 7200000) and wait for it; its gates may take long, and there is no limit on that.
+   **Wait for it by its task notification, or by its own PID** (`wait <pid>`, `while kill -0 <pid>`), **never by a
+   pattern** (`pgrep -f`, `pkill -f`, `ps | grep`): every worktree's landing has the same command line, so a pattern
+   matches another slot's landing and the loop's own shell and never ends (2026-10-06: slot 35 waited on slot 32's
+   landing, never reached its release, and the queue stood still behind a dead process). When
    the tool's own limit ends it anyway (its notice says the command hit its timeout, not the user), it ended
    `stopped` before it merged into the default branch (the queue released) or `interrupted` (the queue held for
    this worktree): rerun it at once (reserve first again when the queue was released); that is not the user's stop
@@ -197,7 +211,11 @@ worktree waits for this one. `hal2-cli-git worktree queue` confirms who holds it
 ## 5. Finish the plan and land it
 
 The landing is on the default branch and the queue is still reserved for this worktree: every other landing waits,
-so work through this without pausing. What only the landing let you check (a step whose done-when needs the landed
+so work through this without pausing. The kept reservation is a **lease** (hal2 plan 0169): it ends by itself when
+no landing or reserve of this worktree starts within it (10 minutes; git.toml `[queue] keep_lease_minutes`), and the
+next waiter takes the queue, so a session that never gets here no longer blocks anyone. A landing started within
+the lease takes the hold back at once; after it the worktree queues like any other. Never count on the lease to
+release for you: it is the net, the steps below are the way. What only the landing let you check (a step whose done-when needs the landed
 default branch, its install or deploy: "after the landing ...", a check of the installed binary) is finished now
 and lands before anything else, so no commit is left behind on the worktree branch.
 
@@ -210,10 +228,12 @@ and lands before anything else, so no commit is left behind on the worktree bran
    on after this `/mtm`.
 2. Anything else still uncommitted in the worktree: [step 2](#2-commit-and-push-everything) (commit, push).
 3. `git log --oneline <default>..HEAD` lists what is not landed yet:
-   - commits: push, back to [step 4](#4-land) (`merge-to-main --keep-reserved` takes the reservation over at once;
-     only the plan changed, so the gates end `cached` or `unchanged`), then here again;
-   - nothing, and `git status --porcelain` shows nothing but ignored files: `hal2-cli-git worktree release`, the
-     next worktree goes. Only now is the landing over.
+   - commits: push, back to [step 4](#4-land) **without `--keep-reserved`** (`merge-to-main` takes the
+     reservation over at once; only the plan changed, so the gates end `cached` or `unchanged`): the tool releases
+     the queue when this finish landing ends, landed or `nothing`. Then here again: nothing is left;
+   - nothing, and `git status --porcelain` shows nothing but ignored files: when the last landing's JSON said
+     `reserved: true`, `hal2-cli-git worktree release` at once, the next worktree goes (`reserved: false`: the tool
+     released already). Only now is the landing over.
 4. Without `reserved: true` (an older hal2-cli-git released the queue already): with commits left, reserve again
    ([step 1](#1-reserve-the-merge-queue)) and land them (step 4); the queue may let other worktrees go first.
 
@@ -234,7 +254,9 @@ Then delete the file when the landed work is finished:
   current` shows `done` equal to `total`, the `plan` skill next to this one); a plan with open steps keeps it;
 - missing or empty: nothing to do.
 
-When it was deleted, delete `HANDOFF.md` too (the session state of the finished work), unless git tracks it.
+When it was deleted, delete the root `HANDOFF.md` too (the session state of the finished work), unless git tracks
+it. A plan's own `plans/<plan>/handoff.md` is a committed record of the plan folder and stays: `plan.py status`
+closed it with the plan's last step.
 
 ## 7. Clean up
 

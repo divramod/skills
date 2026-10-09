@@ -1,12 +1,12 @@
 ---
 name: fix-autoclear
-description: Analyze and fix a failure of hal2's autoclear (the context guard, the clear-and-continue job and the sweep that hand off, /clear and continue a plan-running Claude session at the context threshold) — from the worktree it happened in (`/fix-autoclear 02`; screenshots optional, the pane's screen is captured read-only) or a shot hal2 reported in the global `fix-autoclear` shotfile. Collects the evidence (job record and log, guard markers, the session's transcript tail, the sweep's log), matches it against known failure cases, finds the root cause in hal2's code, fixes it with a regression test replaying the incident, installs the fix, gets the stuck session going again and records the case so the skill learns. `/fix-autoclear doctor` looks for autoclear failures nobody reported; `/fix-autoclear selfcheck` checks this skill's insider knowledge against the code. Use when the user says /fix-autoclear, "autoclear did not work / is stuck / did not continue", or shows a pane stopped by `hal2 stopped this turn` / `stopped for the hand-off`. `/fix-autoclear h` shows help.
+description: Analyze and fix a failure of hal2's autoclear (the context guard, the clear-and-continue job and the sweep that hand off, /clear and continue a plan-running Claude session at the context threshold) — from the worktree it happened in (`/fix-autoclear 02`; screenshots optional, the pane's screen is captured read-only) or a shot hal2 reported in the global `skill-fix-autoclear` shotfile. Collects the evidence (job record and log, guard markers, the session's transcript tail, the sweep's log), matches it against known failure cases, finds the root cause in hal2's code, fixes it with a regression test replaying the incident, installs the fix, gets the stuck session going again and records the case so the skill learns. `/fix-autoclear doctor` looks for autoclear failures nobody reported; `/fix-autoclear selfcheck` checks this skill's insider knowledge against the code. Use when the user says /fix-autoclear, "autoclear did not work / is stuck / did not continue", or shows a pane stopped by `hal2 stopped this turn` / `stopped for the hand-off`. `/fix-autoclear h` shows help.
 ---
 
 # fix-autoclear
 
 The user names the agent (`02` or `hal2 wt 02`, a few words on what it did instead; screenshots optional), or hal2
-reported the failure itself as a shot in the global shotfile `fix-autoclear` (`<repo> wt <NN>: <reason>`, with the
+reported the failure itself as a shot in the global shotfile `skill-fix-autoclear` (`<repo> wt <NN>: <reason>`, with the
 command to run). Name agents by repository and worktree (`hal2 wt 02`), never by pane id. You find
 why hal2's autoclear did not hand off, clear and continue, fix it in hal2 and make the case known to this skill.
 `S=<skill-dir>/scripts`, `E="python3 $S/evidence.py"`. Ask questions by the global question
@@ -110,11 +110,12 @@ clear). Keep this true: `$E selfcheck`.
    gets a **soft stop**, with or without a plan with steps left and with or without a merge-queue ticket (plan
    0181; `plan_guard.rs`'s open plan only goes to the log): the tool is denied once with "run /handoff now" (the
    command of the session's kind, `code/rust/libs/hal2-agents/src/autoclear/kind.rs`: the plain kind `/handoff`,
-   `HANDOFF.md`, `/handoff c`; the role slot `farmer-<repo>` `/farmer handoff`, `roles/farmer/handoff.md`,
+   `HANDOFF.md` or the current plan's own `plans/<plan>/handoff.md` (hal2 plan 0206: the one written last),
+   `/handoff c`; the role slot `farmer-<repo>` `/farmer handoff`, `roles/farmer/handoff.md`,
    `/farmer act`; agents.toml's `[[autoclear.kinds]]` overrides), the marker
    `<state>/agents/autoclear/<session>.guard` is written (stage `soft`) and the job is started detached with
    `--await-handoff`. After it, **hand-off tools pass** (`handoff_tool`: Read/Grep/Glob, the handoff skill,
-   Write/Edit of `HANDOFF.md`, `INTENT.md`, `plans/`, `.adr/`, TaskStop, Bash whose every segment starts with a
+   Write/Edit of `HANDOFF.md`, `INTENT.md`, `plans/` (a plan's `handoff.md` and its ledgers), `.adr/`, TaskStop, Bash whose every segment starts with a
    `HANDOFF_PROGRAMS` entry — git, cat, ls, grep, sed, cut, tr, hal2-cli-agents, ...; never awk — or runs a `HANDOFF_SCRIPTS`
    script; a kind adds its own skill, its file's folder and its skill's scripts:
    `code/rust/libs/hal2-agents/src/guard/tools.rs`). Anything else is a **hard stop**: denied with `continue:
@@ -137,7 +138,7 @@ clear). Keep this true: `$E selfcheck`.
    it as `blocked`); hal2's own request left in the box (begins `hal2 stopped this turn:` or ends `hal2 then clears
    the session and continues.`), or text the pane's send log says hal2 typed (`submit::logged`: any source, 24 h),
    is no draft: emptied, C-u until empty, one row per press) → `requesting` (with
-   `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` written since the request, or current: written at most
+   `--await-handoff`: no hand-off (`handoff.rs`: `HANDOFF.md` or the current plan's `handoff.md` written since the request, or current: written at most
    `CURRENT_WINDOW` (10 min) before it, not before the newest commit of real work, nothing uncommitted outside
    `HANDOFF_PATHS`; the log's `hand-off check:` line says which and why) → types the hand-off request (read back
    by words; a multi-row box showing only the request's last rows, a short pane scrolling it, counts as typed; a
@@ -185,8 +186,8 @@ clear). Keep this true: `$E selfcheck`.
    sweep round early: the first retry at once, the next 1 and 5 minutes after the previous failure
    (`RETRY_BACKOFF`; the sweep skips with `backing off after a failure` until then). All but `agent-gone`,
    `session-ended`, `already-running`, `invalid-request` (`evidence.QUIET`) go into the global shotfile
-   `fix-autoclear`, one shot per session (`<repo> wt <NN>: <reason>`, the job's facts, `/fix-autoclear <NN>`); later
-   failures of the session are appended while the shot is open. `sweep.log` gets a `failure ...: reported in fix-autoclear shot <n>` line.
+   `skill-fix-autoclear`, one shot per session (`<repo> wt <NN>: <reason>`, the job's facts, `/fix-autoclear <NN>`); later
+   failures of the session are appended while the shot is open. `sweep.log` gets a `failure ...: reported in skill-fix-autoclear shot <n>` line.
 
 **Names** (job states and fail reasons, as the records write them):
 <!-- names -->

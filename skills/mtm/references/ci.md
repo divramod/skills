@@ -1,7 +1,8 @@
 # Landing through CI
 
 A repository whose default branch (or this worktree's `HEAD`) has `.github/workflows/land.yml` lands through
-GitHub Actions (hal2 plan 0131, `.adr/landings-on-github-actions.md` in hal2). Nothing is tested on this machine:
+GitHub Actions (hal2's plan 0131 and its decision record
+[landings-on-github-actions](https://github.com/divramod/hal2/blob/main/.adr/landings-on-github-actions.md)). Nothing is tested on this machine:
 `hal2-cli-git worktree merge-to-main` takes the worktree's turn in the merge queue, merges the default branch in,
 builds the `--no-ff` candidate, pushes the branch and `land/<slot>`, opens or updates the landing's pull request
 (`land/<slot>` → the default branch) and waits until `land.yml` has tested the candidate: green, its `merge` job
@@ -34,7 +35,15 @@ Then land:
 
 `hal2-cli-git worktree merge-to-main --max-wait 100m --keep-reserved --json [<slot>]`, in the background with the
 shell tool's maximum timeout (Claude Code: `run_in_background`, `timeout` 7200000; a lower limit gets a
-`--max-wait` 20 minutes below it). It needs `gh` logged in to GitHub (`gh auth status`).
+`--max-wait` 20 minutes below it). It needs `gh` logged in to GitHub (`gh auth status`). Wait for it by its task
+notification or its own PID, never by a `pgrep` pattern (SKILL.md step 4 says why).
+
+**`--keep-reserved` only when something follows**: the plan has steps to finish after the landing (`after_landing`
+of `plan.py current`). Without such steps, and for the finish landing of SKILL.md step 5, run the command **without
+it**: the tool releases the queue the moment the landing ends (after its run has shipped). The finish landing
+starts within the kept reservation's lease (10 minutes, git.toml `[queue] keep_lease_minutes`), takes the hold back
+at once and needs no `reserve` or `land-runs.sh` before it; a kept reservation nobody follows up ends with its
+lease and the next waiter lands (hal2 plan 0169).
 
 **`/mtm milestone`** (SKILL.md's [milestone mode](../SKILL.md#milestone-mode)): run the same command **without
 `--keep-reserved`**, and on exit 0 do not go to step 5 (it is skipped): if the JSON still says `reserved: true`, run
@@ -43,8 +52,8 @@ SKILL.md step 6 as milestone mode says.
 
 | Exit | JSON `status` | Do |
 |---|---|---|
-| 0 | `landed` | the default branch is the candidate (`commit`), the PR (`pull_request`) merged; `retests` counts how often the default branch moved under it. `reserved: true`: go to SKILL.md [step 5](../SKILL.md#5-finish-the-plan-and-land-it). Report `warnings` (e.g. the main checkout could not be pulled) |
-| 0 | `nothing` | the branch has nothing the default branch lacks: step 5 |
+| 0 | `landed` | the default branch is the candidate (`commit`), the PR (`pull_request`) merged; `retests` counts how often the default branch moved under it. `reserved: true` (kept, a lease): go to SKILL.md [step 5](../SKILL.md#5-finish-the-plan-and-land-it) at once; `reserved: false`: the queue is released, step 5 only checks that nothing is left. Report `warnings` (e.g. the main checkout could not be pulled) |
+| 0 | `nothing` | the branch has nothing the default branch lacks; the queue is released, with or without `--keep-reserved` (`reserved: false`), and a worktree that held no ticket never entered the queue: step 5 |
 | 6 | `waiting`, `testing`, `shipping` | the slice passed: in the queue (`ahead`), while the candidate is tested (`candidate`, `run`) or while a run ships (`runs`; with `commit`: this landing has landed and waits for its run's `ship / ...` jobs before it releases the queue: strictly one land run at a time). The place and the candidate are kept: **rerun the same command at once**, as often as it takes, without reserve or `land-runs.sh` before it |
 | 4 | `gate_failed` | the candidate is red; the queue stays held for this worktree (`released: false`): [fix it](#red) and run again at once, the rerun adopts the hold at the head of the queue. Never release it yourself while you can fix: it is released when the branch lands. An older hal2-cli-git answers `released: true`: rerun at once all the same (it queues again) |
 | 3 | `conflict` | merging the default branch in conflicts (`files`): resolve as the [mfm](../../mfm/SKILL.md) skill's **Conflicts** says, commit, rerun (the queue stays held for this worktree meanwhile: go straight on) |

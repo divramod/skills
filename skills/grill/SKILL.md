@@ -25,7 +25,7 @@ the session is self-contained, and decisions are written down so a cleared sessi
 1. **Subject.** The argument, or else the current plan (`plans/CURRENT_PLAN` → `plans/<slug>/plan.md`; when it
    names a shot `<shotfile>/<n>[/<title-slug>]` instead, that shot in `shotfiles/<shotfile>.md`), or else ask what to grill.
 2. **Already decided.** Read the subject plus the repo's decision records (`INTENT.md` or equivalent, the plan's
-   **Decisions** section, `.adr/`). Anything answered there is settled: never ask it again; only reopen it when
+   ledger `decisions.md` or its **Decisions** section, `.adr/`). Anything answered there is settled: never ask it again; only reopen it when
    something new contradicts it, and say why.
 3. **Research.** A branch whose answer depends on research nobody has done yet (how others do it, a format to
    choose, options to compare) is not decided blind, neither by the user nor by an autogrill: mark it
@@ -88,10 +88,16 @@ A manual `/grill` after autogrill rounds takes their decisions as the recommende
 After every round, write each decision down in exactly **one home** so it survives `/clear`, and link from the
 others instead of repeating it:
 
-- the plan's **Decisions** section for decisions that only matter to this plan, one line each:
-  `- <decision> (<date>)`; adjust its steps or done-when checks when a decision changes them;
-- the repo's decision log (`INTENT.md` or equivalent) for decisions that outlive this plan;
-- an ADR for a new rule the code must follow.
+- the plan's ledger `decisions.md` for decisions that only matter to this plan, one entry each (the plan skill's
+  "The plan folder holds four records": `## D<n> · <date> · <user | agent> · in-force`, `**D:**`, the user's quoted
+  `**Words:**` or the autogrill's `**Why:**`; a legacy plan without front matter: one line in its **Decisions**
+  section, `- <decision> (<date>)`); adjust its steps or done-when checks when a decision changes them;
+- a decision record (`.adr/`, the `adr` skill) for what outlives this plan: a rule a session that never reads the
+  plan must know; the ledger entry becomes `promoted` and links it. Never a row in a generated decision log
+  (hal2's `INTENT.md`); a repository without decision records keeps such decisions in its intent doc.
+- a term the user defines or sharpens (what a word means here): an entry of the repository's root `GLOSSARY.md`
+  (`**Term**:`, one or two sentences, an optional `_Avoid_:` line), or of `~/.claude/GLOSSARY.md` when the user
+  means it the same way in every repository.
 
 Mark superseded decisions instead of deleting them. Don't commit; the user or `/handoff` does.
 

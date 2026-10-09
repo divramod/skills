@@ -147,6 +147,17 @@ class Work(unittest.TestCase):
         answered = asked + [{"at": at(5), "kind": "answered", "slot": "11"}]
         self.assertEqual(plan(snap([f], [], [w]), answered), [("run", "orphan", "11")])
 
+    def test_an_orphan_with_only_its_plans_own_handoff_gets_a_session(self):
+        # hal2 plan 0206: a plan in the record format keeps its handoff in its folder, committed.
+        folder = self.tmp / "12" / "plans" / "0085-x"
+        folder.mkdir(parents=True)
+        f = {"kind": "work-without-agent", "slot": "12", "why": ""}
+        w = wt("12", state=None, plan="0085-x", path=str(self.tmp / "12"))
+        self.assertEqual(plan(snap([f], [], [w])), [("wake", "orphan", "12")])
+        (folder / "handoff.md").write_text("x")
+        self.assertEqual(plan(snap([f], [], [w])), [("run", "orphan", "12")])
+        self.assertEqual(plan(snap([f], [], [dict(w, plan="shooter/1/x")])), [("wake", "orphan", "12")])
+
     def test_a_marked_orphan_is_restarted_only_with_handoff_c_else_wakes(self):
         # Skills plan 0013: a subservant (plans/LEAD) continues its one step, never lands.
         (self.tmp / "31").mkdir()

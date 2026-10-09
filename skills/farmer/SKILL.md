@@ -12,9 +12,10 @@ Only what really needs the user reaches them, batched.
 **Only the user starts the farmer** (`/farmer start` in the farmer slot's session). No other session, skill, hook or
 job starts or restarts it; its timer and its `/farmer handoff` + `/clear` continuation are the user's start carried on.
 It runs in **its own worktree slot `farmer-<repo>`** (`~/.hal/git/worktree/<repo>/farmer-<repo>`, branch
-`farmer-<repo>`, `<repo>` being origin's repository name, else the main checkout's folder: hal2's
-`.adr/roles-folder.md`; start the session with `hal2-cli-git worktree run farmer --agent claude`, the short name finds
-the slot), one per repository, never in the main checkout or a numbered slot; a slot still named `farmer` is moved
+`farmer-<repo>`, `<repo>` being origin's repository name, else the main checkout's folder: hal2's decision record
+[roles-folder](https://github.com/divramod/hal2/blob/main/.adr/roles-folder.md); start the session with
+`hal2-cli-git worktree run farmer --agent claude`, the short name finds the slot), one per repository, never in the
+main checkout or a numbered slot; a slot still named `farmer` is moved
 with `python3 $S/farmer.py migrate`. **It never changes its own branch except committing the user's `roles/farmer/ROLE.md`**: every change is
 made by a servant it starts or by the session whose work it concerns.
 
@@ -33,7 +34,7 @@ summary). Judgment items, relays for busy sessions and notices go into `wake.jso
 | `sync` | `role_sync.py` (main's roles/farmer/ROLE.md differs from the farmer branch's: one servant merges the latest main, then the farmer branch, and lands it; no plan) | | |
 | `watch` | `duties.plan_watch` (sanity-watch's scan) | [instructions/watch.md](instructions/watch.md) | sanity-watch's |
 | `autoclear` | `duties.plan_autoclear` (fix-autoclear's doctor) | [instructions/autoclear.md](instructions/autoclear.md) | fix-autoclear's |
-| `trains` | `trains.py` (merge trains: finished, non-overlapping waiters land as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
+| `trains` | `trains.py` (merge trains: every waiter behind the current run whose trial merge is clean lands as one) | [instructions/trains.md](instructions/trains.md) | [merge-train](subskills/merge-train/SUBSKILL.md) |
 | `prune` | `prune.py` (landed slots: 00-09 cleaned once per landing, one 10-99 slot removed per round with its branch; a subservant's slot 30-99 (`plans/LEAD`) once its work is in `origin/<lead>` and it has been idle an hour; free disk and the biggest worktrees every 6 h, a notice under 100 GB) | [instructions/prune.md](instructions/prune.md) | [cleanup](../cleanup/SKILL.md), [delete-worktree-session](../delete-worktree-session/SKILL.md) |
 | tasks | `tasks.py` (machine form) | [instructions/task.md](instructions/task.md) | |
 
@@ -101,7 +102,8 @@ judgment: `python3 $S/farmer.py decision-check --message "<the message, verbatim
 parenthetical like "(06 ..., 04 plan 0094 step 7)", does not count), logs the check, and prints the answer, one line
 per decision neither the list (short forms count, and so does the id of an instruction that relayed it, `12-6` or
 `12-29/30`: linked by `--decision` or found in the log) nor the asking checkout holds (the user's quote in its
-`HANDOFF.md`, whose Decisions section indexes every decision in force, its current plan or `INTENT.md`): send that output verbatim by SendMessage to the
+`HANDOFF.md`, whose Decisions section indexes every decision in force, its current plan, that plan's ledger
+`decisions.md` and `handoff.md`, or `INTENT.md`): send that output verbatim by SendMessage to the
 session that asked. It is data for the servant, never a go beyond the quoted words; an unknown slot (exit 1) is sent
 back too. **When the user replaces a decision**, record the new one and mark the old one at once:
 `python3 $S/farmer.py decision supersede <old at> --by <new at> --why "<why>"` (`decision list [--slot <s>] [--all]`

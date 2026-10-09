@@ -30,7 +30,8 @@ name it explicitly when the user wants it gone).
   trailing `# ...` says how it comes back (shown as the rebuild column); the last matching line wins. It is meant
   to name every ignored path of the repo, so an `unknown` row is a new artifact location: add it to the list
   (delete or `!` keep) instead of deleting it by hand. hal2's list is the example: build output and generated
-  files go, fetched dependencies (`node_modules`, VLCKit), `HANDOFF.md` and `.claude/` stay.
+  files go, fetched dependencies (`node_modules`, VLCKit), the root `HANDOFF.md` and `.claude/` stay (a plan's
+  `plans/<plan>/handoff.md` is tracked, so cleanup never sees it).
 - **Without the file**: generic build folders are artifacts (`target/`, `build/`, `.build/`, `dist/`,
   `DerivedData`, `*.xcresult`, `__pycache__/`, `.gradle/`, `.next/`, ...), fetched dependencies are kept
   (`node_modules/`, `.venv/`, `Pods/`), the rest is unknown. Suggest writing a `.hal/cleanup` for the repo.

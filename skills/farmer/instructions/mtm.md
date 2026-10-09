@@ -5,7 +5,7 @@ session is woken hourly, never released; through CI a red candidate keeps the qu
 [mtm's CI page](../../mtm/references/ci.md)), took landed priority slots off `priority.json` (hal2 keeps the
 user's order: `worktree queue order`, the tick never re-ranks), told the user about a reservation waiting at the
 front an hour without progress (`reservation-waits`, never released), paused and resumed heavy work and restarted
-orphans with a HANDOFF.md. You get what needs a look. Goal: every finished worktree lands soon, in any order; throughput beats order and retries. Check each finding is still true
+orphans with a handoff (the plan's `handoff.md` or the root `HANDOFF.md`). You get what needs a look. Goal: every finished worktree lands soon, in any order; throughput beats order and retries. Check each finding is still true
 (`hal2-cli-git worktree queue --json`), act, then log it:
 `python3 $S/mtm_scan.py record <kind> <slot> "<what you did>" --note "<why>"`.
 
@@ -13,10 +13,10 @@ orphans with a HANDOFF.md. You get what needs a look. Goal: every finished workt
 |---|---|
 | `active-long` | Through CI (`ci: true` in the scan): open the finding's `run` (`gh run view <id>`): a job queued long is a runner question (the ci duty wakes it); a job past its timeout is GitHub's to end. Locally: read the landing's live step in hal2-macos's Landings. A dead process: tell its session to stop and rerun the landing (`hal2-cli-git worktree stop`, then `/mtm`). Never stop a landing that has merged into main |
 | `work-not-queued` | Ask the session in one line what it waits for. Finished and waiting only for a non-product reason (UI tests need the Mac): okay it to land now, the tests after the landing. A product decision: notify the user |
-| `long-queue` | With the duty `trains` opted in the tick forms the trains itself: leave it. Else try one by hand: [merge-to-main-boss › Merge trains](../subskills/merge-to-main-boss/SUBSKILL.md#merge-trains) |
+| `long-queue` | With the duty `trains` opted in the tick forms the train itself at every round, one of all waiters whose trial merge is clean: leave it. Else form it by hand: [merge-to-main-boss › Merge trains](../subskills/merge-to-main-boss/SUBSKILL.md#merge-trains) |
 | `paused` | Lift the pause when its reason is fixed (`python3 $S/mtm_scan.py resume`), tell the waiters "go" |
 | `flaky` | Flaky or real? Load-sensitive (the [reasons](../subskills/merge-to-main-boss/reasons.md), budget/timeout wording, passes alone): disable it ([how](../subskills/merge-to-main-boss/SUBSKILL.md#disable-a-flaky-test), through a servant: `python3 $S/farmer.py delegate --brief <file> --title <title>`). A real assertion failure: leave it to the slot |
-| `orphan` | Work without a session and no HANDOFF.md. Plan steps left: `hal2-cli-git worktree run <NN> --agent claude --detach --prompt "/handoff c"`; the plan looks done: `--prompt "/mtm"` (never in a subservant's slot, below); unclear: notify the user |
+| `orphan` | Work without a session and no handoff (neither `plans/<plan>/handoff.md` nor the root `HANDOFF.md`). Plan steps left: `hal2-cli-git worktree run <NN> --agent claude --detach --prompt "/handoff c"`; the plan looks done: `--prompt "/mtm"` (never in a subservant's slot, below); unclear: notify the user |
 
 **Subservants** (skills plan 0013): a slot whose worktree holds `plans/LEAD` (`<lead-slot> <plan> <step>`, the
 scan's `lead`) runs one step of its lead's plan and never lands; the lead merges its branch. Skip it for every

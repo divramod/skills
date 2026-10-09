@@ -359,6 +359,15 @@ class InTheCheckout(unittest.TestCase):
             'finish first"\n')
         self.assertEqual(len(self.gone()), 1)
 
+    def test_the_current_plans_ledger_holds_it(self):
+        # hal2 plan 0206: a plan in the record format keeps its decisions in decisions.md, not in plan.md.
+        (self.slot / "plans" / "CURRENT_PLAN").write_text("0094-x\n")
+        (self.slot / "plans" / "0094-x" / "plan.md").write_text("---\ntype: Plan\n---\n\n# Plan 0094: x\n")
+        (self.slot / "plans" / "0094-x" / "decisions.md").write_text(
+            '## D1 · 2026-10-06 · user · in-force\n\n**D:** Wait for 12.\n**Words:** "stop the 04-train. 12 should '
+            'finish first"\n**Via:** farmer 04-9\n')
+        self.assertEqual(len(self.gone()), 1)
+
     def test_the_plan_the_handoff_links_holds_it(self):
         (self.slot / "HANDOFF.md").write_text("## Plan\n[Plan 0094](plans/0094-x/plan.md): 9/9\n")
         (self.slot / "plans" / "0094-x" / "plan.md").write_text('User: "stop the 04-train. 12 should finish first"')

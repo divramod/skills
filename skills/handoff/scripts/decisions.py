@@ -22,6 +22,15 @@ work holds no user decision) and every line is `- <YYYY-MM-DD> "<the user's word
 INTENT.md | .adr/<file>.md | a relative path>[ · ended <YYYY-MM-DD>: <why>]`, its home file exists and holds the
 quote (when the quote is distinctive). It prints `ok` or one problem per line.
 
+A plan in the record format (where.py: form `record`; hal2 plan 0206) has no Decisions section in its handoff: its
+index is the plan's ledger `decisions.md`. The list is then the ledger's entries that are in force or promoted, the
+plan's Pre-authorized and the handoff's Watch out, and `--check` is the plan-folder check of that plan (the plan
+skill's `plan.py check <folder>`: the four records' form and their links).
+
+A legacy line's home `plan` is the plan's plan.md or its decisions.md. A home that is a generated file (an
+`INTENT.md` whose decision log is generated from the decision records) holds no quote: the line names the decision
+record (`.adr/<slug>.md`) or the plan instead.
+
 Exit 0 printed (or `--check` ok), 1 `--check` found problems, 2 git missing.
 """
 
@@ -33,7 +42,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import where
+
 ITEM_CHARS = 240
+GENERATED_LOG = "<!-- generated: decision-log -->"
 FARMER = re.compile(r"^Farmer:\s*`?([^\s`(]+)`?(?:\s*\(([^)]+)\))?", re.M)
 PLAN_LINK = re.compile(r"\]\(((?:\./)?plans/[^)\s]+/plan\.md)\)")
 QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”')
@@ -97,8 +109,36 @@ def home_file(root: Path, home: str, plan: Path | None) -> Path | None:
     return root / (m.group(1) or m.group(2)) if m else None
 
 
+def check_record(root: Path, at: dict) -> list[str]:
+    """The problems of the plan folder whose ledger is the decisions index: hal2's records checker over it (the plan
+    skill's checker.py, as `plan.py check <folder>`); without the checker one advisory line, no problem."""
+    folder = str(Path(at["plan"]).parent) + "/"
+    try:
+        found = where.checker.check(repo=root)
+    except where.checker.CheckerError as error:
+        return [str(error)]
+    if found is None:
+        print(where.checker.NOT_INSTALLED)
+        problems = []
+    else:
+        problems = [where.checker.line(p) for p in found["problems"] if p["path"].startswith(folder)]
+    if not (root / at["file"]).is_file():
+        problems.append(f"{at['file']}: missing (where.py --stamp writes it)")
+    return problems
+
+
+def holds(quotes: list[str], files: list[Path]) -> bool:
+    """Is a quote in one of the files, or too short to tell in all of them?"""
+    texts = [f.read_text() for f in files if f.is_file()]
+    return not all(found(q, text) is False for q in quotes for text in texts) if texts else False
+
+
 def check(root: Path) -> list[str]:
-    """The problems of HANDOFF.md's Decisions section; empty when it is complete."""
+    """The problems of the decisions index (HANDOFF.md's Decisions section; a record plan: its folder); empty when
+    it is complete."""
+    at = where.locate(root)
+    if at["form"] == "record":
+        return check_record(root, at)
     path = root / "HANDOFF.md"
     if not path.exists():
         return ["no HANDOFF.md"]
@@ -128,7 +168,10 @@ def check(root: Path) -> list[str]:
         f = home_file(root, m.group(1), plan)
         if f is None or not f.exists():
             say(f"its home {m.group(1)!r} is no existing file" + (" (no current plan)" if f is None else ""))
-        elif quotes and all(found(q, f.read_text()) is False for q in quotes):
+        elif GENERATED_LOG in f.read_text() and quotes and not holds(quotes, [f]):
+            say(f"its home {f.relative_to(root)} has a generated decision log, which holds no quote: name the "
+                "decision record (.adr/<slug>.md) or the plan that holds the user's words")
+        elif quotes and not holds(quotes, [f, f.parent / "decisions.md"] if f == plan else [f]):
             say(f"its home {f.relative_to(root)} does not hold the quote (record it there with the user's words)")
     return problems
 
@@ -170,18 +213,40 @@ def short(item: str) -> str:
     return item if len(item) <= ITEM_CHARS else item[:ITEM_CHARS - 1].rstrip() + "…"
 
 
+LEDGER_HEAD = re.compile(r"^(D\d+) · (\d{4}-\d{2}-\d{2}) · (\w+) · (in-force|promoted)$")
+
+
+def ledger(text: str) -> list[str]:
+    """The entries of a decisions ledger that bind the work: in force or promoted, each as one line."""
+    out, envelope = [], where.envelope
+    for head, body in envelope.entries(envelope.split(text)[1]):
+        m = LEDGER_HEAD.match(head.strip())
+        if m:
+            words = envelope.field(body, "Words")
+            out.append(f"{m.group(1)} {m.group(2)} ({m.group(3)}, {m.group(4)}): {envelope.field(body, 'D')}"
+                       + (f" Words: {words}" if words else ""))
+    return out
+
+
 def collect(root: Path, main_name: str, farmer_repo: str | None) -> dict:
-    handoff_path = root / "HANDOFF.md"
+    at = where.locate(root)
+    handoff_path = root / at["file"]
     handoff = handoff_path.read_text() if handoff_path.exists() else ""
-    plan = plan_file(root, handoff)
+    plan = root / at["plan"] if at["plan"] else plan_file(root, handoff)
     plan_text = plan.read_text() if plan else ""
-    index = [d for d in section(handoff, "Decisions") if not re.fullmatch(r"none\.?", d, re.I)]
-    said = [q for d in index for q in quoted(d.split("home:")[0])]
-    indexed = lambda d: any(found(q, d) for q in said)  # noqa: E731
-    have = [("HANDOFF.md Decisions", d) for d in index]
-    have += [("plan Decisions", d) for d in section(plan_text, "Decisions") if not indexed(d)]
-    have += [("plan Pre-authorized", d) for d in section(plan_text, "Pre-authorized") if not indexed(d)]
-    have += [("HANDOFF.md Open", d) for d in section(handoff, "Open")]
+    if at["form"] == "record":
+        entries = root / at["decisions"]
+        have = [("decisions.md", d) for d in (ledger(entries.read_text()) if entries.is_file() else [])]
+        have += [("plan Pre-authorized", d) for d in section(plan_text, "Pre-authorized")]
+        have += [("handoff.md Watch out", d) for d in section(handoff, "Watch out")]
+    else:
+        index = [d for d in section(handoff, "Decisions") if not re.fullmatch(r"none\.?", d, re.I)]
+        said = [q for d in index for q in quoted(d.split("home:")[0])]
+        indexed = lambda d: any(found(q, d) for q in said)  # noqa: E731
+        have = [("HANDOFF.md Decisions", d) for d in index]
+        have += [("plan Decisions", d) for d in section(plan_text, "Decisions") if not indexed(d)]
+        have += [("plan Pre-authorized", d) for d in section(plan_text, "Pre-authorized") if not indexed(d)]
+        have += [("HANDOFF.md Open", d) for d in section(handoff, "Open")]
     m = FARMER.search(handoff)
     farmer, repo = (m.group(1), (m.group(2) or "").strip()) if m else (None, "")
     repo = farmer_repo or repo or main_name

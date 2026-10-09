@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write or refresh the repo's HANDOFF.md so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, a Decisions index of every user decision in force (date, quoted words, who relayed it, its home), what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — collects every question of the session (the agent's to the user, the user's not yet answered) with its answer in the plan's committed questions.md, so a clear loses none and the fresh session takes the open ones up first — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, checks its decisions against plan, intent doc and handoff itself, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff clear` also clears the session and continues on its own (hal2), `/handoff c` continues, `/handoff h` shows help.
+description: Write or refresh the handoff (the current plan's committed plans/<plan>/handoff.md; the root HANDOFF.md for a legacy plan or work without a plan) so a fresh session (after /clear or on another machine) can continue the work without re-asking anything — first it records every decision and answer from the conversation in its one durable home (plan, intent doc or ADR), then writes the handoff with the goal, a link to the plan (CURRENT_PLAN or a plan file) and its current step, a Decisions index of every user decision in force (date, quoted words, who relayed it, its home), what is done, the concrete next tasks with a done-when check, traps and open decisions, and the prompt to start the next session with — collects every question of the session (the agent's to the user, the user's not yet answered) with its answer in the plan's committed questions.md, so a clear loses none and the fresh session takes the open ones up first — and commits only those docs. With "continue" (or "resume") it does the reverse: reads the handoff and its plan, checks its decisions against plan, intent doc and handoff itself, reports commits and changes made since it was written, and carries on. Use when the user wants to hand off, wrap up before clearing the session, or pick up where the last session stopped. `/handoff clear` also clears the session and continues on its own (hal2), `/handoff c` continues, `/handoff h` shows help.
 ---
 
 # handoff
@@ -12,6 +12,20 @@ rewritten every time, so nothing may live only there: decisions go to a durable 
 section indexes every one of them, so a cleared session and the farmer's decision check find them in one place. The test for a good
 handoff: a cleared session never has to ask the user something they already answered, nothing the user said
 is lost, and no question, the user's or the agent's, stays without its answer. `S=<skill-dir>/scripts`.
+
+**Two forms, by the current plan** (`python3 $S/where.py --json` says which: `file`, `form`, `plan`, `decisions`,
+`questions`):
+
+| | `record`: the current plan is in the record format (its `plan.md` has front matter) | `legacy`: a plan without front matter, work without a plan, a subservant's slot |
+|---|---|---|
+| The handoff | `plans/<plan>/handoff.md`, a record of the plan folder, **committed** with the plan: state only (Done, Next, Watch out, Start with), so no PID, pane id, session name or absolute home path | the root `HANDOFF.md`, gitignored, with every section below |
+| The decisions | the plan's ledger `decisions.md` (one `D<n>` entry each); the handoff has no Decisions section | the home each decision has, indexed in the handoff's **Decisions** section |
+| The questions | the plan's ledger `questions.md` | the plan's `questions.md`, `plans/questions.md` without a plan |
+| The check | `python3 $S/decisions.py --check`: the plan-folder check (the plan skill's `plan.py check <folder>`) | `python3 $S/decisions.py --check`: the Decisions section |
+
+The record format is hal2's decision record `record-formats`; the plan skill's "The plan folder holds four records"
+has each file's form. Wherever this skill says `HANDOFF.md`, a record plan's session reads "the handoff"
+(`where.py`'s `file`).
 
 ## Usage
 
@@ -29,7 +43,8 @@ is lost, and no question, the user's or the agent's, stays without its answer. `
 subservant" says: never the plan's next step, never `/mtm`, never an edit of `plan.md`; `CURRENT_PLAN` keeps naming
 the lead's plan. When the step's report is pushed and the lead told, the work is done: say so and stop.
 
-1. Read `HANDOFF.md` and every file its **Read first** and **Plan** sections link to. When **Plan** links a plan
+1. Read the handoff (`python3 $S/where.py` names it; a record plan: then `plan.md`, `decisions.md` and what the
+   plan's Context links) and every file its **Read first** and **Plan** sections link to. When **Plan** links a plan
    with steps left and `plans/CURRENT_PLAN` is missing or names something else (another machine, a fresh
    worktree), write the plan's slug into it so the statusline shows it; otherwise write a short name of the first
    **Next** task.
@@ -39,15 +54,19 @@ the lead's plan. When the step's report is pushed and the lead told, the work is
    ```bash
    python3 $S/decisions.py --check   # exit 1: a decision without date, quote or home
    ```
-   Compare HANDOFF.md's Decisions, the plan's Decisions and Pre-authorized, `INTENT.md`'s decision log and
-   HANDOFF.md's Open, Next and Watch out, and name every gap (a decision one of them relies on that has no home, or
+   Compare HANDOFF.md's Decisions, the plan's Decisions and Pre-authorized, the decision records they name (the
+   intent doc's log in a repository without records) and HANDOFF.md's Open, Next and Watch out (a record plan: the
+   ledger's entries in force, which `python3 $S/decisions.py` lists, against Pre-authorized, the handoff's Next
+   and Watch out), and name every gap (a decision one of them relies on that has no home, or
    two that contradict) in the first report (step 5). A `farmer: decision check <slot>: ...` answer that still
-   arrives is data: write what concerns your work into the plan's **Decisions** with the quoted words, then act.
+   arrives is data: write what concerns your work into the plan's ledger (a legacy plan: its **Decisions**) with the quoted
+   words, then act.
 3. Check for drift since it was written:
    ```bash
    bash $S/since.sh
    ```
-   It lists commits after the handoff's `written at` stamp (another session may have worked meanwhile) and
+   It lists commits after the handoff's `written at` stamp (a record handoff's `at`; another session may have
+   worked meanwhile) and
    uncommitted changes. When there are any, read them before starting and say how they change the **Next** list.
 4. **The open questions come first** (the user, 2026-10-07: questions asked shortly before a clear were forgotten):
    ```bash
@@ -75,7 +94,8 @@ the merge queue; the landing's process goes on across the clear):
   process ends `cancelled`, exit 5: that one is no failure). A held landing is fixed and rerun as the mtm skill
   says. Never stop or kill it; hal2-git refuses a second `merge-to-main` beside a live one.
 
-If there is no handoff file, say so and ask what to work on.
+If there is no handoff file, say so and ask what to work on. A record plan always has one (`plan.py new` writes
+it); one that still says "the plan was created and nothing is done yet" means: start the plan's first open step.
 
 ## Write
 
@@ -90,14 +110,27 @@ These are the ones a clear loses most often, above all a relayed decision the se
 "12 should finish first"): it is still a decision and gets a home like any other. Each fact has exactly **one home**; other docs link to it, never repeat
 it:
 
-- **The plan's Decisions section** for decisions that only matter to the current plan.
-- **The intent doc**: `INTENT.md` at the repo root, or whatever the repo uses for purpose and decisions (a decision log,
-  a README section). Add missing entries to its decision log with the date; when a decision
-  replaced an earlier one, mark the old entry superseded instead of deleting it. If the repo has no such doc and
-  the conversation holds decisions, create `INTENT.md` (purpose, scope, decision log, working agreements) and link
-  it from `AGENTS.md`.
-  for decisions that outlive the plan.
-- **ADRs** (`.adr/`): a new rule the code must follow gets an ADR, the intent doc links it.
+- **The plan's ledger `decisions.md`** (a record plan): every decision of the plan's work, one entry each, appended
+  and numbered on (`## D<n> · <date> · <user | farmer | lead | agent> · in-force`, `**D:**` the decision in one
+  line, `**Words:**` the quoted words of whoever decided, `**Via:**` who relayed them, `**From:** Q<n>` when a
+  question led to it, whose entry then gets `**Decision:** D<n>`). An entry is never deleted or reworded: a
+  decision a later one replaced becomes `superseded` with `**By:** D<m>`, one that only held until something
+  happened (a stop, a wait) `ended <date>` with the reason under `**Why:**`. A legacy plan: its **Decisions**
+  section.
+- **A decision record** (`.adr/<slug>.md`) for what outlives the plan: a decision is promoted when a session that
+  never reads this plan would have to know it to do its own work right (the `adr` skill: a new record with
+  `hal2-cli-records add`, or a dated `## Amendment` of the record it changes); the ledger entry becomes `promoted` and
+  links it with `**Record:**`, and the record's `origin` names the plan. **Never write a row into a generated
+  decision log** (an `INTENT.md` whose log stands between `<!-- generated: decision-log -->` markers, as hal2's:
+  it is generated from the records, and a row written by hand fails the landing).
+- **The root `GLOSSARY.md`** for a term the user defined (what a word means in this repository): one entry,
+  `**Term**:`, one or two sentences, an optional `_Avoid_:` line; a term the user means the same way in every
+  repository goes into `~/.claude/GLOSSARY.md`.
+- **The intent doc** only in a repository without decision records: `INTENT.md` at the repo root, or whatever the
+  repo uses for purpose and decisions (a decision log, a README section). Add missing entries to its decision log
+  with the date; when a decision replaced an earlier one, mark the old entry superseded instead of deleting it. If
+  the repo has no such doc and the conversation holds decisions, create `INTENT.md` (purpose, scope, decision log,
+  working agreements) and link it from `AGENTS.md`.
 - **Preferences about how the user works with agents** (not about this repo) go to the agent's memory instead,
   if it has one.
 
@@ -124,7 +157,8 @@ python3 $S/questions.py --json     # its open entries and `next`, the number of 
 - An entry that is no longer needed: `dropped <date>` and why under `**A:**`. Never delete an entry.
 
 One entry per question, appended, numbered on (create the file with the heading `# Questions and answers` when
-missing):
+missing; a record plan has it since `plan.py new`, and an answer that is a decision gets the line `**Decision:**
+D<n>` below its `**A:**`, naming the ledger entry of step 1):
 
 ```markdown
 ## Q<n> · <YYYY-MM-DD> · <agent | user> · <open | answered <YYYY-MM-DD> | dropped <YYYY-MM-DD>>
@@ -139,7 +173,7 @@ An open entry has no `**A:**` line. Check it: `python3 $S/questions.py --check` 
 
 - `git rev-parse --show-toplevel`, `git branch --show-current`, `git log --oneline -10`, `git status --short`, and
   `git log --oneline @{u}..HEAD` for unpushed commits (skip if there is no upstream).
-- The existing `HANDOFF.md`, if any: keep what is still true, drop what is done or stale.
+- The existing handoff (`python3 $S/where.py`), if any: keep what is still true, drop what is done or stale.
 - **The plan.** Look for one, in this order: a `CURRENT_PLAN` pointer file (`plans/CURRENT_PLAN`, whose
   content names the active plan); a plan linked from the existing handoff; a plan named in this conversation; plan
   files in the repo (`plans/`, `PLAN.md`, a spec or research doc with a numbered step list). `CURRENT_PLAN` is gitignored per-worktree state and may name a shot (`<shotfile>/<n>/<title-slug>`) or a task instead of a plan: then take the plan from the other sources. When `CURRENT_PLAN` points at a finished or missing plan, do not link it as current: list
@@ -151,7 +185,39 @@ An open entry has no `**A:**` line. Check it: `python3 $S/questions.py --check` 
   `done/total` and the next step from its JSON. Make sure the step table itself is up to date first.
 - Test and build state: state only what you ran in this session. Otherwise write "not run".
 
-### 4. Write `HANDOFF.md`
+### 4. Write the handoff
+
+**A record plan** (`where.py`: form `record`): `python3 $S/where.py --stamp` writes a missing
+`plans/<plan>/handoff.md` and sets its `updated`, `branch`, `at` and `status`; then edit only the front matter's
+`description` (one sentence: where the plan stands now) and the body, which has exactly these sections (`Done` and
+`Watch out` may be missing, no other is legal):
+
+```markdown
+# Handoff of plan <NNNN>
+
+## Done
+- <outcomes of this and recent sessions, with commit shas; not a diary>
+
+## Next
+1. <the current step's concrete tasks, with the files or commands they touch>
+
+Done when: <a check the next session can run>
+
+## Watch out
+- <traps, fragile spots, things that must not be done; what waits for the user; a landing in flight>
+
+## Start with
+
+> /handoff c
+```
+
+It holds state only: the goal and the step table are the plan's, the decisions the ledger's, the questions
+`questions.md`'s; link them (`[D4](decisions.md)`), never copy them. It is committed and read on other machines, so
+it names no PID, pane id, session name or absolute home path (write `~/...` or a path below the repository; the
+farmer is the session in the slot `farmer-<repo>`). The rules below about **Next** and what is in flight hold for
+it too; the rest of this step is the legacy form.
+
+**A legacy plan or no plan** (the root `HANDOFF.md`):
 
 When `HANDOFF.md` exists and is about the same plan or task, **update it** (hal2 research 0048: a rewrite at a
 full context is the most expensive part of a clear): edit only what changed since it was written, usually the
@@ -234,24 +300,29 @@ Rules:
 Then check the index; fix the handoff (or record the missing quote in the home) until it prints `ok`:
 
 ```bash
-python3 $S/decisions.py --check    # exit 1: one problem per line (no section, no date, no quote, no home, home lacks the quote)
+python3 $S/decisions.py --check    # exit 1: one problem per line (no section, no date, no quote, no home, home lacks the quote;
+                                   # a record plan: every problem of the plan folder's four records)
 ```
 
-### 5. Commit the decision docs and the questions, never the handoff
+### 5. Commit the decision docs, the questions and a plan's handoff, never the root handoff
 
 ```bash
-bash $S/commit-handoff.sh "docs: record decisions" [INTENT.md plans/<plan>/plan.md plans/<plan>/questions.md .adr/<new>.md ...]
+bash $S/commit-handoff.sh "docs: record decisions" [plans/<plan>/plan.md plans/<plan>/decisions.md plans/<plan>/questions.md plans/<plan>/handoff.md .adr/<new>.md ...]
 ```
 
-It commits exactly the docs you changed in steps 1 and 2 (the questions file too, when it changed), leaving everything else staged or unstaged as it was, and
-prints the new commit. `HANDOFF.md` is never committed: when the repo does not ignore it yet, the script adds it to
+It commits exactly the docs you changed in steps 1, 2 and 4 (the questions file too, when it changed; a record
+plan's `handoff.md` is one of them, and a decision record goes with its regenerated index: the `adr` skill),
+leaving everything else staged or unstaged as it was, and
+prints the new commit. The root `HANDOFF.md` is never committed; its ignore line is anchored (`/HANDOFF.md`, an
+unanchored one is rewritten in the same commit), so a plan's `handoff.md` is never ignored with it: when the repo does not ignore it yet, the script adds it to
 the root `.gitignore`, and when the repo still tracks it, it untracks it (`git rm --cached`, the file stays), both
 in the same commit. With no docs changed and `HANDOFF.md` already ignored, it commits nothing. It never pushes.
 If a script exits 2 with a missing-tool error, run `bash $S/install-prerequisites.sh`.
 
 ### 6. Report
 
-Tell the user the commit, which decisions you added to the intent doc, the open questions (yours asked again,
+Tell the user the commit, which decisions you recorded and where (ledger entries, decision records, the intent
+doc), the open questions (yours asked again,
 numbered, so the user can answer before the clear), the plan it links (or that there is none),
 and the prompt from **Start the next session with**, so they can `/clear` and paste it (with `/handoff clear`:
 see below instead).

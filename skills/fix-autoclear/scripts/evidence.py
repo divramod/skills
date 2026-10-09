@@ -42,7 +42,7 @@ BLOCKED_AFTER = 3 * 60  # hal2's draft_alert (plan 0139), seconds
 # hal2's sweep.rs MAX_ATTEMPTS: its give-up always writes `attempts >= MAX_ATTEMPTS` with `gave_up` (selfcheck compares)
 MAX_ATTEMPTS = 3
 OFF_REARM = 100  # a rearm_percent no context reaches: hal2's cancel_marker writes at most max(percent, threshold) + 5
-# The fail reasons hal2's report.rs keeps out of the fix-autoclear shotfile: the session or its agent ended on its
+# The fail reasons hal2's report.rs keeps out of the skill-fix-autoclear shotfile: the session or its agent ended on its
 # own, or the request never became a job. No autoclear failure (selfcheck compares with report.rs).
 QUIET = {"agent-gone", "session-ended", "already-running", "invalid-request"}
 

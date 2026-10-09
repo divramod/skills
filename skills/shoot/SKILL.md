@@ -42,7 +42,8 @@ lists nothing (it is created only when a shot is written).
 ## Rank (plain `/shoot` only)
 
 With more than 10 shots, pick the 10 most important and list them most important first. Judge from each shot's
-title and body, and look up facts instead of guessing: `plans/CURRENT_PLAN` and `HANDOFF.md` for the current work,
+title and body, and look up facts instead of guessing: `plans/CURRENT_PLAN` and the handoff (the plan's `plans/<plan>/handoff.md`, else the root `HANDOFF.md`) for the
+current work,
 the branch name, `modified` for recently touched shotfiles. Rank higher what:
 
 - fixes something broken or blocks other shots (a foundation others build on);

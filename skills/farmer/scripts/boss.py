@@ -41,6 +41,12 @@ def when(entry: dict) -> dt.datetime:
     return dt.datetime.fromisoformat(entry["at"])
 
 
+def has_handoff(checkout: Path, plan: str) -> bool:
+    """Is there a handoff `/handoff c` can continue from: the current plan's own, or the checkout's root file?"""
+    own = checkout / "plans" / plan / "handoff.md" if plan and "/" not in plan else None
+    return bool(own and own.is_file()) or (checkout / "HANDOFF.md").is_file()
+
+
 class Planner:
     def __init__(self, snap: dict, ctx: dict):
         self.snap, self.ctx, self.now, self.log = snap, ctx, ctx["now"], ctx["log"]
@@ -138,7 +144,8 @@ class Planner:
                  evidence={**f, "lead": lead})
 
     def orphan(self, f: dict) -> None:
-        """Orphaned work with a HANDOFF.md gets a session with /handoff c, else the farmer is woken. A subservant's
+        """Orphaned work with a handoff (the plan's plans/<plan>/handoff.md, hal2 plan 0206, or the root HANDOFF.md)
+        gets a session with /handoff c, else the farmer is woken. A subservant's
         (plans/LEAD) restart is the same /handoff c, which continues its one step; never /mtm. A subservant whose work
         is all in its lead's branch (no `missing`) is done: never restarted. One with a broken marker wakes the
         farmer: its lead is unknown."""
@@ -149,7 +156,7 @@ class Planner:
         if lead and lead.get("bad"):
             self.add("orphan", "wake", slot, REWAKE, key=f"orphan:{slot}", text=f"orphaned work: {f['why']}",
                      evidence=f)
-        elif (w.get("plan") or lead) and (Path(w.get("path", "")) / "HANDOFF.md").exists():
+        elif (w.get("plan") or lead) and has_handoff(Path(w.get("path", "")), w.get("plan") or ""):
             self.add("orphan", "run", slot, ORPHAN, key=f"orphan:{slot}",
                      argv=["hal2-cli-git", "worktree", "run", slot, "--agent", "claude", "--detach", "--prompt",
                            "/handoff c"], text=f"started a session in {slot} with /handoff c")

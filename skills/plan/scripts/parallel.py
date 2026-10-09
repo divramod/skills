@@ -4,7 +4,7 @@
 - Needs: comma-separated step ids and ranges (`3-7`); blank or `-` is none. Ids are integers, never renumbered.
 - Touches: comma-separated resources (`rust:<crate>`, `ts:<package>`, `proto:<package>`, `docs`, `@hub-stack`, ...);
   two steps sharing one never run at once. Each resource has room for one step, `@vm` for two; a `Capacity:` line
-  under the title (`Capacity: @vm=2, @x=3`) overrides. A row whose Step starts with `Milestone <n>` touches `@land`.
+  under the title (`Capacity: @vm=2, @x=3`; a plan in the record format: above its step table) overrides. A row whose Step starts with `Milestone <n>` touches `@land`.
   Resources compare without backticks, whitespace and case.
 - Who: `lead`, `subagent`, `user` or `slot NN` (a subservant in worktree slot 30-99).
 - Status: `done...`, `running`, `blocked <why>`, anything else (blank, `next`) is open. A running step, and a blocked
@@ -74,10 +74,12 @@ def kind(status: str) -> str:
 
 
 def capacity(text: str) -> dict[str, int]:
-    """Room per resource: 1, `@vm` 2, and what a `Capacity: @x=3, ...` line above the first section says."""
+    """Room per resource: 1, `@vm` 2, and what a `Capacity: @x=3, ...` line says: above the first section, or (a
+    plan in the record format, whose front matter has no such key) in `## Steps` above the step table."""
     room = dict(DEFAULT_CAPACITY)
+    record = text.startswith("---\n")
     for line in text.splitlines():
-        if line.startswith("## "):
+        if line.lstrip().startswith("|") if record else line.startswith("## "):
             break
         if line.startswith("Capacity:"):
             for part in line.split(":", 1)[1].split(","):

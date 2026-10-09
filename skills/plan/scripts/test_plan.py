@@ -88,6 +88,26 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(info["next"]["done_when"], "")
         self.assertEqual(info["grilled"], "")
 
+    def test_each_step_names_its_model_and_effort_or_takes_the_run_default(self):
+        self.write_plan(text="# Plan 0002: x\n\nRun: sonnet medium\n\n## Steps\n\n"
+                             "| # | Step | Done when | Model | Effort | Status |\n|---|---|---|---|---|---|\n"
+                             "| 1 | a | t | opus | high | next |\n| 2 | b | t | | xhigh | |\n")
+        (self.plans / "CURRENT_PLAN").write_text("0002-migrate-daily-tools\n")
+
+        info = self.plan("current")
+
+        self.assertEqual([(s["model"], s["effort"]) for s in info["steps"]], [("opus", "high"), ("sonnet", "xhigh")])
+        self.assertEqual((info["next"]["model"], info["next"]["effort"]), ("opus", "high"))
+        self.write_plan()
+        self.assertEqual(self.plan("current")["next"]["model"], "", "a legacy table runs on the session's own")
+
+    def test_new_writes_the_run_default_and_the_columns(self):
+        info = self.plan("new", "deploy the hub")
+        text = (self.root / info["path"]).read_text()
+
+        self.assertIn("run: sonnet medium", text)
+        self.assertEqual((info["next"]["model"], info["next"]["effort"]), ("sonnet", "medium"))
+
     def test_status_updates_one_cell(self):
         self.write_plan()
         (self.plans / "CURRENT_PLAN").write_text("0002-migrate-daily-tools\n")
@@ -98,6 +118,25 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(info["done"], 2)
         self.assertEqual(info["next"]["step"], "shooter")
         self.assertIn("| 2 | move nvim | done (`916a934`) |", (self.plans / "0002-migrate-daily-tools" / "plan.md").read_text())
+
+    def test_status_next_writes_the_step_file_once(self):
+        self.write_plan(text=EXISTING.replace("| 3 | shooter | |", "| 3 | shooter `x` | |"))
+        (self.plans / "CURRENT_PLAN").write_text("0002-migrate-daily-tools\n")
+        step = self.plans / "0002-migrate-daily-tools" / "steps" / "3.md"
+
+        info = self.plan("status", "3", "next")
+
+        self.assertEqual(info["step_file"], "plans/0002-migrate-daily-tools/steps/3.md")
+        text = step.read_text()
+        self.assertTrue(text.startswith("# Step 3: shooter `x`\n"))
+        self.assertIn("\n## Task\n", text)
+        self.assertIn("plans-short-and-concise", text)
+        step.write_text("# Step 3: mine\n\n## Task\n\nkept\n")
+        info = self.plan("status", "3", "next")
+        self.assertNotIn("step_file", info)
+        self.assertIn("kept", step.read_text())
+        self.plan("status", "2", "done")
+        self.assertFalse((step.parent / "2.md").exists())
 
     def test_use_accepts_number_and_grilled_stamps_date(self):
         self.write_plan()
@@ -114,12 +153,21 @@ class PlanTest(unittest.TestCase):
         path = self.root / info["path"]
         self.assertEqual(info["finished"], "")
         self.plan("status", "1", "done")
-        self.assertNotIn("Finished:", path.read_text())
+        self.assertNotIn("finished:", path.read_text())
         self.plan("status", "2", "done")
         text = path.read_text()
-        self.assertRegex(text, r"\nFinished: \d{4}-\d{2}-\d{2}\n")
+        self.assertRegex(text, r"\nstatus: done\n(.*\n)*finished: \d{4}-\d{2}-\d{2}\n---\n")
         self.assertTrue(self.plan("current")["finished"])
         self.plan("status", "2", "next")
+        self.assertNotIn("finished:", path.read_text())
+        self.assertIn("\nstatus: open\n", path.read_text())
+
+    def test_a_legacy_plan_keeps_its_finished_line(self):
+        path = self.write_plan(text=EXISTING.replace("next |", "done |"))
+        self.plan("use", "2")
+        self.plan("status", "3", "done")
+        self.assertRegex(path.read_text(), r"\nFinished: \d{4}-\d{2}-\d{2}\n")
+        self.plan("status", "3", "next")
         self.assertNotIn("Finished:", path.read_text())
 
     def test_new_plan_ends_with_the_uat_step_but_a_research_plan_does_not(self):
@@ -128,12 +176,14 @@ class PlanTest(unittest.TestCase):
         research = self.plan("new", "Compare tabs", "--research")
         self.assertFalse(any("UAT" in s["step"] for s in research["steps"]))
 
-    def test_new_plan_has_a_pre_authorized_section_before_its_decisions(self):
-        """Hal2 plan 0137: user-only questions are answered before implementation and recorded there."""
+    def test_new_plan_has_a_pre_authorized_section_and_its_decisions_in_the_ledger(self):
+        """Hal2 plan 0137: user-only questions are answered before implementation and recorded; hal2 plan 0206: a
+        plan's decisions are the entries of decisions.md, no section of plan.md."""
         info = self.plan("new", "deploy the hub")
         text = (self.root / info["path"]).read_text()
         self.assertIn("## Pre-authorized", text)
-        self.assertLess(text.index("## Pre-authorized"), text.index("## Decisions"))
+        self.assertNotIn("## Decisions", text)
+        self.assertEqual(info["decisions"], "plans/0001-deploy-the-hub/decisions.md")
         self.assertEqual(len(info["steps"]), 2)
 
     def test_uat_scaffolds_once_with_the_feature_shotfile(self):
@@ -142,8 +192,12 @@ class PlanTest(unittest.TestCase):
         info = self.plan("uat")
         uat = self.root / info["uat"]
         text = uat.read_text()
-        self.assertTrue(text.startswith(f"# UAT {info['slug'][:4]}: plugin-plan 3 tabs\n"))
-        self.assertIn("\nShotfile: plugin-plan\n", text)
+        self.assertTrue(text.startswith("---\ntype: UAT\nschema: 1\ntitle: \"plugin-plan 3 tabs\"\n"), text)
+        self.assertIn("\nstatus: active\n", text)
+        self.assertIn(f"\nplan: {int(info['slug'][:4])}\n", text)
+        self.assertIn(f"\n# UAT {info['slug'][:4]}: plugin-plan 3 tabs\n", text)
+        self.assertIn("\nshotfile: plugin-plan\n", text)
+        self.assertNotIn("Shotfile:", text, "the typed form: the envelope holds the header")
         self.assertEqual(info["uat_checks"], ["U1"])
         uat.write_text(text + "\n## U2 Second\nSteps:\n1. x\n\nExpected: y\n")
         self.assertEqual(self.plan("uat", "--shotfile", "other")["uat_checks"], ["U1", "U2"])  # never overwritten
@@ -181,7 +235,7 @@ class PlanTest(unittest.TestCase):
     def test_new_plan_lands_automatically_unless_manual(self):
         info = self.plan("new", "Auto")
         self.assertEqual(info["landing"], "auto")
-        self.assertIn("\nLanding: auto\n", (self.root / info["path"]).read_text())
+        self.assertIn("\nlanding: auto\n", (self.root / info["path"]).read_text())
         self.assertEqual(info["land"], "wait")
 
         info = self.plan("new", "Manual", "--manual-landing")
@@ -191,7 +245,7 @@ class PlanTest(unittest.TestCase):
     def test_new_research_plan_never_lands_itself(self):
         info = self.plan("new", "Compare queues", "--research")
         self.assertEqual(info["landing"], "manual")
-        self.assertIn("\nLanding: manual\n", (self.root / info["path"]).read_text())
+        self.assertIn("\nlanding: manual\n", (self.root / info["path"]).read_text())
         self.assertEqual(info["land"], "manual")
 
     def test_new_autogenerated_plan_names_its_maker(self):
@@ -199,8 +253,8 @@ class PlanTest(unittest.TestCase):
         info = self.plan("new", "Watcher fix", "--autogenerated", "sanity-watch")
         self.assertTrue(info["autogenerated"].startswith("sanity-watch, 20"), info["autogenerated"])
         text = (self.root / info["path"]).read_text()
-        self.assertIn("\nAutogenerated: sanity-watch, ", text)
-        self.assertIn("\nLanding: auto\n", text)
+        self.assertIn("\nautogenerated: sanity-watch, ", text)
+        self.assertIn("\nlanding: auto\n", text)
 
     def test_plan_without_landing_line_is_manual_and_landing_sets_it(self):
         self.write_plan()

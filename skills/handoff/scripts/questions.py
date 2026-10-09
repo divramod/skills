@@ -14,6 +14,8 @@ what the user asked (or told) the agent that was not yet answered in words:
 
   **Q:** <the question; the user's own words quoted>
   **A:** <the answer; the user's own words quoted when the user gave it>
+  **Decision:** D<n>      (a plan in the record format, when the answer is a decision: the entry of decisions.md,
+                           which names this question with `**From:** Q<n>`)
 
 An open entry has no `**A:**` line (or an empty one). `--check` prints `ok` or one problem per line: a heading that
 does not match, a number used twice, no `**Q:**`, an answered entry without an answer, an open one with one.
@@ -53,7 +55,7 @@ def questions_file(root: Path) -> Path:
 
 def field(body: str, name: str) -> str:
     """The text of a `**<name>:**` line and the lines that continue it."""
-    m = re.search(rf"^\*\*{name}:\*\*[ \t]*(.*?)(?=^\*\*[QA]:\*\*|\Z)", body, re.M | re.S)
+    m = re.search(rf"^\*\*{name}:\*\*[ \t]*(.*?)(?=^\*\*[A-Za-z]+:\*\*|\Z)", body, re.M | re.S)
     return " ".join(m.group(1).split()) if m else ""
 
 

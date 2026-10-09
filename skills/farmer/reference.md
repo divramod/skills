@@ -6,7 +6,7 @@ delegation by hand, and the decisions behind it all.
 ## roles/farmer/ROLE.md
 
 Each repository's own farmer settings and tasks live in `roles/farmer/ROLE.md` ([template](templates/ROLE.md)), the
-role folder hal2's `.adr/roles-folder.md` gives every role. It is **maintained in the farmer branch**
+role folder hal2's [roles-folder](https://github.com/divramod/hal2/blob/main/.adr/roles-folder.md) gives every role. It is **maintained in the farmer branch**
 (`farmer-<repo>`): the user edits it in the farmer slot
 (`~/.hal/git/worktree/<repo>/farmer-<repo>/roles/farmer/ROLE.md`), and the tick reads it from there at the start of
 every round. A change counts from the next round, without waiting for a landing.
@@ -151,7 +151,7 @@ script, a recurring failure class, a rule patch in `pending/`), it delegates:
 
 ## Decisions
 
-From the grill with the user on 2026-10-03. They are recorded for the repositories in hal2's INTENT.md:
+From the grill with the user on 2026-10-03. They are recorded for the repositories in hal2's [INTENT.md](https://github.com/divramod/hal2/blob/main/INTENT.md):
 
 - The goal: get things running and keep them running, autonomously wherever possible. The farmer is the user's
   helper, started only by the user.

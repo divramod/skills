@@ -23,6 +23,13 @@ Whatever can be done deterministically is done deterministically, by a skill's s
 only the judgment steps, and loops tick as code that wakes the model only for judgment work:
 [.adr/deterministic-first.md](.adr/deterministic-first.md).
 
+## Skill shape
+
+Every `SKILL.md` has front matter `name` (its folder's name) and `description`, one `# ` heading, and a table of
+calls (rows starting with `` `/<name>` ``) before the first numbered section, with a `/<name> h` row; a
+`SUBSKILL.md` has one `# ` heading. hal2's `hal2-cli-records check` holds it (the Skill kind, opted into by
+`.hal/records.toml`, which also excludes the generated shortcut skills `c` and `h`).
+
 ## Skill script rules
 
 Skills keep deterministic work (fetching, parsing, file layout, downloads, formatting) in `skills/<name>/scripts/`,

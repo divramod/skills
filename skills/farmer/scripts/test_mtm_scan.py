@@ -68,6 +68,19 @@ class Findings(unittest.TestCase):
         q[0]["process_alive"] = False
         self.assertIn("reserved-idle", [f["kind"] for f in scan.findings(snap(queue=q, worktrees=w))])
 
+    def test_a_reserved_holder_that_works_is_no_idle_reservation(self):
+        # hal2 plan 0169, 2026-10-06 21:37: 05 held the queue reserved between two dispatched land.yml runs of its
+        # measurement; reserved-idle told it to land. Its turn had just ended, a shell waited, a run was unfinished.
+        q = [{"slot": "05", "state": "held", "enqueued": "2026-10-03T02:33:17Z", "process_alive": False,
+              "hold": {"reason": "reserved"}}]
+        kinds = lambda w, **kw: [f["kind"] for f in scan.findings(snap(queue=q, worktrees=[w], **kw))]  # noqa: E731
+        idle = {"slot": "05", "ahead": 2, "agent_state": "done", "agent_idle_seconds": 9000}
+        self.assertIn("reserved-idle", kinds(idle))
+        self.assertNotIn("reserved-idle", kinds(dict(idle, agent_idle_seconds=120)), "its turn just ended")
+        self.assertNotIn("reserved-idle", kinds(dict(idle, agent_tasks=1)), "a background shell runs")
+        self.assertNotIn("reserved-idle", kinds(idle, runs_unfinished=1), "a land.yml run is unfinished")
+        self.assertNotIn("reserved-idle", kinds(dict(idle, agent_state="working", agent_idle_seconds=0)))
+
     def test_a_held_landing_whose_agent_works_is_left_alone(self):
         q = [{"slot": "12", "state": "held", "process_alive": False, "hold": {"reason": "failed"}}]
         w = [{"slot": "12", "ahead": 2, "agent_state": "working"}]

@@ -5,7 +5,7 @@ any order (the user, 2026-10-03). Throughput beats order and retries: a test tha
 and the work lands. Its rule-based part runs as code in the farmer's tick (`boss.py` over `mtm_scan.py`: wake failed
 landings and release held queues, landed priority slots done (hal2 keeps the order), a reservation waiting at the front
 reported to the user, pause heavy work under load and send go after it, waiter-gone,
-orphaned work with a HANDOFF.md restarted, flaky tests delegated). What needs judgment wakes the farmer session with
+orphaned work with a handoff (the plan's `handoff.md` or the root `HANDOFF.md`) restarted, flaky tests delegated). What needs judgment wakes the farmer session with
 [instructions/mtm.md](../../instructions/mtm.md), which links the procedures below. Why landings fail:
 [reasons.md](reasons.md).
 
@@ -50,19 +50,23 @@ all slots trip on) gets a servant: [Delegate a fix](../../reference.md#delegate-
 
 ## Merge trains
 
-Several finished branches land as one. One landing runs the gates once instead of once per branch. The duty
-`trains` does this as code ([merge-train](../merge-train/SUBSKILL.md)); by hand it goes like this:
+Everything waiting behind the current run lands as one: the gates run once instead of once per branch. Forming the
+train at every round is the farmer's duty (the user, 2026-10-06: "its a duty of the farmer to always create the merge
+train for all the queued worktrees behind the current run"). The duty `trains` does this as code
+([merge-train](../merge-train/SUBSKILL.md)); by hand it goes like this:
 
-1. Candidates are waiting or finished slots whose plans are done and whose diffs do not overlap much
-   (`git diff --stat origin/<default>...<branch>`). Gates that would rebuild broadly anyway, like a workspace-wide
-   Cargo change, combine well with small changes.
-2. The **carrier** is the slot nearest the queue head. Tell it: `git fetch && git merge --no-ff <other branch>`.
-   It resolves conflicts, runs its quick checks and lands as usual.
+1. Candidates are all waiting slots with commits, in queue order, whose trial merge is clean or conflicts only in
+   append-only docs and generated files (`python3 $S/trains.py plan --repo <main>` runs it; by hand `git merge-tree
+   --write-tree --name-only <carrier> <branch>`). A subservant's slot (`plans/LEAD`) never rides.
+2. The **carrier** is the queue's holder while its candidate is not pushed (a plain reservation, a priority slot
+   included), else the first waiter; never a landing that runs. Tell it: `git fetch && git merge --no-ff <other
+   branch>`, one at a time in queue order. It runs its quick checks and lands as usual.
 3. Tell each **passenger**: "your branch rides in <carrier>'s landing; wait. After it lands run /mfm; your
    `/mtm` then lands what is left (plan steps checked after the landing), probably nothing". Its ticket stays,
    because its follow-up landing is quick.
-4. At most 4 branches per train. A train whose landing fails on a passenger's change splits again: the carrier
-   resets its merge with `git reset --hard ORIG_HEAD`, but only before it lands.
+4. No maximum. A waiter that conflicts elsewhere is left out, named, and lands alone. A train whose landing fails
+   on a passenger's change splits again: the carrier resets its merge with `git reset --hard ORIG_HEAD`, but only
+   before it lands.
 
 ## Review and okays
 

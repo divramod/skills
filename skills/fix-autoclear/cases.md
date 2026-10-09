@@ -129,7 +129,8 @@ Newest first. One case per root cause; a recurrence adds a line under its case. 
   `claude-working-api-retry.txt`.
 - **Recovered**: by hand, after the fix was installed.
 - **Would have caught it sooner**: a report without a screenshot (now: hal2 reports failures as shots in the global
-  `fix-autoclear` shotfile, plan 0077) and an immediate retry (now: the first retry at the next 10 s check).
+  `skill-fix-autoclear` shotfile, plan 0077; `fix-autoclear` before plan 0214) and an immediate retry (now: the
+  first retry at the next 10 s check).
 - **Benign look-alike**: `* Waiting for API response · will retry` alone is Claude still working (the API retries);
   the job waits, it is no failure.
 

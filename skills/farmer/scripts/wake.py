@@ -12,7 +12,7 @@ session is woken by typing `/farmer act` into its empty prompt (deliver.py) once
 adds no turn, a refused wake (the session busy, a draft) is retried by the next tick, and a wake the
 session has not acted on within an hour is repeated.
 
-A session whose context reached `CLEAR_AT` percent is woken with `/farmer handoff` instead (plan 0132 in hal2): it
+A session whose context reached `CLEAR_AT` percent is woken with `/farmer handoff` instead (hal2's plan 0132): it
 writes its handoff.md and starts hal2's clear-and-continue, which types `/clear` and then `/farmer act` itself.
 wake.json's `handoff` ({"at", "session"}) holds every other wake back meanwhile; the farmer pane's new session id
 ends it (that counts as the wake), and one not done within `HANDOFF_TIMEOUT` falls back to a plain `/clear` and

@@ -33,15 +33,19 @@ in the same worktree (that plan's `Landing: auto` lands both), or when the user 
 plan to `auto`; only an implementation plan lands itself.
 
 **Every implementation plan ends with its UATs.** Its last step before the landing (the template's "Write the
-UATs") writes `plans/<NNNN>-<slug>/uat.md` (`plan.py uat` scaffolds it from `templates/uat.md`): the user acceptance
-checks the user runs by hand on the default branch after the landing, in hal2's UAT tab. Only what a human must see
+UATs") writes `plans/<NNNN>-<slug>/uat.md` (`plan.py uat` scaffolds it from `templates/uat.md`, typed `UAT`: its
+`status` is the file's, `active` or `archived`, never a check's; a legacy uat.md keeps its header lines): the user acceptance
+checks the user runs by hand on the default branch after the landing (`hal2-cli-plans uat next <plan>`, then `uat set
+<plan> <check> pass|fail|skip|blocked`). Only what a human must see
 goes there: derive the checks from the goal, each step's done-when and the diff (new panes, commands, keys, deep
 links), drop what the plan's tests and your own verification already proved, keep what needs eyes and hands (layout,
 feel, real data, other devices), riskiest first (`Priority: p1` = what the goal promises), at most about 10, each
 with `Open:` (a hal2:// deep link) or `Run:` (a command) when one exists, steps and the expected result; tag checks
 that should come back with later plans of the feature `regression`. Ids (`U1`, `U2`, ...) are never reused.
-Results never go into a checkout (hal2 keeps them in its state root); a failed check becomes a shot in the plan's
-feature shotfile (`Shotfile:`). A research plan has no UATs (`new --research` leaves the step out).
+Never write a verdict into a checkout or commit one: `uat set` queues it in hal2's state root, and the next landing
+from that machine appends it to the plan's committed `uat-results.jsonl` and regenerates `plans/uats.md` in its
+candidate (hal2 plan 0214 step 12); a failed check becomes a shot in the plan's feature shotfile (the `shotfile`
+key). A research plan has no UATs (`new --research` leaves the step out).
 
 **The step table is the plan's state.** `/plan`, `/handoff` and the statusline all read it; nothing else tracks
 progress. Update it the moment a step's check passes, never later.
@@ -59,7 +63,12 @@ test (`--workspace`, a bare `cargo nextest run`) or a full gate job (a release b
 are the landing's CI; a check that needs one before then runs on the CI runner (hal2: `gh workflow run land.yml -f
 ref=<branch> -f jobs=<job>`; hal2 plan 0157).
 
-**A plan lands once, at its end.** `new` writes `Landing: auto` below the title: when the plan's last step is done,
+**Short and concise** (hal2's record plans-short-and-concise): one line per step, `plan.md` at most 150 lines, a
+table cell at most 200 characters, a step file at most 120 lines; link the research, records and code instead of
+repeating them; a question in `questions.md` is clear: plain words, what it is about, what each answer causes.
+
+**A plan lands once, at its end.** `new` writes `landing: auto` into the plan's front matter (a legacy plan has a
+`Landing: auto` line below the title; the JSON's `landing` is the same for both): when the plan's last step is done,
 the plan lands itself with `/mtm` in the same run (the user's start of the plan is the consent to land it; hal2's
 merge-hooks ADR, "Who starts a landing"). `Landing:
 manual` (`new --manual-landing`, every research plan, `plan.py landing manual`, and every plan without the line) waits for the user's
@@ -83,8 +92,42 @@ branch, and a reservation file shared by all worktrees of the clone, and reserve
 Never pick a number by hand. Add `--fetch` when other machines may have created plans. `python3 $S/plan.py check`
 lists numbers used by two plans (for example after merging branches from before this rule).
 
-**One home per decision**: decisions that matter only to this plan go under the plan's **Decisions**; decisions
-that outlive it go to the repo's decision record (`INTENT.md` or equivalent) and the plan links them.
+**The plan folder holds four records** (hal2's decision record
+[record-formats](https://github.com/divramod/hal2/blob/main/.adr/record-formats.md); `new` writes all
+four, each with a front matter envelope: `type`, `schema`, `title`, `description`, `status` and the type's keys):
+
+| File | Holds | Written |
+|---|---|---|
+| `plan.md` | the overview: goal, context, the step table, Pre-authorized, Notes on the whole plan; `status` is `done` exactly when no step is open (`plan.py status` keeps it, `finished` and the other three files' `status`) | amended in place |
+| `decisions.md` | the ledger of every decision taken while the plan is planned and run: `## D<n> · <date> · <user \| farmer \| lead \| agent> · <in-force \| promoted \| superseded \| ended <date>>`, then `**D:**` (one line), `**Words:**` (quoted; required unless `agent`), and where they apply `**Via:**`, `**Why:**`, `**From:** Q<n>`, `**Record:**` (a link to the decision record; exactly when `promoted`), `**By:** D<m>` (exactly when `superseded`) | appended, numbered on; only an entry's state and its Record and By lines ever change |
+| `questions.md` | every question, the agent's and the user's, with its answer (the handoff skill's entries), plus `**Decision:** D<n>` when the answer is a decision | appended |
+| `handoff.md` | the state a cleared session needs (Done, Next with its `Done when:`, Watch out, Start with); committed, so no PID, pane id, session name or absolute home path | overwritten by `/handoff` |
+
+Beside them, **each step has its file** `steps/<n>.md` (hal2's shaped kind Step: `# Step <n>: <title>`, `## Task`,
+then optional and in this order `## Needs and touches`, `## Approach`, `## Done when`, `## Your rules (a subservant)`,
+`## Notes`, `## Result`; at most 120 lines): `plan.py status <n> next` writes it from `templates/step.md` when it is
+missing (never over an existing one; a parallel plan's is its brief, `plan.py brief`), the grill adds its
+`## Approach`, the step's end its `## Notes`. Status and who stay in the step table only.
+
+A plan has no `## Decisions` section: an autogrill decision is a `D<n>` entry by `agent` with its **Why**, a user's
+answer an entry with their quoted **Words**, and **Pre-authorized** names its entries by number. `python3 $S/plan.py
+check` validates every plan folder with hal2's one records checker, `hal2-cli-records check --json` (keys, status
+values, sections, entry headings, the links between questions, decisions and decision records, dead links, a status
+against its step table) and prints one problem per line, each ending in its rule; run it after writing a ledger
+entry, and `/handoff` and `/mtm` run it too. The checker is `$HAL2_CLI_RECORDS`, else `hal2-cli-records` on PATH;
+without it the check is advisory: it prints `records unchecked: hal2-cli-records is not installed` and passes (the
+plan numbers are still checked), and hal2's landing gate checks the records. `plan.py check <folder>...` checks the named
+plan folders only, `plan.py scaffold` writes a ledger or handoff that is missing. A `plan.md` without front matter
+is a **legacy plan** (every plan made before 2026-10-08; `format` in the JSON): it passes the check untouched, keeps
+its `Landing:`, `Grilled:` and `Finished:` lines and its **Decisions** section, and is never migrated in passing.
+
+**One home per decision** (the decision ladder): a question is an entry of `questions.md`; its answer, and every
+other choice of the plan, an entry of `decisions.md`. A decision is **promoted** to a decision record (`.adr/`, the
+`adr` skill) when a session that never reads this plan would have to know it to do its own work right: it binds
+work outside the plan's steps, or after the plan has landed. Then the entry becomes `promoted` and links the record,
+whose `origin` names the plan. Never promoted: the plan's order and who does what, a go or a stop, a base, a number
+or a name reserved for the plan's branches. In a repository without decision records, what outlives the plan goes
+to its intent doc (`INTENT.md` or equivalent); never into a generated decision log.
 
 **Global plans** belong to no repository: they live in hal2's global plans folder (`plans.toml`'s `root`,
 default `~/Documents/hal2/plans`, laid out like `plans/`), and hal2-macos shows them next to every repository's
@@ -102,6 +145,7 @@ and its steps are not committed (the folder is no repository) unless the user ke
 | `/plan new --autogenerated <by> <idea>` | | a plan a watcher made (e.g. sanity-watch): writes `Autogenerated: <by>, <date>`, hal2 marks it `autogenerated` |
 | `/plan`, `/plan status` | `/plan s` | [show where the current plan stands](#status) |
 | `/plan next` | `/plan n` | [run the plan](#run-the-plan) from its next step to the end, offering `/grill` first |
+| `/plan start` | | the user's go: hand off, [switch](#model-and-effort-per-step) to the next step's model and effort in a fresh session, which runs the plan to its landing without a question |
 | `/plan done [<step>]` | `/plan d [<step>]` | [finish a step](#finish-a-step) after its check passes |
 | `/plan use <slug or number>` | `/plan u <ref>` | `python3 $S/plan.py use <ref>`, then Status |
 | `/plan uat` | | `python3 $S/plan.py uat`: scaffold the current plan's `uat.md` (see above) |
@@ -114,7 +158,7 @@ and its steps are not committed (the folder is no repository) unless the user ke
 | `/plan reports` | | `python3 $S/plan.py reports`: the subservants' reports arrived on their branches |
 | `/plan new -g <title>` | `/plan r -g <topic>` | a global plan (see "Global plans" above; `--research` works too) |
 | `/plan s -g <n>`, `/plan n -g <n>`, `/plan d -g <n> [<step>]` | | status, run, finish a step of global plan `<n>` |
-| `/plan check` | `/plan c` | `python3 $S/plan.py check`: report plan numbers used twice |
+| `/plan check` | `/plan c` | `python3 $S/plan.py check`: report plan numbers used twice and every problem of the plan folders' records |
 | `/plan help` | `/plan h` | print this table and stop |
 
 ## New plan
@@ -131,18 +175,21 @@ and its steps are not committed (the folder is no repository) unless the user ke
    ```bash
    python3 $S/plan.py new "<title>" --goal "<goal>"              # add --research for a research plan
    ```
-4. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. A research
+4. Fill it in: **Context** links, 3–10 good **Steps** (see above; one line each, short and concise), first step
+   `next` (`plan.py status 1 next` writes its `steps/1.md`), the rest empty. A research
    plan's steps end in its research doc (e.g. question and criteria, sources, compare, write `research.md`, record
    the decision). No step lands; steps checked after the landing come last ("after the landing: ..."). The plan
-   lands itself at its end (`Landing: auto`); when the user wants to land it themselves, `plan.py landing manual`.
-   Record decisions taken so far in their one home.
+   lands itself at its end (`landing: auto`); when the user wants to land it themselves, `plan.py landing manual`.
+   Write the front matter's `description` (one sentence, at most 200 characters: what the plan delivers; `new`
+   takes the goal's first sentence) and record the decisions taken so far as entries of `decisions.md`.
 5. **Autogrill it once** before offering it: run [`/grill auto`](../grill/SKILL.md#auto) on the plan (one round
    without questions: map the design tree, decide every open branch yourself by the repo's rules, record each
    decision in its home, adjust steps and checks), which stamps `plan.py grilled --auto`.
 6. **User-only questions before implementation.** List every question only the user can answer: money, production
    deploys, accounts and secrets, paid resources, product choices. They are asked now, never mid-run: with the
-   offer below (numbered, a recommended answer each), and the answers go into the plan's **Pre-authorized** section
-   (the user's words and the date) before step 1 runs. A plan nobody answers here (an autogenerated plan, a servant
+   offer below (numbered, a recommended answer each), and the answers go into `decisions.md` (an entry by `user` with
+   the quoted words) and the plan's **Pre-authorized** section names them (`D3: ...`; a legacy plan: the user's
+   words and the date in the section) before step 1 runs. A plan nobody answers here (an autogenerated plan, a servant
    the farmer started) sends them to the farmer in one line each (SendMessage to the session in the repository's
    farmer slot `farmer-<repo>`; without one, `PushNotification`) and records them as open under **Pre-authorized**; the run starts
    with the steps that do not depend on them.
@@ -156,6 +203,34 @@ and its steps are not committed (the folder is no repository) unless the user ke
      this offer again after its shared-understanding check.
 
    Stopping here is the user's free answer, not an option.
+
+## Model and effort per step
+
+Each step names the session's model and effort for it: the step table's `Model` (`haiku`, `sonnet`, `opus`,
+`fable`, a full id) and `Effort` (`low` ... `max`) columns, empty for the plan's `run: <model> <effort>` (a legacy
+plan: the line `Run: ...` below the title); `plan.py current` gives both per step and for `next`. The autogrill
+picks them by the rubric: Opus high for design, new engines, the landing's code and big rewrites, xhigh for a
+decision the plan turns on; Sonnet medium or high for well-specified work with a test as its check; Haiku only for
+narrow mechanical work. A legacy table without the columns runs on the session's own model and effort.
+
+- **The user's defaults never change** (the user, 2026-10-09: "new sessions should always set the effort level to
+  medium and the model to opus 5.5"): a switch is for the running session only. Never type `/model` (Claude saves
+  it as the default every new session starts on); hal2 restarts the session with process-only flags instead.
+- **Between two steps with the same model and effort** the run goes on in the same session (the context check of
+  [Finish a step](#finish-a-step) still hands off at its threshold).
+- **Before a step whose model or effort differs** from the session's: `/handoff` (its Next is that step), then
+  ```bash
+  hal2-cli-agents switch --model <m> --effort <e> --prompt "/handoff c" --detach --json
+  ```
+  and end the turn with one line ("switching to <m> <e>, continuing with /handoff c"). hal2 waits for the turn's
+  end, stops the session by signal and starts it again in the same pane with `claude --model <m> --effort <e>` and
+  the prompt: a fresh session that continues the plan. When `switch` cannot start (no hal2, not in a pane), go on
+  in this session and name it in the step's notes.
+- **A step that fails its done-when twice** escalates once: effort one level up, else the next bigger model, through
+  the same switch; record it in the step's notes.
+- **`/plan start`** is the user's go for the current plan: no grill offer, no question; write the handoff, then the
+  switch above with the next step's values (also when they equal the session's: the plan starts in a fresh
+  context), and the fresh session runs the plan to its end and its landing.
 
 ## Status
 
@@ -178,9 +253,10 @@ notification naming the plan and stop.
 user approves the plan once, when it starts (the grill offer below); from then on there is no question-tool call,
 no approval, no plan mode and no per-step grill offer until the plan's end. What would have been a question:
 
-- **a decision** nothing settles (the plan, the decision record `INTENT.md`, the ADRs, the repo's rules for choosing
-  between options): take the more professional, battle-tested option yourself and record it in its one home (the
-  plan's **Decisions**, or `INTENT.md` when it outlives the plan);
+- **a decision** nothing settles (the plan and its `decisions.md`, the decision records, the intent doc, the repo's
+  rules for choosing between options): take the more professional, battle-tested option yourself and record it in
+  its one home (an entry of `decisions.md` by `agent` with its **Why**; promoted to a decision record with the
+  `adr` skill when it outlives the plan; a legacy plan: its **Decisions** section);
 - **an outward-facing or irreversible action** (pushing, publishing, deleting data that is not the plan's own): do it
   when the plan's **Pre-authorized** section or a relayed go names it, else skip it and name it in the plan's final
   report; the landing of an auto plan at its end ([Land the plan](#land-the-plan)) is not one of these: the start of
@@ -209,7 +285,9 @@ no approval, no plan mode and no per-step grill offer until the plan's end. What
 2. A parallel plan (`parallel` in the JSON) runs as [Run a parallel plan](#run-a-parallel-plan) says; in a
    subservant's slot (`lead` in the JSON) only its one step runs, as [Work as a subservant](#work-as-a-subservant)
    says. Otherwise, for each step, starting with the one marked `next`:
-   1. Detail it for yourself: the files it touches, the approach, the tests. Use subagents (with worktree
+   0. Its `model` and `effort` differ from the session's: switch first ([Model and effort per step](#model-and-effort-per-step)).
+   1. Detail it in its `steps/<n>.md` (written when it became next; `plan.py status <n> next` writes a missing
+      one): the files it touches, the approach, the tests. Use subagents (with worktree
       isolation) for independent parallel parts.
    2. Implement it until its done-when check passes.
    3. [Finish the step](#finish-a-step): table, notes, commit, context check. Stop when the context check says so,
@@ -321,7 +399,8 @@ refuses a subservant's writes to `plan.md`; the mtm skill's `subservant-guard.sh
 slots: no "land now", no restart with `/mtm`, only with `/handoff c`; its `follow_up` never tracks a subservant, so
 the lead watches and stops its own) and this prose.
 
-**Hand-off.** The state is the step table, `steps/`, `reports/` and the lead's `HANDOFF.md`, which lists what is in
+**Hand-off.** The state is the step table, `steps/`, `reports/` and the lead's handoff (the plan's `handoff.md`; a
+legacy plan: the root `HANDOFF.md`), which lists what is in
 flight (step, who, since). The context check runs between merges instead of between steps; stop the `watch`
 Monitor before a clear. After `/handoff c`: `plan.py current` and `ready --json`, `plan.py reports`, then the loop
 again. The subservants keep working meanwhile; their reports wait on their branches.
@@ -376,9 +455,11 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
    python3 $S/plan.py status <step> done
    python3 $S/plan.py status <next step> next
    ```
-3. Record what the step taught under **Notes**, and adjust later steps when reality changed them (say what and
-   why; decisions go to their one home).
-4. **Commit the step**: one commit with the step's changes and the updated plan, message
+3. Record what the step taught under `## Notes` of its `steps/<n>.md` (its commit, what was decided while
+   building, the checks' results; `## Result` when the step produced something to hand on), and adjust later steps
+   when reality changed them (say what and why; decisions go to their one home). The plan's own **Notes** keep only
+   what concerns the whole plan.
+4. **Commit the step**: one commit with the step's changes, its `steps/<n>.md` and the updated plan, message
    `<type>(<scope>): <what> (plan <NNNN> step <n>)`. Stage only the files this step changed (other uncommitted
    work in the tree stays as it was). Never push without the user's consent.
 5. **Check the context window** before starting the next step:
@@ -396,7 +477,8 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
         after a clear their notifications would wake the fresh session. Note in the handoff what was stopped and
         must be rerun. **Never a landing or a waiting reserve** (`hal2-cli-git worktree merge-to-main|reserve`): it
         goes on across the clear; name it in the handoff (the command, the slot, its ticket's state) instead.
-     2. Run `/handoff` (it records decisions, writes `HANDOFF.md` with the plan's next step and commits them).
+     2. Run `/handoff` (it records decisions, writes the plan's `handoff.md` (a legacy plan: the root `HANDOFF.md`)
+        with the plan's next step and commits them).
      3. `autoclear` is true: start the automatic clear-and-continue, then end your turn with one line saying the
         session clears and continues with `/handoff c`; do nothing after it (the clear waits for your turn to end,
         waits out a draft the user types, and never types into a non-empty prompt):
@@ -404,7 +486,7 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
         hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
         ```
         `already-running` is fine: hal2's guard already started the job (it stops a session above the threshold at
-        its next tool, research 0010 in hal2): just end your turn. When it fails to start otherwise (autoclear
+        its next tool, hal2's [research 0010](https://github.com/divramod/hal2/blob/main/research/0010-autoclear-watcher/research.md)): just end your turn. When it fails to start otherwise (autoclear
         disabled, ...), say so and fall back to the next point.
      A tool denied with "hal2: context at N% ... run /handoff now" is that guard: stop the step where it is, do
      points 1-2 (only the hand-off's tools run now; name in the handoff what was cut off), then end your turn: the
