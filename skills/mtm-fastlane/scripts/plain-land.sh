@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # The fastlane's landing without hal2 (fastlane.sh land): the worktree <dir>'s
 # HEAD, which must contain origin/<default>, lands as one merge commit of HEAD's
 # tree on origin/<default> + HEAD, pushed fast-forward to the default branch;

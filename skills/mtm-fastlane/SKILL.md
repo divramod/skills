@@ -84,8 +84,12 @@ Every script exits 0 ok, 1 red or not runnable (fix and rerun), 2 a missing tool
    after a landing (version tags, deliveries, installs). Only what the branch changed runs: use the repository's
    change detection (`hal2-cli-git changes --branch "$FASTLANE_BASE"`) where it has one, else `git diff
    --name-only "$FASTLANE_BASE"...HEAD`.
-3. Write the scripts from the templates in `$S/templates/` (their header says what they replace) and the conf:
-   `LAND_WORKFLOWS`, `LAND_REFS`, `MERGE_JOB`, `SHIP_GRACE`, `FINGERPRINT_INPUTS` (the git pathspecs scan read) and
+3. Write `.hal/mtm-fastlane-worktree.sh`, `.hal/mtm-fastlane-main.sh` and `.hal/mtm-fastlane.conf` from
+   `$S/templates/` (same names), filling every `@PLACEHOLDER@`: the header says what they replace and what is
+   skipped with the CI command for it; `@CHECKS@` and `@STEPS@` become `step <name> <command>` lines, each guarded
+   with `if touches '<ERE>'; then ...; fi` (never `touches ... && step ...`: a false last line fails the script),
+   and `skip <job> <why>` for every CI job that cannot run here. The conf: `LAND_WORKFLOWS`, `LAND_REFS`,
+   `MERGE_JOB`, `SHIP_GRACE`, `FINGERPRINT_INPUTS` (scan's `fingerprint_inputs`); commit the inputs, then set
    `FINGERPRINT=$(bash $S/fastlane.sh fingerprint)` last.
 4. `bash $S/check.sh` validates them (`bash -n`, executable, shellcheck when present, the fingerprint) and runs the
    worktree script's `--dry-run`, which lists what it would run and what it skips. Commit the three files.

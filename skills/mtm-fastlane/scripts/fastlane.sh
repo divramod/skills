@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # The fastlane's deterministic steps (SKILL.md), run in the worktree <dir> (default .):
 #   fastlane.sh preflight [<dir>]                  a worktree on its own branch, the two scripts, the fingerprint
 #   fastlane.sh fingerprint [<dir>]                the fingerprint of the conf's FINGERPRINT_INPUTS now
