@@ -353,11 +353,15 @@ build or test cycle, or longer than about 30 minutes. It runs in slot 30-99, nev
    - a subagent: `plan.py assign <n> subagent`, then start it with the brief as its prompt;
    - a subservant: **reuse before create**: a slot 30+ whose last step is merged (and marked done) gets the next one:
      `plan.py assign <n> slot <NN>` rewrites its `plans/LEAD`, then its session is told to `git reset --hard
-     origin/<lead>` and read the new brief, so its build cache stays warm. Only when none is free start one first,
-     then assign the step to the slot create.py's JSON names (`"slot"`):
+     origin/<lead>` and read the new brief, so its build cache stays warm; when the step's model or effort differs
+     from that session's, `hal2-cli-agents switch <its pane> [--model <m>] [--effort <e>] --detach --prompt "<the
+     prompt plan.py brief printed>"` restarts it at the step's values with the brief instead. Only when none is
+     free start one first, at the step's model and effort, then assign the step to the slot create.py's JSON names
+     (`"slot"`):
      ```bash
      python3 <create-worktree-session>/scripts/create.py --from 30 --base origin/<lead> \
-       --lead "<lead-slot> <plan-slug> <n>" --exact --prompt "<the prompt plan.py brief printed>"
+       --lead "<lead-slot> <plan-slug> <n>" [--model <m>] [--effort <e>] --exact \
+       --prompt "<the prompt plan.py brief printed>"
      python3 $S/plan.py assign <n> slot <NN>   # NN: the "slot" of create.py's JSON
      ```
      `assign` refuses a slot another running or blocked step holds, whose `plans/LEAD` names other work (another
