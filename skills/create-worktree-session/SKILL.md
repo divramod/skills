@@ -13,7 +13,7 @@ description: Start a new agent session (Claude by default) in the current reposi
 | `/create-worktree-session` | start Claude in the first free, clean slot of the current repository; its first prompt is `/mfm` |
 | `/create-worktree-session <prompt>` | the same, the first prompt runs `/mfm` and then `<prompt>` (e.g. `/shoot 13`) |
 | `... --repo <dir>` | another repository (any of its checkouts) |
-| `... --agent codex\|opencode`, `--model <id>`, `--tmux` | another agent, its model, a window of tmux session `hal-<repo>` instead of a terminal host |
+| `... --agent codex\|opencode`, `--model <id>`, `--effort <level>`, `--tmux` | another agent, its model and effort (per process, saved nowhere), a window of tmux session `hal-<repo>` instead of a terminal host |
 | `... --exact` | the first prompt exactly as given, without `/mfm` first |
 | `... --from <NN>` | start the slot search at `<NN>` instead of 01 (subservants: `--from 30`) |
 | `... --base <rev>` | branch the slot from `<rev>` (e.g. `origin/02`) instead of main: `git branch -f NN <rev>` for a new slot, `git reset --hard <rev>` in a reused clean one; a leftover branch `NN` with commits in neither `<rev>` nor main is skipped |
@@ -23,7 +23,7 @@ description: Start a new agent session (Claude by default) in the current reposi
 
 ## Run
 
-1. `python3 $S/create.py [--repo <dir>] [--agent ..] [--model ..] [--tmux] [--prompt "<prompt>"] [--exact]`
+1. `python3 $S/create.py [--repo <dir>] [--agent ..] [--model ..] [--effort ..] [--tmux] [--prompt "<prompt>"] [--exact]`
    (a parallel plan's lead adds `--from 30 --base origin/<lead> --lead "<lead-slot> <plan> <step>"` and the prompt
    `plan.py brief <step>` printed; the plan skill's "Run a parallel plan"). Pass the
    user's prompt verbatim as one argument. Exit 2 names a missing hal2 CLI: run `bash $S/install-prerequisites.sh`

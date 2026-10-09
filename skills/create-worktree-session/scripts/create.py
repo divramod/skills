@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Start an agent session in the repository's first free and clean worktree slot.
 
-  create.py [--repo DIR] [--agent claude|codex|opencode] [--model ID] [--tmux] [--prompt TEXT] [--exact]
+  create.py [--repo DIR] [--agent claude|codex|opencode] [--model ID] [--effort LEVEL] [--tmux] [--prompt TEXT] [--exact]
             [--from NN] [--base REV] [--lead "<lead-slot> <plan> <step>"] [--min-free-gb 50]
 
 The slot, counting from 01: no agent session runs in it (no live agent of the repository, no live terminal host
@@ -204,6 +204,8 @@ def start(repo: Path, slot: str, argv: list[str], prompt: str) -> dict:
         command.append("--tmux")
     if arg(argv, "--model"):
         command += ["--model", arg(argv, "--model")]
+    if arg(argv, "--effort"):
+        command += ["--effort", arg(argv, "--effort")]
     command += ["--prompt", prompt]
     env = {k: v for k, v in os.environ.items() if k not in DROPPED_ENV}
     shell = os.environ.get("SHELL") or "/bin/zsh"

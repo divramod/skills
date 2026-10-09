@@ -105,8 +105,9 @@ class TestCreate(unittest.TestCase):
         self.assertEqual(run[run.index("--prompt") + 1], "/mfm")
 
     def test_a_prompt_runs_after_mfm_unless_exact_and_flags_pass_through(self):
-        self.run_create("--prompt", "/shoot 13", "--model", "m1", "--tmux")
+        self.run_create("--prompt", "/shoot 13", "--model", "m1", "--effort", "high", "--tmux")
         run = self.run_call()
+        self.assertEqual(run[run.index("--effort") + 1], "high")
         self.assertEqual(run[run.index("--prompt") + 1], "Run /mfm (merge-from-main) first, then:\n\n/shoot 13")
         self.assertEqual(run[run.index("--model") + 1], "m1")
         self.assertIn("--tmux", run)
