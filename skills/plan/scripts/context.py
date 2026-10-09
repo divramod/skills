@@ -6,7 +6,8 @@
 Claude Code: the session is $CLAUDE_CODE_SESSION_ID, its transcript ~/.claude/projects/*/<session>.jsonl.
 Used tokens are the last main-conversation API call's input (uncached + cache read + cache write) plus its
 output, which is what the next call starts from. The window comes from --window, else $CLAUDE_CONTEXT_WINDOW,
-else 1,000,000 when the model setting in ~/.claude/settings.json ends in `[1m]`, else 200,000; when more tokens
+else 1,000,000 when the session's model (its claude process's `--model`, else the model setting in
+~/.claude/settings.json; session.py) ends in `[1m]`, else 200,000; when more tokens
 are in use than that, the window must be the 1M one.
 
 `percent` is measured against the usable window, i.e. without Claude Code's auto-compact buffer (16.5% of the
@@ -32,6 +33,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import session
 
 DEFAULT_WINDOW = 200_000
 LARGE_WINDOW = 1_000_000
@@ -68,10 +71,14 @@ def configured_window(settings: Path) -> int:
     env = os.environ.get("CLAUDE_CONTEXT_WINDOW", "").strip()
     if env.isdigit():
         return int(env)
-    try:
-        model = str(json.loads(settings.read_text()).get("model", ""))
-    except (OSError, json.JSONDecodeError, AttributeError):
-        model = ""
+    running = session.current(os.getppid(), settings)
+    if running:
+        model = running["model"]
+    else:
+        try:
+            model = str(json.loads(settings.read_text()).get("model", ""))
+        except (OSError, json.JSONDecodeError, AttributeError):
+            model = ""
     return LARGE_WINDOW if model.lower().endswith("[1m]") else DEFAULT_WINDOW
 
 
