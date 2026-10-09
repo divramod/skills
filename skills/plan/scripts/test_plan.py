@@ -119,6 +119,25 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(info["next"]["step"], "shooter")
         self.assertIn("| 2 | move nvim | done (`916a934`) |", (self.plans / "0002-migrate-daily-tools" / "plan.md").read_text())
 
+    def test_status_next_writes_the_step_file_once(self):
+        self.write_plan(text=EXISTING.replace("| 3 | shooter | |", "| 3 | shooter `x` | |"))
+        (self.plans / "CURRENT_PLAN").write_text("0002-migrate-daily-tools\n")
+        step = self.plans / "0002-migrate-daily-tools" / "steps" / "3.md"
+
+        info = self.plan("status", "3", "next")
+
+        self.assertEqual(info["step_file"], "plans/0002-migrate-daily-tools/steps/3.md")
+        text = step.read_text()
+        self.assertTrue(text.startswith("# Step 3: shooter `x`\n"))
+        self.assertIn("\n## Task\n", text)
+        self.assertIn("plans-short-and-concise", text)
+        step.write_text("# Step 3: mine\n\n## Task\n\nkept\n")
+        info = self.plan("status", "3", "next")
+        self.assertNotIn("step_file", info)
+        self.assertIn("kept", step.read_text())
+        self.plan("status", "2", "done")
+        self.assertFalse((step.parent / "2.md").exists())
+
     def test_use_accepts_number_and_grilled_stamps_date(self):
         self.write_plan()
 

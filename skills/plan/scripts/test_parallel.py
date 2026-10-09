@@ -352,13 +352,20 @@ class ParallelTest(unittest.TestCase):
 
     # brief and report
 
+    def test_status_next_leaves_a_parallel_plans_step_to_its_brief(self):
+        info = self.plan("status", "3", "next")
+
+        self.assertNotIn("step_file", info)
+        self.assertFalse((self.root / "plans" / SLUG / "steps" / "3.md").exists())
+
     def test_brief_scaffolds_once_and_prints_the_prompt(self):
         info = self.plan("brief", "3")
 
         brief = self.root / info["brief"]
         self.assertEqual(info["brief"], f"plans/{SLUG}/steps/3.md")
         text = brief.read_text()
-        self.assertIn(f"# Step 3 of plan {SLUG}: client", text)
+        self.assertIn("# Step 3: client", text)
+        self.assertIn(f"Step 3 of plan {SLUG}, written by the lead", text)
         self.assertIn("- Needs: 1 (done; their work is on origin/02)", text)
         self.assertIn("- Touches: ts:client", text)
         self.assertIn("npm test", text)

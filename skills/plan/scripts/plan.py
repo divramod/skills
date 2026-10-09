@@ -23,7 +23,11 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
   plan.py current                                          print the current plan as JSON
   plan.py list                                             print every plan as JSON
   plan.py use <slug-or-number>                             make a plan current
-  plan.py status <step> "<status>" [--plan <slug>]         set one step's Status cell
+  plan.py status <step> "<status>" [--plan <slug>]         set one step's Status cell; `next` also writes the
+                                                           step's file steps/<step>.md from templates/step.md
+                                                           when it is missing (never overwrites; not for a
+                                                           parallel plan, whose brief is `brief`), named in the
+                                                           JSON's `step_file`
   plan.py grilled [--auto] [--plan <slug>]                 set the plan's `Grilled:` line to today; --auto counts
                                                            one autogrill round: `Grilled: <date> (autogrill ×n)`,
                                                            a grill by the user adds `, grill`
@@ -99,6 +103,8 @@ PLAN_RE = re.compile(r"^(\d{4})-[a-z0-9-]+$")
 MAIN = "plan.md"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "plan.md"
 UAT_TEMPLATE = TEMPLATE.parent / "uat.md"
+STEP_TEMPLATE = TEMPLATE.parent / "step.md"
+STEPS = "steps"
 UAT = "uat.md"
 UAT_CHECK = re.compile(r"^## (U\d+)\b")
 RESEARCH = "research"
@@ -412,6 +418,27 @@ def set_status(path: Path, step: str, status: str) -> None:
     set_cells(path, step, {"status": status})
 
 
+def scaffold_step(path: Path, step: str) -> Path | None:
+    """Write `steps/<step>.md` from templates/step.md when the step becomes next (hal2's record
+    plans-short-and-concise): never over an existing file, never for a flat plan (no folder) or a parallel plan
+    (its brief is `plan.py brief`). The written file, or None."""
+    target = path.parent / STEPS / f"{step}.md"
+    if path.name != MAIN or target.exists():
+        return None
+    text = path.read_text()
+    if parallel.is_parallel(steps_table(text.splitlines())[1]):
+        return None
+    row = next((s for s in read_steps(text) if s["number"] == step), None)
+    if row is None:
+        return None
+    target.parent.mkdir(exist_ok=True)
+    target.write_text(STEP_TEMPLATE.read_text().format(
+        number=step, title=row["step"] or f"step {step}",
+        task="<what to change: the files and packages, the approach, what the step must not touch>",
+        done_when=row["done_when"] or "the step table's check"))
+    return target
+
+
 def set_cells(path: Path, step: str, values: dict[str, str]) -> None:
     """Set cells of one step's row by column name (lower case), keeping every other cell."""
     lines = path.read_text().splitlines(keepends=True)
@@ -628,8 +655,11 @@ def main(argv: list[str]) -> int:
             return run_parallel(root, path, args)
         else:
             path = resolve(root, args.plan) if args.plan else current_path(root)
+            written = None
             if args.command == "status":
                 set_status(path, args.step, args.status)
+                if args.status.strip().lower() == "next":
+                    written = scaffold_step(path, args.step)
             elif args.command == "landing":
                 set_landing(path, args.landing)
             elif args.command == "uat":
@@ -639,6 +669,8 @@ def main(argv: list[str]) -> int:
             else:
                 set_grilled(path, args.auto)
             result = describe(root, path)
+            if written:
+                result["step_file"] = str(written.relative_to(root))
     except (PlanError, parallel.ParallelError) as error:
         print(f"plan.py: {error}", file=sys.stderr)
         return 1

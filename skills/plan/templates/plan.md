@@ -23,7 +23,8 @@ created: {date}
 
 ## Steps
 
-Each step is detailed when it is next; keep one line per step here. The plan lands once, after all its steps
+Each step is detailed in `steps/<n>.md`, written when it becomes next (`plan.py status <n> next`); keep one line
+per step here. Short and concise: this file at most 150 lines, a cell at most 200 characters, links over repeats. The plan lands once, after all its steps
 (`landing: auto`: the plan skill runs `/mtm` then); steps checked only after the landing come last, their done-when
 starting "after the landing: ...". `Model` and `Effort` are the session's for the step (empty: `run` above);
 the run switches the session before a step whose values differ (the skill's "Model and effort per step").
@@ -43,4 +44,4 @@ by its number. The run acts on them without asking again.
 
 ## Notes
 
-- <anything learned along the way that changes the plan>
+- <what concerns the whole plan; a step's notes go into its `steps/<n>.md`>

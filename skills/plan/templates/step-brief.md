@@ -1,7 +1,7 @@
-# Step {number} of plan {slug}: {title}
+# Step {number}: {title}
 
-Written by the lead (slot {lead}) when the step became ready. Who: {who}. The plan's `plan.md` stays the lead's: read
-it, never edit it.
+Step {number} of plan {slug}, written by the lead (slot {lead}) when the step became ready. Who: {who}. The plan's
+`plan.md` stays the lead's: read it, never edit it.
 
 ## Task
 

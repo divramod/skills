@@ -9,7 +9,8 @@ status: open
 
 # Questions and answers
 
-<!-- One entry per question, appended, numbered on, never deleted:
+<!-- One entry per question, appended, numbered on, never deleted; each clear on its own: plain words, what it is
+about, what each answer causes:
 
   ## Q<n> · <YYYY-MM-DD> · <agent | user> · <open | answered <YYYY-MM-DD> | dropped <YYYY-MM-DD>>
 

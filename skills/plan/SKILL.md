@@ -59,6 +59,10 @@ test (`--workspace`, a bare `cargo nextest run`) or a full gate job (a release b
 are the landing's CI; a check that needs one before then runs on the CI runner (hal2: `gh workflow run land.yml -f
 ref=<branch> -f jobs=<job>`; hal2 plan 0157).
 
+**Short and concise** (hal2's record plans-short-and-concise): one line per step, `plan.md` at most 150 lines, a
+table cell at most 200 characters, a step file at most 120 lines; link the research, records and code instead of
+repeating them; a question in `questions.md` is clear: plain words, what it is about, what each answer causes.
+
 **A plan lands once, at its end.** `new` writes `landing: auto` into the plan's front matter (a legacy plan has a
 `Landing: auto` line below the title; the JSON's `landing` is the same for both): when the plan's last step is done,
 the plan lands itself with `/mtm` in the same run (the user's start of the plan is the consent to land it; hal2's
@@ -90,10 +94,16 @@ four, each with a front matter envelope: `type`, `schema`, `title`, `description
 
 | File | Holds | Written |
 |---|---|---|
-| `plan.md` | goal, context, the step table, Pre-authorized, Notes; `status` is `done` exactly when no step is open (`plan.py status` keeps it, `finished` and the other three files' `status`) | amended in place |
+| `plan.md` | the overview: goal, context, the step table, Pre-authorized, Notes on the whole plan; `status` is `done` exactly when no step is open (`plan.py status` keeps it, `finished` and the other three files' `status`) | amended in place |
 | `decisions.md` | the ledger of every decision taken while the plan is planned and run: `## D<n> · <date> · <user \| farmer \| lead \| agent> · <in-force \| promoted \| superseded \| ended <date>>`, then `**D:**` (one line), `**Words:**` (quoted; required unless `agent`), and where they apply `**Via:**`, `**Why:**`, `**From:** Q<n>`, `**Record:**` (a link to the decision record; exactly when `promoted`), `**By:** D<m>` (exactly when `superseded`) | appended, numbered on; only an entry's state and its Record and By lines ever change |
 | `questions.md` | every question, the agent's and the user's, with its answer (the handoff skill's entries), plus `**Decision:** D<n>` when the answer is a decision | appended |
 | `handoff.md` | the state a cleared session needs (Done, Next with its `Done when:`, Watch out, Start with); committed, so no PID, pane id, session name or absolute home path | overwritten by `/handoff` |
+
+Beside them, **each step has its file** `steps/<n>.md` (hal2's shaped kind Step: `# Step <n>: <title>`, `## Task`,
+then optional and in this order `## Needs and touches`, `## Approach`, `## Done when`, `## Your rules (a subservant)`,
+`## Notes`, `## Result`; at most 120 lines): `plan.py status <n> next` writes it from `templates/step.md` when it is
+missing (never over an existing one; a parallel plan's is its brief, `plan.py brief`), the grill adds its
+`## Approach`, the step's end its `## Notes`. Status and who stay in the step table only.
 
 A plan has no `## Decisions` section: an autogrill decision is a `D<n>` entry by `agent` with its **Why**, a user's
 answer an entry with their quoted **Words**, and **Pre-authorized** names its entries by number. `python3 $S/plan.py
@@ -161,7 +171,8 @@ and its steps are not committed (the folder is no repository) unless the user ke
    ```bash
    python3 $S/plan.py new "<title>" --goal "<goal>"              # add --research for a research plan
    ```
-4. Fill it in: **Context** links, 3–10 good **Steps** (see above), first step `next`, the rest empty. A research
+4. Fill it in: **Context** links, 3–10 good **Steps** (see above; one line each, short and concise), first step
+   `next` (`plan.py status 1 next` writes its `steps/1.md`), the rest empty. A research
    plan's steps end in its research doc (e.g. question and criteria, sources, compare, write `research.md`, record
    the decision). No step lands; steps checked after the landing come last ("after the landing: ..."). The plan
    lands itself at its end (`landing: auto`); when the user wants to land it themselves, `plan.py landing manual`.
@@ -271,7 +282,8 @@ no approval, no plan mode and no per-step grill offer until the plan's end. What
    subservant's slot (`lead` in the JSON) only its one step runs, as [Work as a subservant](#work-as-a-subservant)
    says. Otherwise, for each step, starting with the one marked `next`:
    0. Its `model` and `effort` differ from the session's: switch first ([Model and effort per step](#model-and-effort-per-step)).
-   1. Detail it for yourself: the files it touches, the approach, the tests. Use subagents (with worktree
+   1. Detail it in its `steps/<n>.md` (written when it became next; `plan.py status <n> next` writes a missing
+      one): the files it touches, the approach, the tests. Use subagents (with worktree
       isolation) for independent parallel parts.
    2. Implement it until its done-when check passes.
    3. [Finish the step](#finish-a-step): table, notes, commit, context check. Stop when the context check says so,
@@ -439,9 +451,11 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
    python3 $S/plan.py status <step> done
    python3 $S/plan.py status <next step> next
    ```
-3. Record what the step taught under **Notes**, and adjust later steps when reality changed them (say what and
-   why; decisions go to their one home).
-4. **Commit the step**: one commit with the step's changes and the updated plan, message
+3. Record what the step taught under `## Notes` of its `steps/<n>.md` (its commit, what was decided while
+   building, the checks' results; `## Result` when the step produced something to hand on), and adjust later steps
+   when reality changed them (say what and why; decisions go to their one home). The plan's own **Notes** keep only
+   what concerns the whole plan.
+4. **Commit the step**: one commit with the step's changes, its `steps/<n>.md` and the updated plan, message
    `<type>(<scope>): <what> (plan <NNNN> step <n>)`. Stage only the files this step changed (other uncommitted
    work in the tree stays as it was). Never push without the user's consent.
 5. **Check the context window** before starting the next step:
