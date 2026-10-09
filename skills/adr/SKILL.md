@@ -11,9 +11,21 @@ sections Context, Decision, Consequences, Confirmation, amendments appended. The
 generated decision log, the lookups). Your job is the judgment: whether a decision is promoted at all, whether it is
 a new record or an amendment, and the record's words.
 
-`A=hal2-cli-records` (from the repository; `--repo <dir>` elsewhere). Missing:
-`cargo install --path apps/hal2-cli-records` from hal2's `code/rust/`; inside a hal2 worktree whose branch is ahead of the installed one,
-`cargo run -q --manifest-path code/rust/Cargo.toml -p hal2-cli-records -- <args>` runs the worktree's own.
+`A=${HAL2_CLI_RECORDS:-hal2-cli-records}`: the binary is `$HAL2_CLI_RECORDS` when set (a hal2 worktree whose
+branch is ahead of the installed binary points it at its own build, `code/rust/target/debug/hal2-cli-records` after
+`cargo build -p hal2-cli-records`), else `hal2-cli-records` on PATH (`cargo install --path apps/hal2-cli-records`
+from hal2's `code/rust/`). Run it from the repository, or pass `--repo <dir>`. The skill only calls hal2; hal2 calls
+no skill.
+
+**Without the binary** (`command -v "$A"` finds nothing; a machine or cloud session without hal2) the skill still
+works, read-only and advisory:
+- `/adr check` prints the one line `records unchecked: hal2-cli-records is not installed` and passes: hal2's landing
+  gate (`records-check`) is where the check is enforced.
+- `for`, `search`, `list`, `show` read the files themselves: `grep -l` over `.adr/*.md` for words and for
+  `applies_to` globs that match the path, the front matter's `status` and `title` for the list, the file itself for
+  `show`; say that the answer comes from a plain read.
+- `add`, an amendment's regeneration (`index`, `intent`) and the decision record's form need the binary: write
+  nothing, tell the user to install it (the command above) and stop.
 
 | Call | Does |
 |---|---|
@@ -22,7 +34,7 @@ a new record or an amendment, and the record's words.
 | `/adr search <words>` | `$A search <words>`: records holding every word (title hits first); then `$A show <slug>` for the ones that matter |
 | `/adr list [status]` | `$A list [--status proposed\|accepted\|deprecated\|superseded]` |
 | `/adr show <slug>` | `$A show <slug>` |
-| `/adr check` | `$A check && $A index --check && $A intent --check`: what the landing's gate job `records-check` runs; fix every line it prints |
+| `/adr check` | `$A check`: the one check of every record the repository holds (its `.hal/records.toml` says which kinds apply; the binary knows the rest), each problem ending in its rule; fix every line it prints. Exit 2: a usage or read error, 3: the binary is older than the repository's `checker` asks (install a newer one). Without the binary: the advisory line above |
 | `/adr help`, `/adr h` | print this table and stop |
 
 ## Promote a decision
@@ -61,8 +73,7 @@ a new record or an amendment, and the record's words.
 6. **Regenerate and check**, then fix every line they print:
    ```bash
    $A index && $A intent     # .adr/index.md and INTENT.md's decision log: generated, never edited by hand
-   $A check && $A index --check && $A intent --check
-   python3 <plan-skill-dir>/scripts/plan.py check plans/<NNNN>-<slug>     # the ledger's side of the link
+   $A check                  # every record, the plan folders' ledgers included (the link's both sides)
    ```
    A rule every agent must know before it reads any file also gets its line in the repository's `AGENTS.md` Rules
    (a link and one sentence); a path-scoped rule does not: `$A for <path>` finds it.

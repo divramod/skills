@@ -3,6 +3,9 @@
 
 A research doc is a folder research/<NNNN>-<slug>/ holding research.md and its helper files. research.md starts with
 YAML front matter (the template's keys) and uses fixed H2 names in the template's order; the core H2s are required.
+`new` writes the record envelope (hal2's decision record `record-formats`): `type: Research`, `schema: 1` and a
+`description` (the question's first sentence, else the title; at most 200 characters). A doc without `type` is
+legacy: it may lack the three keys.
 
   research.py new "<title>" [--question "<q>"] [--plan <path>] [--origin <ref>] [--kind <kind>] [--author <a>]
                                     [--fetch]
@@ -12,7 +15,11 @@ YAML front matter (the template's keys) and uses fixed H2 names in the template'
   research.py status <n>            one doc as JSON (<n>: number, 0019, or the folder name)
   research.py check [--branches]    every research/*/research.md: front matter, required keys and values,
                                     H1, required H2s in order, id = folder number, no number used twice;
-                                    --branches also checks numbers across worktrees and branches; exit 1 on problems
+                                    --branches also checks numbers across worktrees and branches; then hal2's
+                                    records checker (`hal2-cli-records check --json`, checker.py:
+                                    $HAL2_CLI_RECORDS, else on PATH) over the typed docs (`type: Research`), its
+                                    problems ending in their rule; without it one line `records unchecked: ...`
+                                    (advisory); exit 1 on problems
   research.py set <n> <key> <value> set one front matter field (bumps `updated`); lists as `a, b` or `[a, b]`
   research.py log <n> "<text>"      append `- <today>: <text>` to the Log and bump `updated`
 
@@ -29,6 +36,7 @@ import sys
 import textwrap
 from pathlib import Path
 
+import checker
 import research_number
 
 RESEARCH = Path("research")
@@ -58,11 +66,15 @@ SECTIONS = [  # the template's H2s in order; True = required
 ]
 ORDER = [name for name, _ in SECTIONS]
 REQUIRED_SECTIONS = [name for name, required in SECTIONS if required]
-KEYS = ["id", "title", "question", "status", "answer", "confidence", "kind", "created", "updated", "revisit",
+KEYS = ["type", "schema", "id", "title", "description", "question", "status", "answer", "confidence", "kind", "created", "updated", "revisit",
         "author", "origin", "plan", "follow_up", "decision", "supersedes", "superseded_by", "related", "tags",
         "sources", "claims"]
 LIST_KEYS = {"follow_up", "supersedes", "superseded_by", "related", "tags"}
-INT_KEYS = {"id", "sources"}
+INT_KEYS = {"id", "sources", "schema"}
+# The record envelope (hal2's decision record `record-formats`): `new` writes it; a doc from before it (no `type`)
+# is legacy and may lack the three keys.
+ENVELOPE = {"type": "Research", "schema": 1}
+DESCRIPTION = 200
 FOLDED_KEYS = {"question", "answer"}
 STATUSES = ["planned", "researching", "verifying", "done", "decided", "abandoned", "superseded"]
 CONFIDENCES = ["high", "moderate", "low"]
@@ -79,10 +91,14 @@ class ResearchError(Exception):
 
 def strip_comment(text: str) -> str:
     """Drop a ` #` comment outside quotes."""
-    quote = None
+    quote, escaped = None, False
     for i, ch in enumerate(text):
         if quote:
-            if ch == quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\" and quote == '"':
+                escaped = True
+            elif ch == quote:
                 quote = None
         elif ch in "\"'" and (i == 0 or text[i - 1] in " [{,:"):
             quote = ch
@@ -267,15 +283,22 @@ def validate(folder: Path, meta: dict | None, body: list[str], today: dt.date) -
     problems = []
     number = int(folder.name[:4])
     if meta is not None:
+        typed = "type" in meta
         for key in KEYS:
-            if key not in meta:
+            if key not in meta and (typed or key not in (*ENVELOPE, "description")):
                 problems.append(f"front matter: `{key}` is missing")
+        for key, value in ENVELOPE.items():
+            if key in meta and meta[key] != value:
+                problems.append(f"front matter: {key} {meta[key]!r} is not {value!r}")
+        if typed and len(str(meta.get("description") or "")) > DESCRIPTION:
+            problems.append(f"front matter: `description` has {len(str(meta['description']))} characters, over "
+                            f"{DESCRIPTION}")
         for key in meta:
             if key not in KEYS:
                 problems.append(f"front matter: unknown key `{key}`")
         if "id" in meta and meta["id"] != number:
             problems.append(f"front matter: id {meta['id']!r} is not the folder's number {number}")
-        for key in ("title", "question", "answer", "author"):
+        for key in ("title", "question", "answer", "author") + (("description",) if typed else ()):
             if key in meta and not (isinstance(meta[key], str) and meta[key].strip()):
                 problems.append(f"front matter: `{key}` is empty")
         if meta.get("status") not in STATUSES and "status" in meta:
@@ -376,6 +399,16 @@ def add_months(day: dt.date, months: int) -> dt.date:
     raise ValueError(day)
 
 
+def describe(question: str, title: str) -> str:
+    """The doc's `description`: the question's first sentence (the title without a question), at most 200
+    characters, cut at a word."""
+    text = " ".join((question or title).split())
+    first = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
+    if len(first) <= DESCRIPTION:
+        return first
+    return first[:DESCRIPTION - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
 def default_author(root: Path) -> str:
     out = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=root,
                          capture_output=True, text=True)
@@ -400,7 +433,8 @@ def new(root: Path, title: str, question: str = "", plan: str = "", origin: str 
     if folder.exists():
         raise ResearchError(f"{folder} exists already")
     text = TEMPLATE.read_text().format(
-        id=number, number=f"{number:04d}", title=dump_scalar(title), question=question or "<the question>",
+        id=number, number=f"{number:04d}", title=dump_scalar(title), description=dump_scalar(describe(question, title)),
+        question=question or "<the question>",
         kind=kind, date=today.isoformat(), revisit=add_months(today, REVISIT_MONTHS).isoformat(),
         author=dump_scalar(author or default_author(root)), origin=dump_scalar(origin or "user request"),
         plan=dump_scalar(plan))
@@ -548,6 +582,15 @@ def main(argv: list[str]) -> int:
             print(json.dumps(load(find(root, args.ref), root), indent=2))
         elif args.command == "check":
             problems = check(root, args.branches)
+            try:
+                found = checker.check(repo=root)
+            except checker.CheckerError as error:
+                print(error, file=sys.stderr)
+                return error.code
+            if found is None:
+                print(checker.NOT_INSTALLED)
+            else:
+                problems += [checker.line(p) for p in found["problems"] if p["path"].startswith(f"{RESEARCH}/")]
             for line in problems:
                 print(line)
             if problems:

@@ -24,7 +24,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "plan" / "scripts"))
 
-import envelope  # noqa: E402  (the plan skill's)
+import checker  # noqa: E402  (the plan skill's)
+import envelope  # noqa: E402
 import folder  # noqa: E402
 
 ROOT_FILE = "HANDOFF.md"

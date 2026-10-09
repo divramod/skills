@@ -1,6 +1,9 @@
 ---
+type: Research
+schema: 1
 id: {id}
 title: {title}
+description: {description}  # one sentence, at most 200 characters
 question: >-
   {question}
 status: planned  # planned | researching | verifying | done | decided | abandoned | superseded

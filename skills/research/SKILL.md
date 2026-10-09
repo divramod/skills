@@ -7,7 +7,8 @@ description: Research a question into a cited research doc, research/<NNNN>-<slu
 
 One folder per research, `research/<NNNN>-<slug>/`: `research.md` plus its helper files (notes, data, scripts), so
 the folder is self-contained. `research.md` follows [templates/research.md](templates/research.md): YAML front matter
-(the metadata hal2 lists and filters), then the overview on one screen (**Answer, Key findings, Recommendation,
+(the metadata hal2 lists and filters; `new` writes the record envelope `type: Research`, `schema: 1` and a
+`description` of at most 200 characters, a doc without `type` is legacy), then the overview on one screen (**Answer, Key findings, Recommendation,
 Decision**), then the details under fixed H2 names in the template's order. Required H2s: Answer, Key findings,
 Recommendation, Decision, Question and scope, Method, Findings, Open questions, Sources, Log; optional: Background,
 Options, Comparison, Assumptions and what would change our mind, Risks, Next steps, Evidence. Other headings are
@@ -49,7 +50,7 @@ and leave the commit to the user.
 | `/research new <title>` | `/research n <title>` | `python3 $S/research.py new "<title>" [--question ...] [--plan ...] [--origin ...] [--kind ...]`: scaffold only, report the path |
 | `/research`, `/research status [<n>]` | `/research s [<n>]` | `research.py status <n>` (no `<n>`: `list`): title, status, answer, confidence, claims, stale, problems |
 | `/research list` | `/research l` | `research.py list`: a table of number, title, status, confidence, stale |
-| `/research check` | `/research c` | `research.py check` (`--branches`: numbers across every branch too): report problems, fix what is ours |
+| `/research check` | `/research c` | `research.py check` (`--branches`: numbers across every branch too), then hal2's records checker on the typed docs (`$HAL2_CLI_RECORDS`, else `hal2-cli-records` on PATH; without it the one line `records unchecked: hal2-cli-records is not installed`, advisory): report problems, fix what is ours |
 | `/research verify <n>` | `/research v <n>` | [re-run the verification pass](#verify) on doc `<n>` |
 | `/research revisit <n>` | `/research r <n>` | [re-check the signposts](#revisit) of doc `<n>` and log the result |
 | `/research help` | `/research h` | print this table and stop |

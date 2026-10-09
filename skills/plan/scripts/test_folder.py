@@ -1,5 +1,11 @@
-"""The plan folder in the record format: what `plan.py new` writes, and `plan.py check` (hal2 plan 0206 step 8)."""
+"""The plan folder in the record format: what `plan.py new` writes, and `plan.py check` (hal2 plan 0206 step 8),
+which runs hal2's records checker (hal2 plan 0214 step 6): every template `new` writes passes it.
+
+The checker is `$HAL2_CLI_RECORDS`, else `hal2-cli-records` on PATH; the tests that need it are skipped without it.
+hal2 tests its rules (one seeded fault per rule); here only that plan.py runs it and prints its problems.
+"""
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -11,8 +17,12 @@ HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "plan.py"
 sys.path.insert(0, str(HERE))
 
+import checker  # noqa: E402
 import envelope  # noqa: E402
 import folder  # noqa: E402
+
+CHECKER = checker.binary()
+needs_checker = unittest.skipUnless(CHECKER, f"{checker.NAME} is not installed and ${checker.ENV} is unset")
 
 ENTRY = """
 ## D1 · 2026-10-08 · user · in-force
@@ -31,9 +41,9 @@ class FolderTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_plan(self, *args) -> subprocess.CompletedProcess:
+    def run_plan(self, *args, env: dict | None = None) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, str(SCRIPT), "--root", str(self.root), *args],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=env)
 
     def new(self, *args) -> Path:
         result = self.run_plan("new", *args)
@@ -50,6 +60,7 @@ class FolderTest(unittest.TestCase):
         self.assertIn(old, text)
         path.write_text(text.replace(old, new, 1))
 
+    @needs_checker
     def test_new_writes_the_four_records_and_they_are_valid(self):
         plan = self.new("Deploy the hub", "--goal", "The hub runs on hal9k. Then the nodes follow.")
         self.assertEqual(sorted(p.name for p in plan.parent.iterdir()),
@@ -59,6 +70,7 @@ class FolderTest(unittest.TestCase):
         self.assertEqual(meta["description"], "The hub runs on hal9k.")
         self.assertEqual(self.check(), (0, "ok: 4 records\n"))
 
+    @needs_checker
     def test_every_kind_of_new_plan_is_valid(self):
         self.new("Compare queues", "--research")
         self.new("Many hands", "--parallel")
@@ -67,11 +79,13 @@ class FolderTest(unittest.TestCase):
         self.run_plan("grilled", "--auto")
         self.assertEqual(self.check(), (0, "ok: 16 records\n"))
 
+    @needs_checker
     def test_a_long_goal_is_cut_to_a_description_of_200_characters(self):
         plan = self.new("Long", "--goal", "word " * 80)
         self.assertLessEqual(len(envelope.get(plan.read_text(), "description")), 200)
         self.assertEqual(self.check()[0], 0)
 
+    @needs_checker
     def test_a_legacy_plan_passes_and_gets_no_scaffold(self):
         legacy = self.root / "plans" / "0001-old" / "plan.md"
         legacy.parent.mkdir(parents=True)
@@ -80,6 +94,7 @@ class FolderTest(unittest.TestCase):
         self.assertEqual(self.run_plan("scaffold", "--plan", "1").returncode, 0)
         self.assertEqual([p.name for p in legacy.parent.iterdir()], ["plan.md"])
 
+    @needs_checker
     def test_the_last_step_done_closes_the_ledgers_and_the_handoff(self):
         plan = self.new("Tiny")
         for step in ("1", "2"):
@@ -101,13 +116,14 @@ class FolderTest(unittest.TestCase):
         self.run_plan("status", "2", "next")
         self.assertEqual(handoff.stat().st_mtime, 1_000_000_000)
 
+    @needs_checker
     def test_scaffold_writes_a_missing_ledger_and_keeps_the_others(self):
         plan = self.new("Tiny")
         (plan.parent / "decisions.md").write_text((plan.parent / "decisions.md").read_text() + ENTRY)
         (plan.parent / "questions.md").unlink()
         code, out = self.check()
         self.assertEqual(code, 1)
-        self.assertIn("questions.md: missing or without front matter", out)
+        self.assertIn("questions.md is missing or without front matter", out)
         self.assertEqual(self.run_plan("scaffold").returncode, 0)
         self.assertIn("i do the mtm next morning", (plan.parent / "decisions.md").read_text())
         self.assertEqual(self.check(), (0, "ok: 4 records\n"))
@@ -120,30 +136,31 @@ class FolderTest(unittest.TestCase):
         self.assertIn(expect, out)
         self.assertIn(f"plans/0001-tiny/{name}: ", out)
 
-    def test_an_unknown_key_fails(self):
-        self.seeded("plan.md", "landing: auto\n", "landing: auto\nowner: me\n", "unknown key `owner`")
+    @needs_checker
+    def test_a_problem_is_printed_with_its_path_and_rule(self):
+        self.seeded("plan.md", "landing: auto\n", "landing: auto\nowner: me\n", "unknown key `owner` (spec:unknown-key)")
 
-    def test_a_decisions_section_in_the_plan_fails(self):
-        self.seeded("plan.md", "## Notes", "## Decisions\n\n- one\n\n## Notes", "section `## Decisions` is not allowed")
+    @needs_checker
+    def test_a_problem_outside_the_plans_folder_is_not_the_plan_check_s(self):
+        self.new("Tiny")
+        (self.root / "research" / "0001-x").mkdir(parents=True)
+        (self.root / "research" / "0001-x" / "research.md").write_text("---\ntype: Research\nschema: 1\n---\n# x\n")
+        self.assertEqual(self.check(), (0, "ok: 5 records\n"))
 
-    def test_a_status_that_does_not_fit_the_step_table_fails(self):
-        self.seeded("plan.md", "status: open", "status: done", "does not fit the step table")
+    def test_without_the_checker_the_records_are_unchecked_and_pass(self):
+        """The advisory path: no binary, one line, exit 0 (also with a broken plan)."""
+        plan = self.new("Tiny")
+        self.edit(plan, "landing: auto\n", "landing: auto\nowner: me\n")
+        env = {**os.environ, checker.ENV: str(self.root / "no-such-binary")}
+        result = self.run_plan("check", env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "ok: no plan number is used twice\n" + checker.NOT_INSTALLED + "\n")
+        env = {k: v for k, v in os.environ.items() if k != checker.ENV}
+        env["PATH"] = "/usr/bin:/bin"  # git, never hal2-cli-records
+        result = self.run_plan("check", str(plan.parent), env=env)
+        self.assertEqual((result.returncode, result.stdout), (0, checker.NOT_INSTALLED + "\n"))
 
-    def test_a_user_decision_without_its_words_fails(self):
-        self.seeded("decisions.md", "-->\n", "-->\n" + ENTRY.replace('**Words:** "i do the mtm next morning"\n', ""),
-                    "D1: decided by `user`, but no **Words:** line")
-
-    def test_an_answered_question_without_its_answer_fails(self):
-        self.seeded("questions.md", "-->\n", "-->\n\n## Q1 · 2026-10-08 · agent · answered 2026-10-08\n\n**Q:** Which?\n",
-                    "Q1: `answered` does not fit its **A:** line")
-
-    def test_a_handoff_with_a_machine_local_fact_fails(self):
-        self.seeded("handoff.md", "## Start with", "## Watch out\n\n- The build runs in pane %54.\n\n## Start with",
-                    "machine-local fact (a pane id)")
-
-    def test_a_dead_link_fails(self):
-        self.seeded("plan.md", "[handoff.md](handoff.md)", "[handoff.md](hand-off.md)", "dead link: hand-off.md")
-
+    @needs_checker
     def test_a_named_folder_is_checked_alone_and_resolves_its_links_in_the_repository_around_it(self):
         """An example plan folder laid out like a repository (hal2 plan 0202's examples/plans/<plan>/) links real
         files of the repository that holds it."""
@@ -159,7 +176,8 @@ class FolderTest(unittest.TestCase):
         self.edit(copy / "plan.md", "status: open", "status: abandoned")
         code, out = self.check(str(copy))
         self.assertEqual(code, 1)
-        self.assertIn("status `open` but the plan is `abandoned`", out)
+        self.assertIn("plans/0001-tiny/examples/plans/0001-tiny/", out)
+        self.assertIn("abandoned", out)
         self.assertEqual(self.run_plan("check", str(self.root / "docs")).returncode, 1)
 
 

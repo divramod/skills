@@ -34,11 +34,14 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
                                                            default branch after the landing) from the template;
                                                            the shotfile defaults to the title's first word
   plan.py check [<plan folder>...]                         the plan-folder check: exit 1 when a plan number is
-                                                           used twice or a record of a plan folder (plan.md,
-                                                           decisions.md, questions.md, handoff.md) breaks its
-                                                           form; one problem per line; legacy plans pass; named
-                                                           folders: only those, their links resolved in the
-                                                           repository that holds them
+                                                           used twice or hal2's records checker (`hal2-cli-records
+                                                           check --json`, checker.py: $HAL2_CLI_RECORDS, else on
+                                                           PATH) finds a problem in a plan folder's records
+                                                           (plan.md, decisions.md, questions.md, handoff.md); one
+                                                           problem per line; legacy plans pass; named folders: only
+                                                           those (an example folder laid out like a repository:
+                                                           `--folder` of the tree holding its plans/); without the
+                                                           checker one line `records unchecked: ...`, exit 0
   plan.py scaffold [--plan <slug>]                         write the ledgers and the handoff a plan in the record
                                                            format lacks (never overwrites one)
   plan.py -g ...                                           the same on the global plans folder (hal2's
@@ -77,6 +80,7 @@ is the first open step to run before the landing (an after-landing step only whe
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -84,6 +88,7 @@ import sys
 import time
 from pathlib import Path
 
+import checker
 import folder
 import parallel
 import plan_number
@@ -642,8 +647,9 @@ def main(argv: list[str]) -> int:
 
 
 def run_check(root: Path, folders: list[Path]) -> int:
-    """The plan-folder check (hal2's decision record `record-formats`, rule 7): every record of the named plan
-    folders, or of every plan with the plan numbers. A plan.md without front matter is legacy and passes."""
+    """The plan-folder check: the plan numbers, then hal2's records checker (checker.py) over the plan folders, or
+    over the named ones only. A plan.md without front matter is legacy and passes; without the checker the records
+    are unchecked (one line, no failure)."""
     code = 0
     if folders:
         missing = [str(f) for f in folders if not (f / MAIN).is_file()]
@@ -651,20 +657,41 @@ def run_check(root: Path, folders: list[Path]) -> int:
             raise PlanError(f"no plan folder (a folder holding {MAIN}): {', '.join(missing)}")
     else:
         code = plan_number.main(["--root", str(root), "check"])
-        folders = [p.parent.relative_to(root) for p in plan_files(root) if p.name == MAIN]
-        folders = [root / f for f in folders]
-    count, problems = folder.check([f.resolve() for f in folders], base_of(folders[0], root) if folders else root)
-    shown = [p.replace(str(root.resolve()) + "/", "") for p in problems]
-    print("\n".join(shown) if shown else f"ok: {count} records")
+    try:
+        found = check_records(root, [f.resolve() for f in folders])
+    except checker.CheckerError as error:
+        print(error, file=sys.stderr)
+        return error.code
+    if found is None:
+        print(checker.NOT_INSTALLED)
+        return code
+    count, problems = found
+    print("\n".join(problems) if problems else f"ok: {count} records")
     return 1 if problems else code
 
 
-def base_of(path: Path, root: Path) -> Path:
-    """The repository a folder's links resolve in when they leave the folder's own tree: the one that holds it."""
-    try:
-        return find_root(path.resolve())
-    except PlanError:
-        return root
+def check_records(root: Path, folders: list[Path]) -> tuple[int, list[str]] | None:
+    """The checker's records and problems of the plans folder, or of the named plan folders: a folder of this
+    repository is checked with the repository (its .hal/records.toml applies), any other (an example folder laid
+    out like a repository, `<tree>/plans/<plan>/`) with `--folder <tree>`. None without the checker."""
+    real = root.resolve()
+    if not folders:
+        result = checker.check(repo=real)
+        if result is None:
+            return None
+        return result["records"], [checker.line(p) for p in result["problems"] if p["path"].startswith(f"{PLANS}/")]
+    count, problems, runs = 0, [], {}
+    for path in folders:
+        runs.setdefault(path.parent.parent, []).append(path.name)
+    for tree, names in runs.items():
+        result = checker.check(repo=real) if tree == real else checker.check(folder=tree)
+        if result is None:
+            return None
+        count += result["records"]
+        prefix = "" if tree == real else f"{os.path.relpath(tree, real)}/"
+        problems += [checker.line(p, prefix) for p in result["problems"]
+                     if any(p["path"].startswith(f"{PLANS}/{name}/") for name in names)]
+    return count, problems
 
 
 # What a subservant (a slot with plans/LEAD) may not do: plan.md is the lead's (hal2 shows the newest copy).

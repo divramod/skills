@@ -4,7 +4,7 @@ The duty `trains` of the [farmer](../../SKILL.md), opted in by roles/farmer/ROLE
 every round everything waiting behind the current run becomes one train, so the gates run once (the user,
 2026-10-06: "its a duty of the farmer to always create the merge train for all the queued worktrees behind the
 current run. in the best case, as now, it combines all waiting worktrees into one train."; hal2's
-`.adr/merge-queue-policy.md` rule 3). Its rule-based part runs as code in the tick: `trains.py`
+[merge-queue-policy](https://github.com/divramod/hal2/blob/main/.adr/merge-queue-policy.md) rule 3). Its rule-based part runs as code in the tick: `trains.py`
 (`python3 $S/trains.py plan --repo <main>` shows what it would do now, sending nothing), the test is `trial.py`'s
 trial merge. What needs judgment wakes the farmer session with [instructions/trains.md](../../instructions/trains.md).
 The by-hand practice it mirrors: [merge-to-main-boss › Merge trains](../merge-to-main-boss/SUBSKILL.md#merge-trains).

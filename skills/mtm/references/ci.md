@@ -1,7 +1,8 @@
 # Landing through CI
 
 A repository whose default branch (or this worktree's `HEAD`) has `.github/workflows/land.yml` lands through
-GitHub Actions (hal2 plan 0131, `.adr/landings-on-github-actions.md` in hal2). Nothing is tested on this machine:
+GitHub Actions (hal2's plan 0131 and its decision record
+[landings-on-github-actions](https://github.com/divramod/hal2/blob/main/.adr/landings-on-github-actions.md)). Nothing is tested on this machine:
 `hal2-cli-git worktree merge-to-main` takes the worktree's turn in the merge queue, merges the default branch in,
 builds the `--no-ff` candidate, pushes the branch and `land/<slot>`, opens or updates the landing's pull request
 (`land/<slot>` → the default branch) and waits until `land.yml` has tested the candidate: green, its `merge` job

@@ -110,12 +110,21 @@ def home_file(root: Path, home: str, plan: Path | None) -> Path | None:
 
 
 def check_record(root: Path, at: dict) -> list[str]:
-    """The problems of the plan folder whose ledger is the decisions index (the plan skill's check)."""
-    plan = root / at["plan"]
-    _, problems = where.folder.check([plan.parent], root)
+    """The problems of the plan folder whose ledger is the decisions index: hal2's records checker over it (the plan
+    skill's checker.py, as `plan.py check <folder>`); without the checker one advisory line, no problem."""
+    folder = str(Path(at["plan"]).parent) + "/"
+    try:
+        found = where.checker.check(repo=root)
+    except where.checker.CheckerError as error:
+        return [str(error)]
+    if found is None:
+        print(where.checker.NOT_INSTALLED)
+        problems = []
+    else:
+        problems = [where.checker.line(p) for p in found["problems"] if p["path"].startswith(folder)]
     if not (root / at["file"]).is_file():
         problems.append(f"{at['file']}: missing (where.py --stamp writes it)")
-    return [p.replace(str(root) + "/", "") for p in problems]
+    return problems
 
 
 def holds(quotes: list[str], files: list[Path]) -> bool:

@@ -12,9 +12,10 @@ Only what really needs the user reaches them, batched.
 **Only the user starts the farmer** (`/farmer start` in the farmer slot's session). No other session, skill, hook or
 job starts or restarts it; its timer and its `/farmer handoff` + `/clear` continuation are the user's start carried on.
 It runs in **its own worktree slot `farmer-<repo>`** (`~/.hal/git/worktree/<repo>/farmer-<repo>`, branch
-`farmer-<repo>`, `<repo>` being origin's repository name, else the main checkout's folder: hal2's
-`.adr/roles-folder.md`; start the session with `hal2-cli-git worktree run farmer --agent claude`, the short name finds
-the slot), one per repository, never in the main checkout or a numbered slot; a slot still named `farmer` is moved
+`farmer-<repo>`, `<repo>` being origin's repository name, else the main checkout's folder: hal2's decision record
+[roles-folder](https://github.com/divramod/hal2/blob/main/.adr/roles-folder.md); start the session with
+`hal2-cli-git worktree run farmer --agent claude`, the short name finds the slot), one per repository, never in the
+main checkout or a numbered slot; a slot still named `farmer` is moved
 with `python3 $S/farmer.py migrate`. **It never changes its own branch except committing the user's `roles/farmer/ROLE.md`**: every change is
 made by a servant it starts or by the session whose work it concerns.
 

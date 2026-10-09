@@ -147,8 +147,9 @@ The queue is reserved now: work through this without pausing, every other landin
    `plans/CURRENT_PLAN` to the root `.gitignore` and commit that as its own change.
 4. **The plan folders are valid**: `python3 <plan-skill-dir>/scripts/plan.py check` (the `plan` skill next to
    this one) prints one line per problem of a plan folder's records (plan.md, decisions.md, questions.md,
-   handoff.md in the record format; a plan without front matter is legacy and passes) and exits 1. Fix what this
-   worktree's plans show (an open question in a closed ledger is answered or `dropped`, a promoted decision links
+   handoff.md in the record format; a plan without front matter is legacy and passes) and exits 1. It runs hal2's
+   records checker; where `hal2-cli-records` is not installed it prints `records unchecked: ...` and passes. Fix
+   what this worktree's plans show (an open question in a closed ledger is answered or `dropped`, a promoted decision links
    its record, a status fits its step table) and commit it with the rest; a problem in a plan this worktree did not
    touch is named in the report, never fixed in passing. A plan's `handoff.md` is work: commit it.
 5. Commit with messages in the repo's style (`git log --oneline -10`) that say why; one commit per independent

@@ -97,9 +97,12 @@ four, each with a front matter envelope: `type`, `schema`, `title`, `description
 
 A plan has no `## Decisions` section: an autogrill decision is a `D<n>` entry by `agent` with its **Why**, a user's
 answer an entry with their quoted **Words**, and **Pre-authorized** names its entries by number. `python3 $S/plan.py
-check` validates every plan folder (keys, status values, sections, entry headings, the links between questions,
-decisions and decision records, dead links, a status against its step table) and prints one problem per line; run
-it after writing a ledger entry, and `/handoff` and `/mtm` run it too. `plan.py check <folder>...` checks the named
+check` validates every plan folder with hal2's one records checker, `hal2-cli-records check --json` (keys, status
+values, sections, entry headings, the links between questions, decisions and decision records, dead links, a status
+against its step table) and prints one problem per line, each ending in its rule; run it after writing a ledger
+entry, and `/handoff` and `/mtm` run it too. The checker is `$HAL2_CLI_RECORDS`, else `hal2-cli-records` on PATH;
+without it the check is advisory: it prints `records unchecked: hal2-cli-records is not installed` and passes (the
+plan numbers are still checked), and hal2's landing gate checks the records. `plan.py check <folder>...` checks the named
 plan folders only, `plan.py scaffold` writes a ledger or handoff that is missing. A `plan.md` without front matter
 is a **legacy plan** (every plan made before 2026-10-08; `format` in the JSON): it passes the check untouched, keeps
 its `Landing:`, `Grilled:` and `Finished:` lines and its **Decisions** section, and is never migrated in passing.
@@ -465,7 +468,7 @@ interrupted) by the user (one your own shell tool's time limit ended is rerun: t
         hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
         ```
         `already-running` is fine: hal2's guard already started the job (it stops a session above the threshold at
-        its next tool, research 0010 in hal2): just end your turn. When it fails to start otherwise (autoclear
+        its next tool, hal2's [research 0010](https://github.com/divramod/hal2/blob/main/research/0010-autoclear-watcher/research.md)): just end your turn. When it fails to start otherwise (autoclear
         disabled, ...), say so and fall back to the next point.
      A tool denied with "hal2: context at N% ... run /handoff now" is that guard: stop the step where it is, do
      points 1-2 (only the hand-off's tools run now; name in the handoff what was cut off), then end your turn: the

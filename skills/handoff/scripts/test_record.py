@@ -10,6 +10,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PLAN = HERE.parents[1] / "plan" / "scripts" / "plan.py"
+sys.path.insert(0, str(PLAN.parent))
+import checker  # noqa: E402  (the plan skill's: hal2's records checker, hal2 plan 0214 step 6)
+
+needs_checker = unittest.skipUnless(checker.binary(), f"{checker.NAME} is not installed and ${checker.ENV} is unset")
 ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
 LEGACY = "# Plan 0001: old\n\n## Decisions\n\n- none\n\n| # | Step | Status |\n|---|---|---|\n| 1 | x | next |\n"
@@ -65,6 +69,11 @@ class RecordHandoffTest(unittest.TestCase):
         (self.repo / "plans" / "CURRENT_PLAN").write_text("0001-old\n")
         return plan
 
+    def checked(self) -> str:
+        """`decisions.py --check`'s verdict, its advisory line (no checker installed) left out."""
+        lines = self.script("decisions.py", "--check").stdout.strip().split("\n")
+        return "\n".join(line for line in lines if line != checker.NOT_INSTALLED)
+
     def where(self) -> dict:
         return json.loads(self.script("where.py", "--json").stdout)
 
@@ -96,7 +105,7 @@ class RecordHandoffTest(unittest.TestCase):
         text = handoff.read_text()
         self.assertIn(f'\nat: "{sha}"\n', text)
         self.assertIn("\nbranch: main\n", text)
-        self.assertEqual(self.script("decisions.py", "--check").stdout.strip(), "ok")
+        self.assertEqual(self.checked(), "ok")
 
     def test_since_reads_the_plans_handoff_and_its_at(self):
         self.new_plan()
@@ -114,13 +123,14 @@ class RecordHandoffTest(unittest.TestCase):
         plan = self.new_plan()
         ledger = plan.parent / "decisions.md"
         ledger.write_text(ledger.read_text() + ENTRY)
-        self.assertEqual(self.script("decisions.py", "--check").stdout.strip(), "ok")
+        self.assertEqual(self.checked(), "ok")
         listed = json.loads(self.script("decisions.py", "--json").stdout)["decisions"]
         texts = [d["text"] for d in listed if d["from"] == "decisions.md"]
         self.assertEqual(len(texts), 2, texts)
         self.assertIn('Nothing lands tonight. Words: "i do the mtm next morning', texts[0])
         self.assertTrue(texts[1].startswith("D3 2026-10-08 (agent, in-force): The handoff lives in the plan folder."))
 
+    @needs_checker
     def test_check_names_a_broken_ledger_entry(self):
         plan = self.new_plan()
         ledger = plan.parent / "decisions.md"
