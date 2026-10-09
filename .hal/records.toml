@@ -1,0 +1,13 @@
+# The skills repository's records: what `hal2-cli-records check` holds it to (hal2 plan 0214 step 20; the keys:
+# `hal2-cli-records --help`, the format: hal2's .adr/record-formats.md).
+
+# The oldest checker allowed: an older hal2-cli-records exits 3 naming this version.
+checker = ">=0.1.0"
+
+# The shaped kinds this repository opts into (the typed ones are always checked). Not `agent-instructions`: this
+# AGENTS.md is not yet in its shape (hal2 plan 0214 step 14).
+kinds = ["skill"]
+
+# The shortcut skills `c` and `h`, generated from aliases.json by scripts/gen-aliases.py: a call of another skill,
+# without a table of calls of their own.
+exclude = ["skills/c/SKILL.md", "skills/h/SKILL.md"]

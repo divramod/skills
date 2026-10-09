@@ -10,6 +10,14 @@ writing and link dates. Your job is the judgment: pick the mode, read, write the
 content. Every command prints what it did; JSON goes to stdout and progress to stderr. Paths like `subskills/…` and
 `templates/…` are relative to this skill's folder.
 
+| Call | Does |
+|---|---|
+| `/tell <url-or-path>` | summarize it into a note (steps 1-6) |
+| `/tell <url-or-path> <url-or-path>…` | a summary of each and a digest across them (step 7) |
+| `/tell <topic>`, `/tell topic:<words>` | find what is relevant about the topic, summarize it, write the topic's digest |
+| `/tell` | open the most recent summary (step 0) |
+| `/tell h`, `/tell help` | print this table and stop |
+
 ## 0. No input given
 
 Open the most recent summary and stop:
