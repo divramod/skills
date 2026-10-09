@@ -192,8 +192,12 @@ class PlanTest(unittest.TestCase):
         info = self.plan("uat")
         uat = self.root / info["uat"]
         text = uat.read_text()
-        self.assertTrue(text.startswith(f"# UAT {info['slug'][:4]}: plugin-plan 3 tabs\n"))
-        self.assertIn("\nShotfile: plugin-plan\n", text)
+        self.assertTrue(text.startswith("---\ntype: UAT\nschema: 1\ntitle: \"plugin-plan 3 tabs\"\n"), text)
+        self.assertIn("\nstatus: active\n", text)
+        self.assertIn(f"\nplan: {int(info['slug'][:4])}\n", text)
+        self.assertIn(f"\n# UAT {info['slug'][:4]}: plugin-plan 3 tabs\n", text)
+        self.assertIn("\nshotfile: plugin-plan\n", text)
+        self.assertNotIn("Shotfile:", text, "the typed form: the envelope holds the header")
         self.assertEqual(info["uat_checks"], ["U1"])
         uat.write_text(text + "\n## U2 Second\nSteps:\n1. x\n\nExpected: y\n")
         self.assertEqual(self.plan("uat", "--shotfile", "other")["uat_checks"], ["U1", "U2"])  # never overwritten

@@ -93,6 +93,7 @@ import time
 from pathlib import Path
 
 import checker
+import envelope
 import folder
 import parallel
 import plan_number
@@ -473,17 +474,22 @@ def uat_checks(path: Path) -> list[str]:
 
 
 def write_uat(path: Path, shotfile: str = "") -> Path:
-    """Scaffold the plan's `uat.md` from the template (never overwrites one)."""
+    """Scaffold the plan's `uat.md` from the template, typed (`type: UAT`, hal2's spec `uat`; never overwrites one)."""
     if path.name != MAIN:
         raise PlanError("a flat plan file has no folder for its uat.md: move it into plans/<NNNN>-<slug>/")
     uat = path.parent / UAT
     if not uat.exists():
         text = path.read_text()
         title = next((l.split(":", 1)[1].strip() for l in text.splitlines() if l.startswith("# Plan ")), slug_of(path))
-        uat.write_text(UAT_TEMPLATE.read_text().format(
-            number=slug_of(path)[:4], title=title, slug=slug_of(path), date=dt.date.today().isoformat(),
-            shotfile=shotfile or feature_of(title),
-        ))
+        title = " ".join(title.split())
+        number = slug_of(path)[:4]
+        feature = shotfile.removesuffix(".md") or feature_of(title)
+        out = UAT_TEMPLATE.read_text().format(
+            number=number, id=int(number), title=title, quoted_title=envelope.quote(title),
+            description=envelope.quote(f"The checks a person runs by hand on the default branch after plan {number} landed."),
+            date=dt.date.today().isoformat(), shotfile=feature,
+        )
+        uat.write_text(out if feature else out.replace("shotfile: \n", ""))
     return uat
 
 

@@ -80,6 +80,23 @@ class FolderTest(unittest.TestCase):
         self.assertEqual(self.check(), (0, "ok: 16 records\n"))
 
     @needs_checker
+    def test_the_scaffolded_uat_is_typed_and_valid_beside_a_typed_and_a_legacy_plan(self):
+        """Hal2 plan 0214 step 11: `uat.md` is the typed kind UAT; a legacy uat.md stays legacy, never migrated."""
+        self.new('A "quoted" title: with [brackets]')
+        self.assertEqual(self.run_plan("uat").returncode, 0)
+        legacy = self.root / "plans" / "0002-old" / "plan.md"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("# Plan 0002: old\n\n| # | Step | Status |\n|---|---|---|\n| 1 | x | next |\n")
+        self.assertEqual(self.run_plan("uat", "--plan", "0002-old", "--shotfile", "_main.md").returncode, 0)
+        uat = (legacy.parent / "uat.md").read_text()
+        self.assertEqual((envelope.get(uat, "type"), envelope.get(uat, "plan"), envelope.get(uat, "shotfile")),
+                         ("UAT", 2, "_main"))
+        (self.root / "plans" / "0003-older").mkdir()
+        (self.root / "plans" / "0003-older" / "plan.md").write_text("# Plan 0003: older\n")
+        (self.root / "plans" / "0003-older" / "uat.md").write_text("# UAT 0003: older\n\nPlan: 0003-older\n")
+        self.assertEqual(self.check(), (0, "ok: 6 records\n"))
+
+    @needs_checker
     def test_a_long_goal_is_cut_to_a_description_of_200_characters(self):
         plan = self.new("Long", "--goal", "word " * 80)
         self.assertLessEqual(len(envelope.get(plan.read_text(), "description")), 200)
