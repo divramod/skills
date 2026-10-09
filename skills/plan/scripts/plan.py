@@ -79,7 +79,8 @@ The JSON's `landing` is the plan's `Landing:` line (auto|manual; none for a glob
 `after_landing` says its done-when starts with "after the landing" (or the older "after the user's `/mtm`"), `next`
 is the first open step to run before the landing (an after-landing step only when no other is open), `land` is
 `ready` when no open step must run before the landing (`wait` otherwise; `manual`, `none` from `landing`), and
-`problems` lists after-landing steps followed by steps that are not.
+`problems` lists after-landing steps followed by steps that are not. `current` and `status` add `switch`: the
+`next` step's model and effort when they differ from the running Claude Code session's (session.py), else null.
 """
 import argparse
 import datetime as dt
@@ -97,6 +98,7 @@ import envelope
 import folder
 import parallel
 import plan_number
+import session
 
 PLANS = Path("plans")
 POINTER = "CURRENT_PLAN"
@@ -677,6 +679,9 @@ def main(argv: list[str]) -> int:
             result = describe(root, path)
             if written:
                 result["step_file"] = str(written.relative_to(root))
+        if args.command in ("current", "status"):
+            result["switch"] = session.switch_for(result["next"], session.current(
+                os.getppid(), Path.home() / ".claude" / "settings.json"))
     except (PlanError, parallel.ParallelError) as error:
         print(f"plan.py: {error}", file=sys.stderr)
         return 1

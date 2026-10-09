@@ -285,7 +285,7 @@ no approval, no plan mode and no per-step grill offer until the plan's end. What
 2. A parallel plan (`parallel` in the JSON) runs as [Run a parallel plan](#run-a-parallel-plan) says; in a
    subservant's slot (`lead` in the JSON) only its one step runs, as [Work as a subservant](#work-as-a-subservant)
    says. Otherwise, for each step, starting with the one marked `next`:
-   0. Its `model` and `effort` differ from the session's: switch first ([Model and effort per step](#model-and-effort-per-step)).
+   0. Its `model` and `effort` differ from the session's (`plan.py current`'s `switch` is not null): switch first ([Model and effort per step](#model-and-effort-per-step)), with `switch`'s values.
    1. Detail it in its `steps/<n>.md` (written when it became next; `plan.py status <n> next` writes a missing
       one): the files it touches, the approach, the tests. Use subagents (with worktree
       isolation) for independent parallel parts.
