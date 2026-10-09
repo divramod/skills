@@ -18,7 +18,8 @@ and feels on the real setup, real data, other devices). At most ~10, riskiest fi
 One `## U<n> <title>` per check; ids are never reused. Fields: Priority p1|p2|p3, Tags (comma list; `regression`
 carries a check forward to later plans of the feature), Kind scripted|explore, Open (a hal2:// deep link),
 Run (a shell command), Timebox + Charter (explore), Preconditions, Steps, Expected. `status` is this file's
-(`archived`: its checks are no longer run); the verdicts go to uat-results.jsonl beside it, never into this file. -->
+(`archived`: its checks are no longer run); the verdicts go to uat-results.jsonl beside it,
+written by the landing, never into this file. -->
 
 ## U1 <what the user checks>
 Priority: p1
