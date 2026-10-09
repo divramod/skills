@@ -76,11 +76,15 @@ works, read-only and advisory:
 6. **Regenerate and check**, then fix every line they print:
    ```bash
    $A index && $A intent     # .adr/index.md and INTENT.md's decision log: generated, never edited by hand
+   $A generated --check      # AGENTS.md's generated Rules and the other generated blocks (--write writes them)
    $A check                  # every record, the plan folders' ledgers included (the link's both sides)
    ```
-   A rule every agent must know before it reads any file also gets its line in the repository's `AGENTS.md` Rules
-   (a link and one sentence); a path-scoped rule does not: `$A for <path>` finds it.
-7. Commit the record, the index, `INTENT.md` and the ledger together (`docs(adr): <slug>: <what>`), or leave them
+   A rule every agent must know before it reads any file also gets a `rule:` key in the record's front matter (one
+   line, `MUST`, `MUST NOT`, `NEVER` or `SHOULD` in capitals, at most 200 characters, no link; `$A add ... --rule
+   "<rule>"` writes it): where `AGENTS.md`'s Rules are generated (its `<!-- generated: rules -->` block), run
+   `$A generated --write` and never edit the bullet by hand; elsewhere write the line and the record's link into
+   `AGENTS.md`'s Rules. A path-scoped rule gets none: `$A for <path>` finds it.
+7. Commit the record, the index, `INTENT.md`, `AGENTS.md` and the ledger together (`docs(adr): <slug>: <what>`), or leave them
    to the step's commit when a plan is running. Never push or land for it.
 
 ## Rules
