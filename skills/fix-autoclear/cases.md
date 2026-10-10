@@ -3,6 +3,19 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-10 · a mod's pane held the keyboard: `/clear` typed, the box stayed empty (skills wt 30, hal2 wt 43)
+
+- **Signature**: job `failed` `typing-mismatch: typed "/clear", the box showed Some("")`, repeated each attempt until
+  `attempts`; the idle screen shows the empty box and a mod's band (`s: subagents [-]`); Claude's TTY has no unread
+  input; the host's input log (before plan 0231 there was none) would show the keys arriving.
+- **Cause**: the side pane of the Claude Code mod `divramod-subagent-context` held the keyboard; one Escape gave it
+  back (farmer, 10:32). The job typed into it; the sweep skipped skills wt 30 below the threshold (34.x% shown as 35%).
+- **Fix**: hal2 plan 0231 steps 1-3: `545f85849` (Escape, `ensure_insert`, type again), `160ac8dfa` (sweep
+  `wanted_again`), `b51a1d0cb` (host input log); tests `incident_30_tests::*`, `incident_30_sweep_tests::*`,
+  `host::input_reaches_the_child_after_a_viewer_vanished_and_the_log_shows_it`. The mod is not changed (the user's repo).
+- **Would have caught it sooner**: the host's input log (keys arrived) and a check of the TTY's unread bytes: both
+  say "the input path works, the keyboard is held". Shot 19 (hal2 wt 02, `None`) is another cause: a ~22-column pane.
+
 ## 2026-10-07 · sessions the guard never covered: a queue ticket, no open plan, never idle (hal2 wt 02, 05, farmer)
 
 - **Signature**: no failed job at all. A session far over the threshold (the farmer's slot at 55 %, a carrier at

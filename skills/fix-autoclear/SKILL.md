@@ -147,6 +147,11 @@ clear). Keep this true: `$E selfcheck`.
    read back, Enter; confirmed by a `SessionStart` record, source `clear`) → `continuing` (the effort level, see
    below; then the kind's prompt, `DEFAULT_PROMPT` `/handoff c`, typed, read back, sent) → `continued`. The job
    needs no open plan (the refusal no-open-plan is gone since plan 0181; `--without-plan` does nothing).
+   **Typing gets the keyboard back** (`code/rust/libs/hal2-agents/src/autoclear/keyboard.rs`, plan 0231): when a typed
+   `/clear` or prompt reads back as nothing (`Some("")`) and the turn is over (clearing, continuing, the hand-off
+   request after an ended turn), the job presses one Escape (a mod's pane or band may hold the keyboard), `ensure_insert`,
+   and types once more; log `nothing showed: the prompt may not have the keyboard (a mod's pane?), pressing Escape`,
+   `after Escape the box reads ...`. Never on the busy path (Escape interrupts a working turn).
    **The busy path** (`code/rust/libs/hal2-agents/src/autoclear/busy.rs`, `queued.rs` and `queued_clear.rs` beside
    it, the queue read by `code/rust/libs/hal2-agents/src/scrape/queued.rs`; plan 0181): a session that is never
    idle (a farmer under a stream of messages). While the job waits for the turn's end it looks every 5 s; once it
@@ -184,6 +189,9 @@ clear). Keep this true: `$E selfcheck`.
    not the resume). S1 a turn ended above the threshold without a running job → starts the job; S13 a soft stop
    older than `grace_minutes` still working without a hand-off → the job with `--interrupt`. After `MAX_ATTEMPTS`
    (3) jobs for a session it gives up (`attempts` job record, marker `gave_up`: the guard then lets everything pass).
+   `wanted_again`: a session whose last job failed (not quiet, not `attempts`, not cancelled) is retried also below the
+   threshold (34.x% shows as 35%), counting against `MAX_ATTEMPTS`, after `RETRY_BACKOFF`; log `start (retrying a
+   failed job below the threshold, context ..., attempt n)`.
 4. **Reports and early retries** (`report.rs`, hal2-api's `apps/hal2-api/src/sweep.rs`): every 10 s (`CHECK`)
    hal2-api looks for job records failed in the last 24 h and not yet in `autoclear/reported.json`. Each runs a
    sweep round early: the first retry at once, the next 1 and 5 minutes after the previous failure
@@ -214,12 +222,18 @@ reads nothing known); `guard.log` a line per guard decision within 5 points of t
 state, plan and `skip (<why>)` or what it started, plus a line per reported failure; `reported.json` the reported
 failures and each session's shot number.
 
+**The host's input log** (`code/rust/libs/hal2-pty/src/hostlog.rs`, plan 0231): a terminal host (`t:<id>`) writes its
+input path into `<state>/agents/<id>.log` beside the host (`grep 'hal2-pty host' <id>.log`): `client <n> hello role=...`,
+`input role=<role> bytes=<count>` (never the bytes), `end: detached|connection gone|refused`, `pty write failed: ...`,
+`input thread ended`. Keys that show there but not in the box: the keyboard is held (see the traps).
+
 **Other files**: the agents' hook records `<state>/agents/<session>.json` (state, last event), the send log
 `<state>/agents/sent/<n>.jsonl` (what hal2 typed, source `autoclear`), transcripts
 `~/.claude/projects/<cwd with / as ->/<session>.jsonl`. The scraper that reads Claude's screen: `scrape.rs`
 (`claude_screen`, the input box).
 
-**Traps**: an old `~/.cargo/bin/hal2-cli-agents` (the hooks run it: check its build time against the fix); a
+**Traps**: a Claude Code mod's pane or band (`s: subagents [-]` under an empty box) holding the keyboard: keys reach the host
+and Claude's TTY (0 unread bytes) but never the box; one Escape gives it back (the job does since plan 0231); an old `~/.cargo/bin/hal2-cli-agents` (the hooks run it: check its build time against the fix); a
 Claude Code update that changes the screen (box, `-- INSERT --`, the history box's `─── History n/m ───` rule, the
 stop lines); an old `hal2-api` (the reports and early retries run in it: `hal2-api install` after installing);
 `* Waiting for API response · will retry` is Claude still working, not a failure; a short pane (hal2 never sizes it:
