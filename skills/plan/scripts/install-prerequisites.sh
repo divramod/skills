@@ -13,4 +13,8 @@ if ! command -v git >/dev/null 2>&1; then
   fi
 fi
 
+if ! command -v ps >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+  sudo apt-get install -y procps
+fi
+
 bash "$here/check-prerequisites.sh"

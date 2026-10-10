@@ -5,11 +5,12 @@
 
 Claude Code: the session is $CLAUDE_CODE_SESSION_ID, its transcript ~/.claude/projects/*/<session>.jsonl.
 Used tokens are the last main-conversation API call's input (uncached + cache read + cache write) plus its
-output, which is what the next call starts from. The window comes from --window, else $CLAUDE_CONTEXT_WINDOW,
-else the session's model: the last `/model` switch in its transcript ("Set model to `Opus 5.5 (1M context)`"),
-else the `--model` of the `claude` process running this script (hal2 starts sessions with `--model opus[1m]`),
-else $ANTHROPIC_MODEL, else the model setting in ~/.claude/settings.json; 1,000,000 for a 1M model (`[1m]`,
-"1M context"), else 200,000. When more tokens are in use than that, the window must be the 1M one.
+output, which is what the next call starts from. The window comes from --window, else session.py, which reads the
+session's live model, effort and window with their sources: $CLAUDE_CONTEXT_WINDOW, else `[1m]`/"1M context" in the
+model or a 5.x model (1,000,000 unless CLAUDE_CODE_DISABLE_1M_CONTEXT=1), else 200,000; the model is the
+transcript's last `requestedModel` or `/model` switch, else the `claude` process's `--model` (hal2 starts sessions
+with `--model opus[1m]`), else $ANTHROPIC_MODEL, else ~/.claude/settings.json. When more tokens are in use than
+the window, the window must be the 1M one.
 
 `percent` is measured against the usable window, i.e. without Claude Code's auto-compact buffer (16.5% of the
 window), exactly like the Claude Code statusline shows it; `raw_percent` is against the whole window.
@@ -24,109 +25,26 @@ the pane `%<n>` or `t:<id>` from them itself); `autoclear_reason` says why not. 
 (default `hal2-cli-agents` on the PATH).
 
 Prints JSON: {"known", "used", "window", "percent", "raw_percent", "threshold", "stop", "source", "autoclear",
-"autoclear_reason", "model_source"}. `model_source` says where the window's model came from. `stop` is true when percent >= threshold. When nothing can be measured (another agent, no transcript yet) `known` is false and
-`stop` is null: the agent judges for itself. Always exits 0 unless the arguments are wrong.
+"autoclear_reason", "model_source", "model", "effort", "sources", "plan", "run", "drift"}. `model`, `effort` and
+`sources` (where model, effort and window came from) are session.py's; `model_source` is `sources.model`. `plan` is
+the current plan (plans/CURRENT_PLAN of the repository around the working directory), `run` its `run: <model>
+<effort> <window>` (null without), `drift` the fields where the session differs from `run`, e.g. {"effort":
+{"session": "medium", "plan": "max"}} (a model compares by family, `[1m]` aside; `{}` without a plan or `run`). `stop` is true when percent >= threshold. When nothing can be measured (another
+agent, no transcript yet) `known` is false and `stop` is null: the agent judges for itself. Always exits 0 unless the arguments are wrong.
 """
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-DEFAULT_WINDOW = 200_000
-LARGE_WINDOW = 1_000_000
+import session
+
 DEFAULT_THRESHOLD = 35.0
 # Share of the window Claude Code keeps free for auto-compaction; the statusline leaves it out.
 AUTO_COMPACT_BUFFER = 0.165
-MODEL_SWITCH = re.compile(r"<local-command-stdout>Set model to (.+?)(?: and saved|</local-command-stdout>)")
-
-
-def find_transcript(session: str, projects: Path) -> Path | None:
-    matches = sorted(projects.glob(f"*/{session}.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return matches[0] if matches else None
-
-
-def last_usage(transcript: Path) -> tuple[int | None, str | None]:
-    """Tokens in context after the last main-chain assistant message (None when there is none), and the model
-    the session's last `/model` switch set (None without one)."""
-    used, model = None, None
-    with transcript.open(encoding="utf-8", errors="replace") as lines:
-        for line in lines:
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("isSidechain"):
-                continue
-            if entry.get("type") == "user":
-                content = (entry.get("message") or {}).get("content")
-                switch = MODEL_SWITCH.search(content) if isinstance(content, str) else None
-                if switch:
-                    model = switch.group(1).strip("` ")
-                continue
-            if entry.get("type") != "assistant":
-                continue
-            usage = (entry.get("message") or {}).get("usage")
-            if not usage:
-                continue
-            used = sum(int(usage.get(key) or 0) for key in (
-                "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"))
-    return used, model
-
-
-def process_model() -> str | None:
-    """The `--model` of the nearest `claude` process above this one, None when there is none or it has none."""
-    if not shutil.which("ps"):
-        return None
-    try:
-        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,args="], capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    table = {}
-    for line in out.stdout.splitlines():
-        fields = line.split(None, 2)
-        if len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit():
-            table[int(fields[0])] = (int(fields[1]), fields[2].split())
-    pid, seen = os.getpid(), set()
-    while pid in table and pid not in seen:
-        seen.add(pid)
-        ppid, args = table[pid]
-        if any(Path(arg).name == "claude" for arg in args[:2]):
-            for i, arg in enumerate(args):
-                if arg == "--model" and i + 1 < len(args):
-                    return args[i + 1]
-                if arg.startswith("--model="):
-                    return arg.split("=", 1)[1]
-            return None
-        pid = ppid
-    return None
-
-
-def session_model(switched: str | None, settings: Path) -> tuple[str, str]:
-    """The session's model and where it came from, by Claude Code's precedence."""
-    if switched:
-        return switched, "/model in the transcript"
-    model = process_model()
-    if model:
-        return model, "the session process's --model"
-    env = os.environ.get("ANTHROPIC_MODEL", "").strip()
-    if env:
-        return env, "$ANTHROPIC_MODEL"
-    try:
-        return str(json.loads(settings.read_text()).get("model", "")), str(settings)
-    except (OSError, json.JSONDecodeError, AttributeError):
-        return "", "default"
-
-
-def configured_window(model: str) -> int:
-    env = os.environ.get("CLAUDE_CONTEXT_WINDOW", "").strip()
-    if env.isdigit():
-        return int(env)
-    model = model.lower()
-    return LARGE_WINDOW if model.endswith("[1m]") or "1m context" in model else DEFAULT_WINDOW
 
 
 def autoclear_settings() -> tuple[dict | None, str]:
@@ -165,6 +83,33 @@ def agent_pane() -> str:
     return f"t:{terminal}" if terminal else ""
 
 
+def plan_run(start: Path) -> tuple[str | None, str]:
+    """The current plan's slug (plans/CURRENT_PLAN of the repository around `start`) and its `run` value
+    (front matter `run`, a legacy plan's `Run:` line); (None, "") without a current plan."""
+    import plan  # plan.py's own reading; imported here so context.py starts fast and stands alone in tests
+    try:
+        path = plan.current_path(plan.find_root(start))
+        return plan.slug_of(path), plan.header_value(path.read_text(), "Run")
+    except (plan.PlanError, OSError):
+        return None, ""
+
+
+def drift(live: dict, run: str) -> dict:
+    """The fields where the session differs from `run: <model> <effort> <window>`: {field: {"session", "plan"}}.
+    A model compares by family (`opus`, `claude-opus-5-5[1m]` and "Opus 5.5 (1M context)" are one); a field the
+    plan or the session does not name is left out."""
+    words = [w.strip("`") for w in run.split()] + ["", "", ""]
+    model, effort, window = ("" if w == "-" else w for w in words[:3])
+    out = {}
+    if model and live["model"] and session.family(model) != session.family(live["model"]):
+        out["model"] = {"session": live["model"], "plan": model}
+    if effort and live["effort"] and effort.lower() != live["effort"].lower():
+        out["effort"] = {"session": live["effort"], "plan": effort}
+    if window and window.lower() != live["window"]:
+        out["window"] = {"session": live["window"], "plan": window}
+    return out
+
+
 def measure(args: argparse.Namespace, home: Path) -> dict:
     settings, why = autoclear_settings()
     threshold = args.threshold
@@ -176,31 +121,33 @@ def measure(args: argparse.Namespace, home: Path) -> dict:
     result = {"known": False, "used": None, "window": None, "percent": None, "raw_percent": None,
               "threshold": threshold, "stop": None, "source": None,
               "autoclear": can_clear, "autoclear_reason": clear_why, "model_source": None}
-    transcript = Path(args.transcript) if args.transcript else None
+    found = None
+    session_id = args.session or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    transcript = Path(args.transcript) if args.transcript else (
+        session.find_transcript(session_id, home / ".claude" / "projects") if session_id else None)
     if transcript is None:
-        session = args.session or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
-        if not session:
-            result["source"] = "no session id ($CLAUDE_CODE_SESSION_ID unset)"
-            return result
-        transcript = find_transcript(session, home / ".claude" / "projects")
-        if transcript is None:
-            result["source"] = f"no transcript for session {session}"
-            return result
-    try:
-        used, switched = last_usage(transcript)
-    except OSError as error:
-        result["source"] = f"cannot read {transcript}: {error}"
+        result["source"] = (f"no transcript for session {session_id}" if session_id
+                            else "no session id ($CLAUDE_CODE_SESSION_ID unset)")
+    else:
+        try:
+            found = session.scan(transcript)
+        except OSError as error:
+            result["source"] = f"cannot read {transcript}: {error}"
+    live = session.values(found, home)
+    slug, run = plan_run(Path.cwd())
+    result.update(model=live["model"], effort=live["effort"], model_source=live["sources"]["model"],
+                  sources=live["sources"], plan=slug, run=run or None, drift=drift(live, run))
+    if found is None:
         return result
+    used = found["used"]
     if used is None:
         result["source"] = f"no usage recorded yet in {transcript}"
         return result
+    window = args.window or live["window_tokens"]
     if args.window:
-        window = args.window
-    else:
-        model, result["model_source"] = session_model(switched, home / ".claude" / "settings.json")
-        window = configured_window(model)
+        result["sources"]["window"] = "--window"
     if used > window:
-        window = max(window, LARGE_WINDOW)
+        window = max(window, session.LARGE_WINDOW)
     percent = round(min(100.0, 100 * used / (window * (1 - AUTO_COMPACT_BUFFER))), 1)
     result.update(known=True, used=used, window=window, percent=percent,
                   raw_percent=round(100 * used / window, 1),
