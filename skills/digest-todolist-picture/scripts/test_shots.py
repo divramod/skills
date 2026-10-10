@@ -124,12 +124,12 @@ class TestCommands(unittest.TestCase):
         other = Path(self.tmp.name) / "other"
         shutil.copytree(self.repo, other)
         cases = [{"shotfile": "main", "title": "new  idea", "body": "\nline one\n\nline two  \n"},
-                 {"shotfile": "fresh", "title": "only a title", "body": ""}]
+                 {"shotfile": "topic-fresh", "title": "only a title", "body": ""}]
         w_cli = run(["write"], [{**c, "repo": str(self.repo)} for c in cases])
         w_py = run(["write"], [{**c, "repo": str(other)} for c in cases], path=no_cli_path())
         self.assertEqual([i["via"] for i in w_cli], ["hal2-cli-shooter"] * 2)
         self.assertEqual([i["number"] for i in w_cli], [i["number"] for i in w_py])
-        for name in ("main.md", "fresh.md"):
+        for name in ("main.md", "topic-fresh.md"):  # a new shotfile needs a prefix (hal2 .adr/shotfiles.md)
             self.assertEqual((other / "shotfiles" / name).read_text(), (self.repo / "shotfiles" / name).read_text())
 
 

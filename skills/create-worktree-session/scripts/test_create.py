@@ -33,19 +33,7 @@ elif args[:2] == ["worktree", "queue"]:
     print(json.dumps({"queue": [{"repo": name, "slot": "07", "state": "held"}]}))
 elif args[:2] == ["worktree", "run"]:
     print("setup ...")
-    path = "/wt/" + args[2]
-    if os.environ.get("FAKE_WT"):  # create the worktree like hal2's ensure: an existing branch is kept
-        import subprocess
-        path = os.path.join(os.environ["FAKE_WT"], args[2])
-        lead = os.path.join(path, "plans", "LEAD")
-        with open(os.environ["FAKE_LOG"], "a") as f:  # what the agent finds when it starts
-            f.write(json.dumps(["lead-at-run", open(lead).read() if os.path.exists(lead) else None]) + "\n")
-        if not os.path.isdir(path):
-            has = subprocess.run(["git", "rev-parse", "--verify", "--quiet", "refs/heads/" + args[2]], cwd=repo,
-                                 capture_output=True).returncode == 0
-            subprocess.run(["git", "worktree", "add", "-q", path] + ([args[2]] if has else ["-b", args[2]]),
-                           cwd=repo, check=True)
-    print(json.dumps({"mode": "terminal", "pane": "t:abc", "slot": args[2], "worktree": path}))
+    print(json.dumps({"mode": "terminal", "pane": "t:abc", "slot": args[2], "worktree": "/wt/" + args[2]}))
 '''
 
 SHELL = '#!/bin/sh\n# a login shell without the login: runs the command it gets with -lc\nexec /bin/sh -c "$2"\n'
@@ -116,80 +104,21 @@ class TestCreate(unittest.TestCase):
         run = self.run_call()
         self.assertEqual(run[run.index("--prompt") + 1], "the shot")
 
-    # a parallel plan's subservant (skills plan 0013)
-
-    def git(self, *args, cwd=None) -> str:
-        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd or self.repo,
-                              capture_output=True, text=True, check=True).stdout.strip()
-
-    def with_origin(self) -> str:
-        """main and branch 02 (one commit ahead) on a bare origin; the sha of origin/02."""
-        origin = Path(self.tmp.name) / "origin.git"
-        self.git("init", "-q", "--bare", "-b", "main", str(origin))
-        self.git("commit", "-q", "--allow-empty", "-m", "main")
-        self.git("branch", "-M", "main")
-        self.git("remote", "add", "origin", str(origin))
-        self.git("push", "-q", "-u", "origin", "main")
-        self.git("checkout", "-q", "-b", "02")
-        self.git("commit", "-q", "--allow-empty", "-m", "lead work")
-        self.git("push", "-q", "origin", "02")
-        self.git("checkout", "-q", "main")
-        self.git("branch", "-D", "02")
-        self.git("remote", "set-head", "origin", "main")
-        return self.git("rev-parse", "origin/02")
+    def test_the_report_echoes_the_model_and_effort_asked_for(self):
+        out = self.run_create("--model", "opus", "--effort", "medium")
+        self.assertEqual((out["model"], out["effort"]), ("opus", "medium"))
+        self.log.unlink()
+        out = self.run_create()
+        self.assertEqual((out["model"], out["effort"]), (None, None))  # the agent's own default
 
     def test_from_starts_the_search_at_the_slot(self):
         out = self.run_create("--from", "30")
         self.assertEqual((out["slot"], out["skipped"]), ("30", []))
         self.assertIn("--from needs a slot from 01 to 99", self.refused("--from", "0"))
 
-    def test_a_subservant_slot_branches_from_base_with_the_marker(self):
-        sha = self.with_origin()
-
-        out = self.run_create("--from", "30", "--base", "origin/02", "--lead", "02 0005-big 3", "--prompt", "brief")
-
-        slot = self.wt / "30"
-        self.assertEqual((out["slot"], out["base"], out["lead"]), ("30", "origin/02", "02 0005-big 3"))
-        self.assertEqual(self.git("rev-parse", "HEAD", cwd=slot), sha)
-        self.assertEqual((slot / "plans" / "LEAD").read_text(), "02 0005-big 3\n")
-        self.assertEqual((slot / "plans" / "CURRENT_PLAN").read_text(), "0005-big\n")
-        self.assertEqual(self.git("status", "--porcelain", cwd=slot), "")  # both ignored through info/exclude
-        run = self.run_call()
-        self.assertEqual(run[run.index("--prompt") + 1], "brief")  # --lead implies --exact: no /mfm
-        self.assertEqual(self.git("rev-parse", "origin/30"), sha)  # published like hal2's ensure
-
-    def test_a_new_subservant_slot_is_marked_before_the_agent_starts(self):
-        self.with_origin()
-
-        self.run_create("--from", "30", "--base", "origin/02", "--lead", "02 0005-big 3")
-
-        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
-        self.assertIn(["lead-at-run", "02 0005-big 3\n"], calls)
-        self.assertEqual(self.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.wt / "30"), "30")
-
-    def test_a_leftover_branch_with_own_commits_is_skipped(self):
-        self.with_origin()
-        self.git("checkout", "-q", "-b", "30")
-        self.git("commit", "-q", "--allow-empty", "-m", "unlanded")
-        self.git("checkout", "-q", "main")
-        self.git("branch", "31", "main")  # a leftover whose commits are on main: free
-
-        out = self.run_create("--from", "30", "--base", "origin/02")
-
-        self.assertEqual(out["slot"], "31")
-        self.assertEqual(out["skipped"], [{"slot": "30", "why": "branch 30 holds 1 commit in neither origin/02 nor main"}])
-        self.assertEqual(self.git("rev-parse", "31"), self.git("rev-parse", "origin/02"))
-
-    def test_a_reused_clean_slot_is_reset_to_base_and_marked_before_the_start(self):
-        sha = self.with_origin()
-        self.git("worktree", "add", "-q", "-b", "30", str(self.wt / "30"))
-
-        out = self.run_create("--from", "30", "--base", "origin/02", "--lead", "02 0005-big 4", "--min-free-gb",
-                              "999999999", extra="30")
-
-        self.assertEqual(out["slot"], "30")
-        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.wt / "30"), sha)
-        self.assertEqual((self.wt / "30" / "plans" / "LEAD").read_text(), "02 0005-big 4\n")
+    def test_a_reused_clean_slot_from_30_is_taken(self):
+        out = self.run_create("--from", "30", "--min-free-gb", "999999999", extra="30")
+        self.assertEqual(out["slot"], "30")  # an existing worktree needs no free disk
 
     def test_a_new_worktree_needs_free_disk(self):
         error = self.refused("--from", "30", "--min-free-gb", "999999999")
@@ -197,21 +126,11 @@ class TestCreate(unittest.TestCase):
         self.assertIn("a new worktree needs 999999999 (--min-free-gb)", error)
         self.assertFalse(self.log.exists() and "run" in self.log.read_text())
 
-    def test_a_bad_lead_is_refused(self):
-        self.with_origin()
-        self.git("worktree", "add", "-q", "-b", "30", str(self.wt / "30"))
-
-        error = self.refused("--from", "30", "--lead", "02 0005-big", extra="30")
-
-        self.assertIn("--lead needs '<lead-slot> <plan> <step>'", error)
-
-    def test_a_bad_lead_creates_no_worktree(self):
-        self.with_origin()
-
-        error = self.refused("--from", "31", "--lead", "02 0005-big")
-
-        self.assertIn("--lead needs '<lead-slot> <plan> <step>'", error)
-        self.assertFalse((self.wt / "31").exists())
+    def test_the_subservant_flags_are_gone(self):
+        # Skills plan 0016 (D12): a plan's steps run in subagents; no slot is marked plans/LEAD any more.
+        for flag in ("--lead", "--base"):
+            error = self.refused("--from", "30", flag, "x")
+            self.assertIn(f"{flag} is gone", error)
         self.assertFalse(self.log.exists() and "run" in self.log.read_text())
 
 

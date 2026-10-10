@@ -12,7 +12,9 @@
 
 Nothing is implicit: only the duties under the front matter's `duties:` (name → cron) and the
 tasks under `## Tasks` (each `### <name>` with its `- **Cron**: <cron>` line) run, and the
-setting `notify` is required, `servant_limit` (`auto` or a number) defaults to `auto`. No roles/farmer/ROLE.md: nothing runs (exit 3).
+setting `notify` is required, `servant_limit` (`auto` or a number) defaults to `auto`, `servant_model` (an alias
+such as `opus` or a model id) to `opus` and `servant_effort` (low|medium|high|xhigh|max) to `medium`: the values a
+servant's coordinator session starts at (skills plan 0016). No roles/farmer/ROLE.md: nothing runs (exit 3).
 A cron is standard 5-field notation in local time: minute hour day-of-month month day-of-week
 (`*/15 * * * *`, `0 * * * *`, `7 9 * * *`, `0 8 * * 1-5`). An item is due when one of its fire
 times passed since it last ran. Writes only runs.jsonl in the farmer's state folder (roles/farmer/ of its slot).
@@ -33,6 +35,10 @@ import roles
 DATA = roles.OVERRIDE  # FARMER_DIR's root, else None: the farmer slot's roles/farmer/ (roles.state_dir)
 DUTIES = ("mtm", "lead", "ci", "prs", "sync", "watch", "autoclear", "trains", "prune")
 NOTIFY = ("every-round", "hourly", "daily", "never")
+# A servant's coordinator session (skills plan 0016, D15): the user's default opus medium unless ROLE.md names more.
+SERVANT_MODEL, SERVANT_EFFORT = "opus", "medium"
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+MODEL = re.compile(r"^[a-z][a-z0-9.\-]*(\[1m\])?$")
 MIN_TICK = 5
 LOOKBACK = dt.timedelta(days=8)
 RANGES = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))
@@ -165,6 +171,13 @@ def schedule(role_text: str) -> tuple[dict[str, str], dict, list[str]]:
         except ValueError as e:
             problems.append(f"{name}: {e}")
     settings = {k: fm.get(k) for k in ("servant_limit", "notify")}
+    model, effort = fm.get("servant_model"), fm.get("servant_effort")
+    settings["servant_model"] = str(model).strip() if model is not None else SERVANT_MODEL
+    settings["servant_effort"] = str(effort).strip() if effort is not None else SERVANT_EFFORT
+    if not MODEL.match(settings["servant_model"]):
+        problems.append("`servant_model:` is a model alias (`opus`, `sonnet`, ...) or id (`claude-opus-5-5`)")
+    if settings["servant_effort"] not in EFFORTS:
+        problems.append(f"`servant_effort:` is one of {', '.join(EFFORTS)}")
     if settings["servant_limit"] is None:
         settings["servant_limit"] = "auto"
     elif settings["servant_limit"] != "auto" and not str(settings["servant_limit"]).isdigit():

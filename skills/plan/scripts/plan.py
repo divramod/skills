@@ -12,7 +12,8 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
 `format` says which).
 
   plan.py new "<title>" [--goal "<goal>"] [--research] [--no-current] [--fetch]
-                                                           create the next plan from the template; its number
+                                                           create the next plan from the template (`run`: the
+                                                           session's live values, else the template's); its number
                                                            is unique across all worktrees and branches
                                                            (plan_number.py; --fetch sees other clones too);
                                                            --research: a research plan, slug <NNNN>-research-<topic>;
@@ -25,9 +26,16 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
   plan.py use <slug-or-number>                             make a plan current
   plan.py status <step> "<status>" [--plan <slug>]         set one step's Status cell; `next` also writes the
                                                            step's file steps/<step>.md from templates/step.md
-                                                           when it is missing (never overwrites; not for a
-                                                           parallel plan, whose brief is `brief`), named in the
+                                                           when it is missing (never overwrites), named in the
                                                            JSON's `step_file`
+  plan.py prompt <step> [--part k] [--model m] [--effort e] [--plan <slug>]
+                                                           print the Agent call that runs the step in one subagent
+                                                           (prompt.py): description `Plan <NNNN> row <step>: <short
+                                                           title>` (`part k` for a retry), the row's model (as its
+                                                           alias) and effort (--model, --effort override them),
+                                                           run_in_background and the prompt; refused when
+                                                           steps/<step>.md has no written `## Task` or a record
+                                                           row fails plan-steps-sized (a legacy row takes `Run:`)
   plan.py grilled [--auto] [--plan <slug>]                 set the plan's `Grilled:` line to today; --auto counts
                                                            one autogrill round: `Grilled: <date> (autogrill ×n)`,
                                                            a grill by the user adds `, grill`
@@ -45,7 +53,21 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
                                                            problem per line; legacy plans pass; named folders: only
                                                            those (an example folder laid out like a repository:
                                                            `--folder` of the tree holding its plans/); without the
-                                                           checker one line `records unchecked: ...`, exit 0
+                                                           checker one line `records unchecked: ...`, exit 0;
+                                                           then the sizing (sizing.py, rule plan-steps-sized): a
+                                                           record plan with an open row needs `run: <model>
+                                                           <effort> <window>` and in each open row a Model, Effort,
+                                                           Window and a Size at most 35% of Window (done rows and
+                                                           legacy plans pass; `current` lists them in `problems`)
+  plan.py run --sync|--check|[--model m] [--effort e] [--window w] [--plan <slug>]
+                                                           the coordinator's `run`: --sync writes the session's live
+                                                           values (session.py), --check prints {run, live, drift}
+                                                           (context.drift) and writes nothing, the flags set words
+  plan.py migrate [--plan <slug>]                          a record plan's table gets Model, Effort, Window and Size
+                                                           where missing; open rows' empty Model and Effort from the
+                                                           old `run`, Window from the model, Size `?` (the check
+                                                           names it until estimated); `run` the live values; never
+                                                           a legacy plan or a done row's values
   plan.py scaffold [--plan <slug>]                         write the ledgers and the handoff a plan in the record
                                                            format lacks (never overwrites one)
   plan.py -g ...                                           the same on the global plans folder (hal2's
@@ -55,23 +77,17 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
                                                            grilled with --plan <n>; no CURRENT_PLAN there
 
 A parallel plan (`new --parallel`; its step table has the columns `| # | Step | Needs | Touches | Who | Done when |
-Status |`, parallel.py) adds `parallel`, `running` and `ready` to the JSON, and these commands (skills plan 0013):
+Status |`, parallel.py) adds `parallel`, `running` and `ready` to the JSON, and these commands (skills plan 0013); its
+ready steps run as parallel subagents (`prompt`), never in other sessions (plan 0016):
   plan.py ready [--limit <n>] [--json]                     the steps that can start now: open, every Need done,
                                                            their Touches free (greedy in table order); --json adds
                                                            why each other open step waits
-  plan.py assign <step> <who> [--force]                    who: lead, subagent, user or slot NN (30-99); sets Who
-                                                           and `running` (a step not ready only with --force); a
-                                                           slot NN that exists gets its plans/LEAD marker; a slot
-                                                           another step holds, whose marker names other work or
-                                                           that runs a farmer servant only with --force
-  plan.py brief <step>                                     scaffold steps/<step>.md (templates/step-brief.md) and
-                                                           print the subservant's exact first prompt
-  plan.py report <step>                                    scaffold reports/<step>.md (templates/report.md)
-  plan.py reports [--no-fetch]                             the running subservants' reports arrived on origin/NN
-  plan.py watch [--interval 60] [--rounds n]               one line per newly arrived report (the lead's Monitor)
-A cell holds a literal `|` written `\\|`. In a subservant's slot (plans/LEAD: `<lead-slot> <plan> <step>`, `lead` in
-the JSON) new, status, assign, grilled, landing, uat and brief are refused: plan.md is the lead's (also with
---root <lead's checkout> when the current directory is in a marked slot).
+  plan.py assign <step> <who> [--force]                    who: lead, subagent or user (`slot NN` is refused: run
+                                                           the step as a subagent); sets Who and `running` (a step
+                                                           not ready only with --force)
+A cell holds a literal `|` written `\\|`. A slot still holding a former subservant's plans/LEAD (`<lead-slot> <plan>
+<step>`, `lead` in the JSON) refuses new, status, assign, grilled, landing, uat, scaffold, run and migrate: plan.md
+is the lead's (also with --root <lead's checkout> when the current directory is in a marked slot).
 
 Run from anywhere inside the repo, or pass --root. Prints JSON on stdout; exits 1 with a message on stderr.
 
@@ -89,14 +105,17 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import checker
+import context
 import envelope
 import folder
 import parallel
 import plan_number
+import prompt as step_prompt
+import session
+import sizing
 
 PLANS = Path("plans")
 POINTER = "CURRENT_PLAN"
@@ -246,35 +265,62 @@ def steps_table(lines: list[str]) -> tuple[int, dict[str, int]]:
     raise PlanError("no step table with columns '#', 'Step' and 'Status'")
 
 
-def run_default(text: str) -> tuple[str, str]:
-    """The plan's default model and effort: a record's `run` key, a legacy plan's `Run: <model> <effort>` line
-    (`-` for none); empty strings without it."""
-    words = [w.strip("`") for w in header_value(text, "Run").split()] + ["", ""]
-    return tuple("" if w == "-" else w for w in words[:2])
+def run_default(text: str) -> tuple[str, str, str]:
+    """The plan's `run` as model, effort and window: a record's `run` key (the coordinator's), a legacy plan's
+    `Run: <model> <effort>` line (`-` for none); empty strings for what it does not name."""
+    words = [w.strip("`") for w in header_value(text, "Run").split()] + ["", "", ""]
+    return tuple("" if w == "-" else w for w in words[:3])
 
 
-def read_steps(text: str) -> list[dict]:
-    lines = text.splitlines()
-    run_model, run_effort = run_default(text)
-    try:
-        header, cols = steps_table(lines)
-    except PlanError:
-        return []
-    steps, width = [], max(cols.values()) + 1
-    for row, line in enumerate(lines[header + 2:], 1):
-        if not line.lstrip().startswith("|"):
+def template_run() -> list[str]:
+    """The template's `run` words: what `new`, `run --sync` and `migrate` write for a value the session does not
+    name."""
+    found = re.search(r"^run: (.+)$", TEMPLATE.read_text(), re.M)
+    return (found.group(1).split() if found else []) + [""] * 3
+
+
+def or_template(words) -> list[str]:
+    return [w or t for w, t in zip(list(words) + ["", "", ""], template_run())][:3]
+
+
+def table_rows(lines: list[str]) -> tuple[int, dict[str, int], list[tuple[int, list[str]]]]:
+    """The step table's header line, its column positions and its rows as (line index, cells)."""
+    header, cols = steps_table(lines)
+    rows, width = [], max(cols.values()) + 1
+    for row, i in enumerate(range(header + 2, len(lines)), 1):
+        if not lines[i].lstrip().startswith("|"):
             break
-        cells = split_row(line)
+        cells = split_row(lines[i])
         if len(cells) < width:
             raise PlanError(f"row {row} of the step table has {len(cells)} cells, its header {width}: write a `|` "
                             "inside a cell as `\\|`")
+        rows.append((i, cells))
+    return header, cols, rows
+
+
+def read_steps(text: str) -> list[dict]:
+    """The step rows. A record plan's rows name their own Model, Effort and Window (`run` is the coordinator's); a
+    legacy plan's empty cells take its `Run:` line."""
+    lines = text.splitlines()
+    run = ("", "", "") if folder.is_record(text) else run_default(text)
+    try:
+        header, cols, rows = table_rows(lines)
+    except PlanError as error:
+        if str(error).startswith("no step table"):
+            return []
+        raise
+    steps = []
+    for _, cells in rows:
+        cell = lambda name: cells[cols[name]] if name in cols else ""
         step = {
             "number": cells[cols["#"]],
             "step": cells[cols["step"]],
-            "done_when": cells[cols["done when"]] if "done when" in cols else "",
+            "done_when": cell("done when"),
             "status": cells[cols["status"]],
-            "model": (cells[cols["model"]] if "model" in cols else "") or run_model,
-            "effort": (cells[cols["effort"]] if "effort" in cols else "") or run_effort,
+            "model": cell("model") or run[0],
+            "effort": cell("effort") or run[1],
+            "window": cell("window") or run[2],
+            "size": cell("size"),
         }
         if parallel.is_parallel(cols):
             parallel.enrich(step, cells, cols)
@@ -316,6 +362,30 @@ def problems_of(steps: list[dict]) -> list[str]:
     return problems
 
 
+def run_line(lines: list[str]) -> int | None:
+    """The index of the front matter's `run:` line, or None."""
+    if not lines or lines[0] != "---":
+        return None
+    for i, line in enumerate(lines[1:], 1):
+        if line == "---":
+            return None
+        if line.startswith("run:"):
+            return i
+    return None
+
+
+def steps_problems(text: str, label: str) -> list[str]:
+    """The `plan-steps-sized` lines of a record plan with an open row (sizing.py); a legacy plan has none."""
+    if not folder.is_record(text):
+        return []
+    lines = text.splitlines()
+    try:
+        header, cols, rows = table_rows(lines)
+    except PlanError:
+        return []
+    return sizing.problems(label, header_value(text, "Run"), run_line(lines), header, cols, rows)
+
+
 def describe(root: Path, path: Path) -> dict:
     text = path.read_text()
     steps = read_steps(text)
@@ -353,7 +423,8 @@ def describe(root: Path, path: Path) -> dict:
         "next": (before_landing or open_steps or [None])[0],
         "landing": landing,
         "land": land,
-        "problems": problems_of(steps) + (parallel.problems(steps) if extra.get("parallel") else []),
+        "problems": problems_of(steps) + (parallel.problems(steps) if extra.get("parallel") else [])
+                    + steps_problems(text, os.path.relpath(path, root)),
         "steps": steps,
         **extra,
     }
@@ -407,6 +478,7 @@ def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool 
     if parallel_plan:
         text = parallel_table(text)
     path.write_text(text)
+    set_header(path, "Run", " ".join(sizing.run_words(session.live(), template_run())))
     folder.scaffold(path, values)
     if autogenerated:
         set_header(path, "Autogenerated", f"{autogenerated}, {dt.date.today().isoformat()}")
@@ -419,16 +491,21 @@ def set_status(path: Path, step: str, status: str) -> None:
     set_cells(path, step, {"status": status})
 
 
+def size_line(row: dict) -> str:
+    """The step file's `Size: <size> of <window>` line (the row's estimated peak context and its window), empty when
+    the row names neither (a legacy row)."""
+    size, window = (row.get("size") or "").strip(), (row.get("window") or "").strip()
+    return f"Size: {size or '?'} of {window or '?'}\n" if size or window else ""
+
+
 def scaffold_step(path: Path, step: str) -> Path | None:
     """Write `steps/<step>.md` from templates/step.md when the step becomes next (hal2's record
-    plans-short-and-concise): never over an existing file, never for a flat plan (no folder) or a parallel plan
-    (its brief is `plan.py brief`). The written file, or None."""
+    plans-short-and-concise): never over an existing file, never for a flat plan (no folder). The written file,
+    or None."""
     target = path.parent / STEPS / f"{step}.md"
     if path.name != MAIN or target.exists():
         return None
     text = path.read_text()
-    if parallel.is_parallel(steps_table(text.splitlines())[1]):
-        return None
     row = next((s for s in read_steps(text) if s["number"] == step), None)
     if row is None:
         return None
@@ -436,7 +513,7 @@ def scaffold_step(path: Path, step: str) -> Path | None:
     target.write_text(STEP_TEMPLATE.read_text().format(
         number=step, title=row["step"] or f"step {step}",
         task="<what to change: the files and packages, the approach, what the step must not touch>",
-        done_when=row["done_when"] or "the step table's check"))
+        size_line=size_line(row), done_when=row["done_when"] or "the step table's check"))
     return target
 
 
@@ -611,27 +688,33 @@ def main(argv: list[str]) -> int:
                          help="plan folders to check (default: every plan's, and the plan numbers)")
     p_scaffold = sub.add_parser("scaffold")
     p_scaffold.add_argument("--plan")
+    p_run = sub.add_parser("run", help="the coordinator's `run: <model> <effort> <window>`")
+    p_run.add_argument("--plan")
+    mode = p_run.add_mutually_exclusive_group()
+    mode.add_argument("--sync", action="store_true", help="write the session's live values (session.py) into run")
+    mode.add_argument("--check", action="store_true", help="compare run with the live values: {run, live, drift}")
+    p_run.add_argument("--model")
+    p_run.add_argument("--effort", choices=sizing.EFFORTS)
+    p_run.add_argument("--window", choices=list(sizing.WINDOWS))
+    p_migrate = sub.add_parser("migrate", help="give a record plan the columns Model, Effort, Window and Size")
+    p_migrate.add_argument("--plan")
     p_ready = sub.add_parser("ready", help="a parallel plan's steps that can start now")
     p_ready.add_argument("--plan")
     p_ready.add_argument("--limit", type=int)
     p_ready.add_argument("--json", action="store_true")
-    p_assign = sub.add_parser("assign", help="give a ready step to lead, subagent, user or slot NN (30-99)")
+    p_assign = sub.add_parser("assign", help="give a ready step to lead, subagent or user")
     p_assign.add_argument("step")
     p_assign.add_argument("who", nargs="+")
     p_assign.add_argument("--plan")
     p_assign.add_argument("--force", action="store_true",
-                          help="assign a step that is not ready, or to a slot that is taken")
-    for name in ("brief", "report"):
-        p = sub.add_parser(name)
-        p.add_argument("step")
-        p.add_argument("--plan")
-    p_reports = sub.add_parser("reports", help="reports arrived on origin/NN of the running subservants")
-    p_reports.add_argument("--plan")
-    p_reports.add_argument("--no-fetch", action="store_true")
-    p_watch = sub.add_parser("watch", help="print one line per newly arrived report (the lead's Monitor)")
-    p_watch.add_argument("--plan")
-    p_watch.add_argument("--interval", type=float, default=60)
-    p_watch.add_argument("--rounds", type=int, default=0, help="stop after this many rounds (0: never)")
+                          help="assign a step that is not ready")
+    p_prompt = sub.add_parser("prompt", help="the Agent call that runs one step in one subagent")
+    p_prompt.add_argument("step")
+    p_prompt.add_argument("--plan")
+    p_prompt.add_argument("--part", type=int, help="a retry: `Plan <NNNN> row <step> part <k>: ...`")
+    p_prompt.add_argument("--model", default="", help="override the row's Model (an escalation)")
+    p_prompt.add_argument("--effort", default="", choices=["", *sizing.EFFORTS],
+                          help="override the row's Effort (an escalation)")
     p_new.add_argument("--parallel", action="store_true",
                        help="the step table gets the columns Needs, Touches and Who (a parallel plan)")
     args = parser.parse_args(argv)
@@ -656,6 +739,12 @@ def main(argv: list[str]) -> int:
             path = resolve(root, args.plan)
             set_current(root, path)
             result = describe(root, path)
+        elif args.command == "run":
+            result = run_values(resolve(root, args.plan) if args.plan else current_path(root), args)
+        elif args.command == "migrate":
+            result = migrate(root, resolve(root, args.plan) if args.plan else current_path(root))
+        elif args.command == "prompt":
+            result = prompt_call(root, resolve(root, args.plan) if args.plan else current_path(root), args)
         elif args.command in PARALLEL_COMMANDS:
             path = resolve(root, args.plan) if args.plan else current_path(root)
             return run_parallel(root, path, args)
@@ -677,17 +766,85 @@ def main(argv: list[str]) -> int:
             result = describe(root, path)
             if written:
                 result["step_file"] = str(written.relative_to(root))
-    except (PlanError, parallel.ParallelError) as error:
+    except (PlanError, parallel.ParallelError, step_prompt.PromptError) as error:
         print(f"plan.py: {error}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
 
+def run_values(path: Path, args) -> dict:
+    """`plan.py run`: --check compares `run` with the session's live values, --sync writes them into it, --model,
+    --effort and --window set those words (the others kept); a legacy plan's line is `Run:`."""
+    before = header_value(path.read_text(), "Run")
+    live = session.live()
+    explicit = {k: v for k, v in (("model", args.model), ("effort", args.effort), ("window", args.window)) if v}
+    if args.check and explicit:
+        raise PlanError("run --check compares only: set values without it")
+    if args.sync and explicit:
+        raise PlanError("run --sync takes the live values: name values without it")
+    if not (args.check or args.sync or explicit):
+        raise PlanError("run needs --sync, --check or --model/--effort/--window")
+    if args.model and not sizing.RUN_MODEL.match(session.model_id(args.model)):
+        raise PlanError(f"--model '{args.model}' is none of {', '.join(sizing.MODELS)} nor a full id")
+    words = (list(run_default(path.read_text())) + ["", "", ""])[:3]
+    if args.sync:
+        words = sizing.run_words(live, or_template(words))
+    elif explicit:
+        for k, name in enumerate(("model", "effort", "window")):
+            if name in explicit:
+                words[k] = session.model_id(explicit[name]) if name == "model" else explicit[name]
+    run = " ".join(w or "-" for w in words).strip()
+    if not args.check and run != before:
+        set_header(path, "Run", run)
+    after = header_value(path.read_text(), "Run")
+    return {"plan": slug_of(path), "run": after, "before": before, "live": live, "drift": context.drift(live, after)}
+
+
+def prompt_call(root: Path, path: Path, args) -> dict:
+    """`plan.py prompt`: the Agent call of one step (prompt.py); the other open steps are named as off limits."""
+    text = path.read_text()
+    steps = read_steps(text)
+    row = next((s for s in steps if s["number"] == args.step), None)
+    if row is None:
+        raise PlanError(f"no step '{args.step}' in {slug_of(path)}")
+    if path.name != MAIN:
+        raise PlanError("a flat plan file has no folder for steps/<n>.md: move it into plans/<NNNN>-<slug>/")
+    if args.part is not None and args.part < 2:
+        raise PlanError("--part counts the retries from 2 (part 1 is the first run)")
+    others = [s for s in steps if s["number"] != row["number"] and not s["status"].lower().startswith("done")]
+    columns = steps_table(text.splitlines())[1] if folder.is_record(text) else None
+    return step_prompt.call(root, path, row, others, columns, args.part, args.model, args.effort)
+
+
+def migrate(root: Path, path: Path) -> dict:
+    """`plan.py migrate`: a record plan's step table gets the columns Model, Effort, Window and Size where missing,
+    its open rows the values (sizing.migrate_row), its `run` the session's live values. A legacy plan is never
+    touched."""
+    text = path.read_text()
+    if not folder.is_record(text):
+        return {"plan": slug_of(path), "migrated": False, "why": "a legacy plan: never migrated"}
+    old_run = list(run_default(text))
+    lines = text.splitlines(keepends=True)
+    header, cols, rows = table_rows([l.rstrip("\n") for l in lines])
+    new_header = sizing.migrate_header(split_row(lines[header]))
+    new_cols = {name.lower(): i for i, name in enumerate(new_header)}
+    lines[header] = join_row(new_header) + "\n"
+    lines[header + 1] = join_row(sizing.migrate_row(split_row(lines[header + 1]), cols, new_cols, old_run, True)) + "\n"
+    for i, cells in rows:
+        lines[i] = join_row(sizing.migrate_row(cells, cols, new_cols, old_run, False)) + "\n"
+    path.write_text("".join(lines))
+    set_header(path, "Run", " ".join(sizing.run_words(session.live(), or_template(old_run))))
+    result = describe(root, path)
+    result["migrated"] = True
+    return result
+
+
 def run_check(root: Path, folders: list[Path]) -> int:
     """The plan-folder check: the plan numbers, then hal2's records checker (checker.py) over the plan folders, or
-    over the named ones only. A plan.md without front matter is legacy and passes; without the checker the records
-    are unchecked (one line, no failure)."""
+    over the named ones only, then the sizing of the open steps of every record plan (`plan-steps-sized`,
+    sizing.py). A plan.md without front matter is legacy and passes; without the checker the records are unchecked
+    (one line, no failure), the sizing still is."""
     code = 0
     if folders:
         missing = [str(f) for f in folders if not (f / MAIN).is_file()]
@@ -695,15 +852,18 @@ def run_check(root: Path, folders: list[Path]) -> int:
             raise PlanError(f"no plan folder (a folder holding {MAIN}): {', '.join(missing)}")
     else:
         code = plan_number.main(["--root", str(root), "check"])
+    plans = [f.resolve() / MAIN for f in folders] if folders else plan_files(root)
+    sized = [line for p in plans for line in steps_problems(p.read_text(), os.path.relpath(p.resolve(), root.resolve()))]
     try:
         found = check_records(root, [f.resolve() for f in folders])
     except checker.CheckerError as error:
         print(error, file=sys.stderr)
         return error.code
     if found is None:
-        print(checker.NOT_INSTALLED)
-        return code
+        print("\n".join([checker.NOT_INSTALLED, *sized]))
+        return 1 if sized else code
     count, problems = found
+    problems += sized
     print("\n".join(problems) if problems else f"ok: {count} records")
     return 1 if problems else code
 
@@ -733,16 +893,16 @@ def check_records(root: Path, folders: list[Path]) -> tuple[int, list[str]] | No
 
 
 # What a subservant (a slot with plans/LEAD) may not do: plan.md is the lead's (hal2 shows the newest copy).
-SUBSERVANT_REFUSES = ("new", "status", "assign", "grilled", "landing", "uat", "brief", "scaffold")
-PARALLEL_COMMANDS = ("ready", "assign", "brief", "report", "reports", "watch")
+SUBSERVANT_REFUSES = ("new", "status", "assign", "grilled", "landing", "uat", "scaffold", "run", "migrate")
+PARALLEL_COMMANDS = ("ready", "assign")
 
 
 def refuse_subservant(root: Path, command: str) -> None:
     marker = parallel.subservant_marker(root, Path.cwd())
     if marker and command in SUBSERVANT_REFUSES:
         raise PlanError(f"this slot is a subservant of slot {marker['slot']} (plan {marker['plan']} step "
-                        f"{marker['step']}, plans/LEAD): it never edits plan.md; write your report with "
-                        f"`plan.py report {marker['step']}` and tell the lead")
+                        f"{marker['step']}): it holds a stale plans/LEAD of the lead in slot {marker['slot']}, never "
+                        f"edits plan.md and never lands; the lead takes the work over, or delete plans/LEAD")
 
 
 def parallel_steps(path: Path) -> list[dict]:
@@ -753,7 +913,7 @@ def parallel_steps(path: Path) -> list[dict]:
 
 
 def run_parallel(root: Path, path: Path, args) -> int:
-    """ready, assign, brief, report, reports, watch (skills plan 0013)."""
+    """ready and assign (skills plan 0013); the steps run as subagents (`prompt`)."""
     slug, steps = slug_of(path), parallel_steps(path)
     if args.command == "ready":
         ready, waiting = parallel.schedule(steps, parallel.capacity(path.read_text()), args.limit)
@@ -764,7 +924,7 @@ def run_parallel(root: Path, path: Path, args) -> int:
             return 0
         result = {"plan": slug, "ready": ready, "waiting": waiting,
                   "running": [s for s in steps if parallel.kind(s["status"]) == "running"]}
-    elif args.command == "assign":
+    else:
         who = parallel.check_who(" ".join(args.who))
         step = next((s for s in steps if s["number"] == args.step), None)
         if step is None:
@@ -773,59 +933,10 @@ def run_parallel(root: Path, path: Path, args) -> int:
         if step not in ready and not args.force:
             why = next((w["why"] for w in waiting if w["number"] == args.step), f"it is {step['status'] or 'open'}")
             raise PlanError(f"step {args.step} is not ready ({why}); --force assigns it anyway")
-        slot = parallel.slot_of(who)
-        if slot and not args.force and (why := parallel.slot_taken(root, slug, steps, args.step, slot)):
-            raise PlanError(f"{why}; --force assigns it anyway")
         set_cells(path, args.step, {"who": who, "status": "running"})
         result = describe(root, path)
-        worktree = parallel.slot_worktree(root, slot) if slot else None
-        if worktree and worktree.resolve() != root.resolve():
-            result["marker"] = str(parallel.write_marker(worktree, root.name, slug, args.step))
-    elif args.command == "brief":
-        step = next((s for s in steps if s["number"] == args.step), None)
-        if step is None:
-            raise PlanError(f"no step '{args.step}' in {slug}")
-        brief = path.parent / "steps" / f"{args.step}.md"
-        if not brief.exists():
-            brief.parent.mkdir(exist_ok=True)
-            brief.write_text(parallel.fill(
-                "step-brief.md", number=args.step, slug=slug, plan_number=slug[:4], title=step["step"],
-                lead=root.name, needs=", ".join(step["needs"]) or "none", touches=", ".join(step["touches"]) or "none",
-                done_when=step["done_when"] or "<the check that proves the step>", who=step["who"] or "<who>"))
-        result = {"plan": slug, "step": args.step, "brief": str(brief.relative_to(root)),
-                  "prompt": parallel.brief_prompt(slug, args.step, root.name)}
-    elif args.command == "report":
-        marker = parallel.read_marker(root) or {}
-        step = next((s for s in steps if s["number"] == args.step), None)
-        if step is None:
-            raise PlanError(f"no step '{args.step}' in {slug}")
-        report = path.parent / "reports" / f"{args.step}.md"
-        if not report.exists():
-            report.parent.mkdir(exist_ok=True)
-            report.write_text(parallel.fill(
-                "report.md", number=args.step, slug=slug, title=step["step"], slot=root.name,
-                lead=marker.get("slot", "<lead slot>"), date=dt.date.today().isoformat()))
-        result = {"plan": slug, "step": args.step, "report": str(report.relative_to(root))}
-    elif args.command == "reports":
-        result = {"plan": slug, "arrived": parallel.arrived(root, slug, steps, fetch=not args.no_fetch)}
-    else:
-        return watch(root, path, args.interval, args.rounds)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
-
-
-def watch(root: Path, path: Path, interval: float, rounds: int) -> int:
-    """One line per report newly arrived on a subservant's branch, for the lead's background Monitor."""
-    seen, n = set(), 0
-    while True:
-        for r in parallel.arrived(root, slug_of(path), read_steps(path.read_text())):
-            if (r["number"], r["sha"]) not in seen:
-                seen.add((r["number"], r["sha"]))
-                print(f"report step {r['number']} from slot {r['slot']} at {r['sha']}: {r['report']}", flush=True)
-        n += 1
-        if rounds and n >= rounds:
-            return 0
-        time.sleep(interval)
 
 
 def run_global(args) -> int:

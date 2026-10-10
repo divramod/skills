@@ -83,7 +83,8 @@ def missing(path: str | Path, slot: str, lead: dict, default: str) -> list[str]:
 
 
 def report_path(lead: dict) -> str:
-    """The step's report as `plan.py report` writes it (skills plan 0013)."""
+    """The step's report as the removed `plan.py report` wrote it (skills plan 0013). Since skills plan 0016 nothing
+    writes one: a stale plans/LEAD means the lead takes the work over, or plans/LEAD is deleted."""
     return f"plans/{lead['plan']}/reports/{lead['step']}.md"
 
 

@@ -40,6 +40,8 @@ Newest first. There is one case per failure class and cause; a recurrence adds a
 - **Would have caught it sooner**: a `SubagentStop` for a task that stays in `.tasks/` while the parent is idle, or
   a background subagent whose transcript is silent for > 10 min with an unanswered `tool_use`, flagged by the scan
   (a class of its own instead of F6, 15 min instead of 53).
+- **Scan since skills plan 0016**: this is the class F14 "subagent dead under an idle parent": a resting session
+  whose listed background subagents all have a transcript quiet for 20 min or more, whatever its plan.
 
 ## 2026-10-01 · F11 autoclear failed: ignored-soft-stop
 
@@ -73,6 +75,9 @@ Newest first. There is one case per failure class and cause; a recurrence adds a
   (e.g. `watch.py ... --wait`) whose completion notification will wake it; that process is still alive.
 - **Cause**: the scan treats any ended turn inside a plan as early, without checking the session's live background
   tasks (hal2-agents' `.tasks/` records). Not a hal2 bug: a gap in sanity-watch's scan.
+- **Scan since skills plan 0016**: closed: a resting session with a live background task (a shell, a monitor, a
+  subagent whose transcript moved in the last 20 min; `background_tasks` of `hal2-cli-agents list --json`) is never
+  reported.
 - **Occurrences**:
   - 2026-09-30 18:41, hal2 slot 00, session a1530b9c, plan 0082 roadmap coordinator, waiting on plan 0074 in slot
     12; left alone (`count`).

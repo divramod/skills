@@ -70,7 +70,7 @@ class Delegate(unittest.TestCase):
                 self.assertEqual(delegation.delegate(a, "/x/hal2", "auto", False, NOW)["state"], "waiting")
             sent = []
             with mock.patch.object(delegation, "has_room", return_value=True), \
-                    mock.patch.object(delegation, "start", side_effect=lambda p, m, dry: sent.append(p) or {"slot": "07"}):
+                    mock.patch.object(delegation, "start", side_effect=lambda p, m, dry, values=None: sent.append(p) or {"slot": "07"}):
                 delegation.follow_up("/x/hal2", {}, "auto", False, NOW)
             self.assertIn("git merge --no-edit farmer", sent[0])
             role = next(Path(d, "servants").glob("*.md")).read_text()

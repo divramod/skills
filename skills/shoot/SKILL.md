@@ -92,11 +92,15 @@ with more shots than free slots, say that the rest get new sessions. Read the an
 `here`, a slot number for 2).
 
 For 1 and 2, with `I=<skill-dir>/../digest-todolist-picture/scripts/implement.py`, per shot in the order picked:
-`python3 $I send --repo <main> --shotfile <file> --number <number> [--global] [--pane <pane>]` (`--pane` with the
-next free slot's pane for 2; without it a new session starts through create-worktree-session's `create.py`, which
-skips slots holding work). It sends hal2-nvim's shot template (run `/mfm`, make the
-shot a plan, then carry it out), starts or types into the session and only then marks the shot sent with that
-slot, so skip step 1 below. Exit 2 names a missing hal2 CLI: run that skill's `install-prerequisites.sh` once and
+`python3 $I send --repo <main> --shotfile <file> --number <number> [--global] [--pane <pane>] [--model <m>]
+[--effort <e>]` (`--pane` with the next free slot's pane for 2; without it a new session starts through
+create-worktree-session's `create.py`, which skips slots holding work). It sends hal2-nvim's shot template (run
+`/mfm`, make the shot a plan, then run it as its coordinator, with the plan skill's coordinator sentence), starts or
+types into the session and only then marks the shot sent with that slot, so skip step 1 below. The session runs at
+an explicit model and effort: the user's defaults `opus` and `medium` (skills plan 0015's D15), or the ones the user
+names for the shot (`--model`, `--effort`). A free session whose model or effort differ (or cannot be read from its
+transcript) is restarted at them first, with the shot as its first prompt (`hal2-cli-agents switch`; the JSON says
+`switched`), instead of being typed into. Exit 2 names a missing hal2 CLI: run that skill's `install-prerequisites.sh` once and
 retry; exit 1: report that shot and go on with the next. Report one line per shot, `<file> shot <n> → <repo> wt
 <slot> (<pane>, new | existing session)`, copy `hal2-cli-agents attach <repo>/<slot>` of the first into both
 clipboards (`pbcopy`, `tmux set-buffer`), and stop: nothing is carried out here. For 3 go on with Shoot.
@@ -128,8 +132,10 @@ unknown id: say so and stop), before marking any: ids refer to that list.
    - Make every shot a plan before starting it: `/plan new "<file> <number> <title>"` (`shooter 3 i want all
      shots to become a plan`; `<file> <number>` for a shot without a title; a global shot:
      `"global <file> <number> <title>"`; a shot that asks for research rather than implementation becomes a
-     research plan, `/plan new --research ...`, slug `<NNNN>-research-...`), then carry the plan out. `/plan`
-     writes the plan's `<NNNN>-<slug>` into `plans/CURRENT_PLAN`, so the statusline shows it; the file is
+     research plan, `/plan new --research ...`, slug `<NNNN>-research-...`), then run the plan as its
+     coordinator: **You are the plan's coordinator: you never do a step yourself; each step runs in one subagent
+     at its row's Model and Effort, sized under 35% of its Window; you check its done-when, commit it and keep
+     `run` current.** `/plan` writes the plan's `<NNNN>-<slug>` into `plans/CURRENT_PLAN`, so the statusline shows it; the file is
      gitignored runtime state, never committed, and `/mtm` deletes it once the plan has landed. A shot worked
      on without a plan names itself there as `<file>/<number>/<title-slug>`, a global one as
      `global:<file>/<number>/<title-slug>`.

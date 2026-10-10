@@ -1,6 +1,6 @@
 ---
 name: mtm
-description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Commits and pushes all work first (gitignores junk, never commits secrets, asks about unclear files). In a repository with `.github/workflows/land.yml` it lands through GitHub Actions: hal2-cli-git takes the worktree's turn in the merge queue, merges the default branch in, pushes the candidate to `land/<slot>` with the landing's pull request and waits until land.yml has tested it and fast-forwarded the default branch; on a red job it reads the log, reproduces it with `gate/main.sh <job>`, fixes, commits and lands again until the PR is merged. Elsewhere it reserves the merge queue, merges the default branch in, runs the repo's local gates, lands one --no-ff merge commit and pushes, fixing conflicts and failing gates itself while its failed landing holds the queue. Either way it resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui), keeps the queue reserved to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`) and ends with what landed (the plan and its steps, or the shot). Only ever started by the user in this session, by the plan skill when a plan the user started (`Landing: auto`) has finished its last step, or when the farmer skill's merge-to-main boss tells the session to land now. Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main". `/mtm milestone` lands a parallel plan's milestone row (queue released, CURRENT_PLAN kept, no cleanup); a subservant's slot (plans/LEAD) never lands. `/mtm h` shows help.
+description: merge-to-main — land the current git worktree's branch on the default branch (main, master, ...) in any repository, so several worktrees can work in parallel. Commits and pushes all work first (gitignores junk, never commits secrets, asks about unclear files). In a repository with `.github/workflows/land.yml` it lands through GitHub Actions: hal2-cli-git takes the worktree's turn in the merge queue, merges the default branch in, pushes the candidate to `land/<slot>` with the landing's pull request and waits until land.yml has tested it and fast-forwarded the default branch; on a red job it reads the log, reproduces it with `gate/main.sh <job>`, fixes, commits and lands again until the PR is merged. Elsewhere it reserves the merge queue, merges the default branch in, runs the repo's local gates, lands one --no-ff merge commit and pushes, fixing conflicts and failing gates itself while its failed landing holds the queue. Either way it resets the worktree to the new default branch and deletes the side branches it merged (e.g. 07-ui), keeps the queue reserved to finish the current plan (steps checked only after the landing), lands that too and only then releases it, so the worktree ends with nothing that is not on the default branch, then deletes its build artifacts (the cleanup skill, `.hal/cleanup`) and ends with what landed (the plan and its steps, or the shot). Only ever started by the user in this session, by the plan skill when a plan the user started (`Landing: auto`) has finished its last step, or when the farmer skill's merge-to-main boss tells the session to land now. Use when the user says /mtm, "merge to main", "land this worktree" or "ship it to main". `/mtm milestone` lands a parallel plan's milestone row (queue released, CURRENT_PLAN kept, no cleanup); a landing runs only in a plan's coordinator session, never in a subagent, and a slot with a stale plans/LEAD never lands. `/mtm h` shows help.
 ---
 
 # mtm
@@ -56,17 +56,17 @@ you") before asking. A landing that went through only reports.
 | Call | Does |
 |---|---|
 | `/mtm [<slot>]` | land the current worktree (or hal slot `<slot>`) |
-| `/mtm milestone` | a parallel plan's lead lands a milestone row: [milestone mode](#milestone-mode) |
+| `/mtm milestone` | a plan's coordinator lands a milestone row: [milestone mode](#milestone-mode) |
 | `/mtm h`, `/mtm help` | print this table and stop |
 
-**A subservant never lands.** Before anything else, also before [references/ci.md](references/ci.md), run
+**Only a plan's coordinator lands, never a subagent or a slot with `plans/LEAD`.** Before anything else, also before [references/ci.md](references/ci.md), run
 `bash $S/subservant-guard.sh <slot>` on the worktree that would land: no argument for plain `/mtm` (the current
 worktree), the slot for `/mtm <slot>` (a bare slot name such as `31` resolves through `git worktree list` to the
 worktree of that folder name; a directory works too, e.g. the `path` of that name in
-`hal2-cli-git worktree list --json`; exit 3: no such worktree, report it). In a parallel plan's subservant slot (the
-worktree holds `plans/LEAD`, the [plan](../plan/SKILL.md) skill's "Work as a subservant") it exits 1 and names the
-lead; then stop with that message, whoever asked (the user, a plan, the farmer): the subservant pushes its branch and
-reports, the lead merges it. Elsewhere it prints nothing and the landing goes on.
+`hal2-cli-git worktree list --json`; exit 3: no such worktree, report it). A plan's steps run in subagents of the coordinator, which does the landing itself
+([plan](../plan/SKILL.md)); a subagent never starts `/mtm`. In a slot that still holds a stale `plans/LEAD` (the
+plan skill's "A stale `plans/LEAD`" note, a former subservant slot) the guard exits 1 and names the lead; then stop
+with that message, whoever asked (the user, a plan, the farmer). The guard and its test stay (plan 0015 D12). Elsewhere it prints nothing and the landing goes on.
 
 **Through CI or locally.** `bash $S/landing-mode.sh` prints `ci` when `.github/workflows/land.yml` is in this
 worktree's `HEAD` or in origin's default branch: the landing then runs through GitHub Actions; read
@@ -78,15 +78,15 @@ the steps below land locally.
 
 ### Milestone mode
 
-`/mtm milestone` is run only by a parallel plan's lead, for a milestone row of its plan ("Milestone n: land ...",
+`/mtm milestone` is run only by a plan's coordinator, for a milestone row of its plan ("Milestone n: land ...",
 whose Needs are done) after the farmer's or the user's "land now" (the plan skill's "Run a parallel plan"). It
-lands what the lead's branch holds like any landing, with four differences, so the plan runs on right after it:
+lands what the coordinator's branch holds like any landing, with four differences, so the plan runs on right after it:
 
 - step 4 runs `merge-to-main` **without `--keep-reserved`** (locally and through CI, see
   [references/ci.md](references/ci.md#land)): the queue is released after the landing; if its JSON still says
   `reserved: true` (the reservation from step 1, or an older hal2-cli-git), run `hal2-cli-git worktree release
   --json [<slot>]` right away, since step 5, which releases it otherwise, is skipped;
-- step 5 is skipped: nothing of the plan is finished here; the lead marks the milestone row done afterwards in its
+- step 5 is skipped: nothing of the plan is finished here; the coordinator marks the milestone row done afterwards in its
   own branch (`plan.py status <n> done`, one commit, not landed again: the next milestone or the plan's own landing
   carries it), so the worktree may end with commits that are not on the default branch;
 - step 6 keeps `plans/CURRENT_PLAN` (and the root `HANDOFF.md`): the plan goes on;

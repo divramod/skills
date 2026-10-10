@@ -174,7 +174,10 @@ clear). Keep this true: `$E selfcheck`.
    /effort`, else the banner's `with medium effort`) and types `/effort <level>` only when it differs; a dialog
    `Change effort level?` is answered with Enter while it stands on `Yes, switch`, else closed with Escape. Best
    effort: `effort: not set to <level> (<why>): the prompt goes out anyway`, never a fail reason; every step is an
-   `effort: ...` line in the job log. `/effort` also rewrites the user's default in `~/.claude/settings.json`.
+   `effort: ...` line in the job log. `/effort` also rewrites the user's default in `~/.claude/settings.json` (a trap: a plan's session whose effort differs from it
+   drifts after a clear). Where the level comes from: a clear that `/handoff clear` starts passes `--effort` from the plan's
+   `run` key (`drift.py --clear`, plan 0016 D8); a clear hal2's guard starts itself still types `[autoclear] effort`
+   until hal2's change (plan 0015's hal2-changes.md) lands.
 3. **The sweep** (`sweep.rs`, run by hal2-api every `sweep_minutes`, log `~/Library/Logs/hal2-api.log`, lines
    `hal2_api::sweep`): takes a session that runs a plan with steps left or has a guard marker (plan or not); an
    idle session without both is left alone (`no plan with steps left`), a merge-queue ticket skips nothing (also

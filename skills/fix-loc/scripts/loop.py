@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""fix-loc's loop: one tick watches the running servant and, once its plan landed, spawns the next unit's.
+"""fix-loc's loop: one tick watches the running servant and, once its plan landed, starts the next unit's.
 
-  loop.py tick   --repo R [--model M] [--dry-run] [--json]   one tick (what the cron job's /fix-loc runs)
+  loop.py tick   --repo R [--coordinator-model M] [--coordinator-effort E] [--step-model S] [--dry-run] [--json]
+                                                            one tick (what the cron job's /fix-loc runs)
   loop.py claim  --repo W --plan <NNNN-slug> [--json]       the servant in checkout W names its plan
   loop.py record --repo R --started|--stopped [--json]      the loop (re)started (cron re-armed) or stopped
   loop.py status --repo R [--json]                          the servant, blocked units, history
 
-The state is `<state root>/state.json` (scan.state_root; tick.py documents its fields). `tick --dry-run`
-decides and prints the next spawn without spawning or writing the state. Exit 2: a missing tool.
+The servant is its plan's coordinator: it starts through create-worktree-session's create.py (`--from 30`: a
+helper slot without a session and without work) at `--coordinator-model` (`--model`; default claude-sonnet-5-5,
+fix-loc's own rule) and `--coordinator-effort` (default medium), and its plan's rows run at `--step-model` (an
+Agent tool alias, default sonnet) with medium effort. Each value is the flag, else the one `state.json` keeps under
+`settings`, else the default; the tick stores it back. The state is `<state root>/state.json` (scan.state_root;
+tick.py documents its fields). `tick --dry-run` decides and prints the next start without starting or writing the
+state. Exit 2: a missing tool.
 """
 
 import argparse
@@ -25,8 +31,11 @@ import layout  # noqa: E402
 import scan  # noqa: E402
 import tick  # noqa: E402
 
-DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULTS = {"coordinator_model": "claude-sonnet-5-5", "coordinator_effort": "medium", "step_model": "sonnet"}
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+STEP_MODELS = ("haiku", "sonnet", "opus", "fable")  # the Agent tool's aliases (plan 0016's D6)
 PROMPT = Path(__file__).resolve().parent.parent / "servant-prompt.md"
+CREATE = Path(__file__).resolve().parents[2] / "create-worktree-session" / "scripts" / "create.py"
 FINISHED = re.compile(r"^Finished:", re.MULTILINE)
 
 
@@ -95,10 +104,19 @@ def observe(repo, project, servant):
     }
 
 
-def fill_prompt(unit, limit):
+def settings(state, **given):
+    """The loop's coordinator model and effort and step model: each given value, else the stored one, else the
+    default; stored back in `state["settings"]`."""
+    stored = state.setdefault("settings", {})
+    for key, default in DEFAULTS.items():
+        stored[key] = given.get(key) or stored.get(key) or default
+    return dict(stored)
+
+
+def fill_prompt(unit, limit, step_model=DEFAULTS["step_model"]):
     names = ", ".join(f"`{f['path']}` ({f['code']})" for f in unit["files"])
     values = {"unit": unit["unit"], "name": unit["unit"].rsplit("/", 1)[-1], "limit": str(limit),
-              "files": names, "scripts": str(Path(__file__).resolve().parent)}
+              "files": names, "scripts": str(Path(__file__).resolve().parent), "step_model": step_model}
     text = PROMPT.read_text().strip()
     for key, value in values.items():
         text = text.replace("{" + key + "}", value)
@@ -112,6 +130,7 @@ def finish(repo, state, now, result):
     over = [f for f in after["files"] if f["code"] > after["limit"]]
     state["history"].append({
         "unit": servant["unit"], "plan": result.get("plan"), "model": servant.get("model"),
+        "effort": servant.get("effort"), "step_model": servant.get("step_model"),
         "started_ms": servant["spawned_ms"], "landed_ms": now, "before": servant.get("before", {}),
         "after": {f["path"]: f["code"] for f in after["files"] if f["path"] in servant.get("before", {})},
         "still_over": [f["path"] for f in over],
@@ -147,37 +166,41 @@ def watch(repo, state, now, result):
     return False
 
 
-def spawn_next(repo, state, now, model, dry_run, result):
+def spawn_next(repo, state, now, values, dry_run, result):
     found = scan.scan(repo)
     unit = tick.next_unit(found["units"], state, now)
     if unit is None:
         result.update(action="idle", reason="no unit over the limit is free", unit=None)
         return
-    prompt = fill_prompt(unit, found["limit"])
-    command = ["hal2-cli-agents", "spawn", state["project"], "--model", model, "--json", "--prompt", prompt]
+    prompt = fill_prompt(unit, found["limit"], values["step_model"])
+    command = [sys.executable, str(CREATE), "--repo", state["project"], "--from", "30",
+               "--model", values["coordinator_model"], "--effort", values["coordinator_effort"],
+               "--exact", "--prompt", prompt]
     result.update(action="next", unit=unit["unit"], files=[f["path"] for f in unit["files"]],
-                  command=command[:-1] + ["<prompt>"], prompt=prompt)
+                  command=command[:-1] + ["<prompt>"], prompt=prompt, settings=values)
     if dry_run:
         result["dry_run"] = True
         return
     spawned = run_json(command)
     state["servant"] = {
-        "unit": unit["unit"], "files": result["files"], "slot": spawned["slot"], "pane": spawned["pane"],
-        "worktree": spawned.get("worktree"), "plan": None, "model": model, "spawned_ms": now,
+        "unit": unit["unit"], "files": result["files"], "slot": spawned["slot"], "pane": spawned.get("pane"),
+        "worktree": spawned.get("worktree"), "plan": None, "model": values["coordinator_model"],
+        "effort": values["coordinator_effort"], "step_model": values["step_model"], "spawned_ms": now,
         "before": {f["path"]: f["code"] for f in unit["files"]},
     }
     result["slot"] = spawned["slot"]
 
 
-def run_tick(repo, model=DEFAULT_MODEL, dry_run=False, now=None):
+def run_tick(repo, model=None, dry_run=False, now=None, effort=None, step_model=None):
     now = now or now_ms()
     state = load(repo)
+    values = settings(state, coordinator_model=model, coordinator_effort=effort, step_model=step_model)
     state["project"] = main_checkout(repo)
     state.setdefault("started_ms", now)
     result = {"action": "wait", "reason": "", "notify": [], "rearm": tick.needs_rearm(state, now)}
     subprocess.run(["git", "-C", str(repo), "fetch", "-q", "origin"], capture_output=True)
     if state["servant"] is None or watch(repo, state, now, result):
-        spawn_next(repo, state, now, model, dry_run, result)
+        spawn_next(repo, state, now, values, dry_run, result)
     if not dry_run:
         save(repo, state)
     return result
@@ -207,7 +230,8 @@ def status(repo):
     state, now = load(repo), now_ms()
     blocked = {unit: until for unit, until in state["blocked"].items() if until > now}
     return {"servant": state["servant"], "blocked": blocked, "history": state["history"][-10:],
-            "landed": len(state["history"]), "started_ms": state.get("started_ms")}
+            "landed": len(state["history"]), "started_ms": state.get("started_ms"),
+            "settings": {**DEFAULTS, **state.get("settings", {})}}
 
 
 def text_of(command, result):
@@ -229,7 +253,9 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument("--repo", default=".")
         p.add_argument("--json", action="store_true")
-    sub.choices["tick"].add_argument("--model", default=DEFAULT_MODEL)
+    sub.choices["tick"].add_argument("--coordinator-model", "--model", dest="model")
+    sub.choices["tick"].add_argument("--coordinator-effort", dest="effort", choices=EFFORTS)
+    sub.choices["tick"].add_argument("--step-model", choices=STEP_MODELS)
     sub.choices["tick"].add_argument("--dry-run", action="store_true")
     sub.choices["claim"].add_argument("--plan", required=True)
     sub.choices["record"].add_argument("--started", action="store_true")
@@ -240,7 +266,7 @@ def main(argv=None):
         print(f"fix-loc: missing {', '.join(missing)} -> run install-prerequisites.sh", file=sys.stderr)
         return 2
     if args.command == "tick":
-        result = run_tick(args.repo, args.model, args.dry_run)
+        result = run_tick(args.repo, args.model, args.dry_run, effort=args.effort, step_model=args.step_model)
     elif args.command == "claim":
         result = claim(args.repo, args.plan)
     elif args.command == "record":

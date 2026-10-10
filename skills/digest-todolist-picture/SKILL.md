@@ -166,7 +166,8 @@ commit only the written shotfiles (`shotfiles: <n> shots from a to-do list pictu
 
 Right after the write, the shot goes to an agent the way hal2-nvim sends a shot: its shot template (`# shot <n>
 <title> (<shotfile>)`, the body, the `# context` lines telling the agent to run `/mfm`, not to touch the shotfile and
-to make the shot a plan titled `<shotfile> <n> <title>`), saved as a bullet file; then the shot is marked sent
+to make the shot a plan titled `<shotfile> <n> <title>` and run it as the plan's coordinator, every step in a sized
+subagent), saved as a bullet file; then the shot is marked sent
 (`## x shot ... [<slot>]`). Only on the user's Mac: it needs hal2 (`hal2-cli-agents`, `hal2-cli-shooter`; exit 2
 names the missing one, `bash $S/install-prerequisites.sh` installs them) and a repository shotfile (a global shot
 has no repository to start a worktree in).
@@ -175,8 +176,9 @@ has no repository to start a worktree in).
   ```bash
   python3 $S/implement.py send --repo <repo dir> --shotfile <name> --number <n>
   ```
-  `hal2-cli-agents spawn` starts Claude in the repository's lowest free worktree slot from 01 (created when missing,
-  its setup run) with the shot as its first prompt. The JSON names the `slot`, `pane` and `remote_control` (the
+  create-worktree-session's `create.py` starts Claude in the repository's first slot without a session and without
+  work (created when missing, its setup run) with the shot as its first prompt, at the user's defaults `opus` and
+  `medium` effort (`--model <m> --effort <e>` when the user names others for the shot). The JSON names the `slot`, `pane` and `remote_control` (the
   Remote Control name `<repo>-<slot>`, so the user finds the new session in the Claude app). Say:
   `Sent to a new worktree: slot <NN>, in the app as <remote_control>.`
 - **A session named: that session.** List the repository's live sessions:
@@ -186,7 +188,8 @@ has no repository to start a worktree in).
   Each has `pane_id`, `slot` (`main`, `01`, ...), `state`, `title`, `plan` and `context_percent`. Match the answer by
   slot (`03`, `three`, `main`) or by words of its plan or title. One match:
   `python3 $S/implement.py send --repo <repo dir> --shotfile <name> --number <n> --pane <pane_id>` types
-  `@<bullet>` into it. No or several matches: list them in plain text, one line each (`A. slot 03, plan 0094 ...,
+  `@<bullet>` into it; a Claude session whose model or effort differ from the shot's (or cannot be read) is
+  restarted at them first with the shot as its first prompt (`switched` in the JSON): say so. No or several matches: list them in plain text, one line each (`A. slot 03, plan 0094 ...,
   done`), offer `new worktree` too, and take the next answer. A session in state `blocked` (waiting for a
   permission or an answer) is never typed into: the text would answer its dialog; say so and offer a new worktree.
   `working` is fine (the agent queues the input), but say so: `Sent to slot 03; it is still working, it reads the

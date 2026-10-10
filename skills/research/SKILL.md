@@ -27,7 +27,8 @@ When no plan runs it (`plans/CURRENT_PLAN` is missing or names something else th
 create a research plan first with the plan skill (`/plan new --research <topic>`, slug `<NNNN>-research-<topic>`,
 `Landing: manual`): it writes `plans/CURRENT_PLAN`, its deliverable is this doc (`research.py new --plan <plan.md>`),
 and its steps are this skill's steps. The user's `/research` call is the go for that plan: no autogrill offer, run
-it. A plan step that needs research runs this skill under that plan and links the doc under its **Context**.
+it. A research plan's rows carry the plan skill's columns Model, Effort, Window and Size (checked by
+`plan.py check`); each row runs in one subagent at those values, the deep Workflow being one row's runner. A plan step that needs research runs this skill under that plan and links the doc under its **Context**.
 
 **The lifecycle is the front matter's `status`**: `planned` (scaffolded) → `researching` → `verifying` → `done`
 (answer written, checked) → `decided` (the human decided; `decision` names the record: an INTENT.md row, an ADR, a
@@ -69,7 +70,7 @@ run the Workflow; no further confirmation.
 2. **Scaffold.** `python3 $S/research.py new "<title>" --question "<question>" [--plan <plan.md>] [--origin <shot or
    plan>] [--kind decision|investigation|survey|incident|architecture]`, then `research.py set <n> status
    researching`; when no plan runs it, create its research plan first (see above) and pass `--plan`.
-3. **Run the Workflow** (tool `Workflow`) with `scriptPath: <skill-dir>/workflows/deep-research.js` and
+3. **Run the Workflow** (tool `Workflow`; it is one step of the plan, run by the coordinator or the row's subagent, and its internal agents take the Workflow's own model settings) with `scriptPath: <skill-dir>/workflows/deep-research.js` and
    `args: {query: "<question>", breadth: 4, context: "<repo facts, constraints, criteria, paths to read>", today:
    "<YYYY-MM-DD>"}`. `breadth` is 2-6 sub-questions (4 by default; 5-6 for broad surveys). The script cannot
    read the clock or files: pass the date and the context. It returns JSON: `report` (the sections), `claims`
@@ -114,7 +115,7 @@ For a narrow question or when the user says quick. No Workflow.
 1. Scope and scaffold as in deep research steps 1-2.
 2. Run 1-3 subagents in parallel (Agent tool), one per sub-question, each told to return atomic claims with the
    evidence passage and a precise source locator, never citing what it did not open.
-3. Write `research.md` with the same sections and rules as step 4 above. There is no verification pass: the
+3. Have a subagent (the row's Model and Effort) write `research.md` with the same sections and rules as step 4 above. There is no verification pass: the
    Evidence table's Verified column says `no`, `claims` is `{total: n, verified: 0, disputed: 0}`, and Method says
    "quick mode: no verification pass; claims are unverified". Risks may stay out (no premortem ran).
 4. Close it as in step 5. The user can run `/research verify <n>` later.

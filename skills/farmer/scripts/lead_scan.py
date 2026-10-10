@@ -4,7 +4,8 @@
   lead_scan.py scan [--repo <dir>] [--json] [--all]
       every agent session of the repository (worktree slots and main, the farmer's own
       session excluded) that waits for someone: a question to the user, a dialog or
-      permission prompt, a failed turn, a session idle inside an unfinished plan, a
+      permission prompt, a failed turn, a session idle inside an unfinished plan (not while
+      its background tasks run: a coordinator waits on its subagents), a
       context near its limit, a slot working without plans/CURRENT_PLAN; with the last thing it said. Stops already handled are
       left out (--all: shown too)
   lead_scan.py record <session-id> <since> <what> [--note <text>] [--repo <dir>]
@@ -92,6 +93,16 @@ def last_assistant_text(path: Path, max_bytes: int = 400_000) -> str:
     return ""
 
 
+ENDED = {"completed", "done", "failed", "killed", "stopped", "ended"}
+
+
+def background(agent: dict) -> list[dict]:
+    """The session's live background tasks (hal2-cli-agents list --json `background_tasks`: subagents, shells,
+    monitors); an entry that says it ended does not count."""
+    return [t for t in agent.get("background_tasks") or [] if isinstance(t, dict) and t.get("alive") is not False
+            and str(t.get("status") or t.get("state") or "").lower() not in ENDED]
+
+
 def classify(agent: dict, said: str, now: float) -> tuple[str, str] | None:
     """(kind, why) for a session that needs help, else None."""
     state, since = agent.get("state"), (agent.get("since") or 0) / 1000
@@ -110,7 +121,8 @@ def classify(agent: dict, said: str, now: float) -> tuple[str, str] | None:
             return "asks", f"waits for an answer for {age // 60} min"
         if (lead := agent.get("lead")) and age >= IDLE_IN_PLAN_AFTER:  # a subservant: its one step, never a landing
             return "idle-in-plan", f"idle for {age // 60} min inside its step, {mtm_scan.subservant(lead)}"
-        if agent.get("plan") and age >= IDLE_IN_PLAN_AFTER:
+        # A coordinator waiting on its subagents (skills plan 0016, D14) is not stopped.
+        if agent.get("plan") and age >= IDLE_IN_PLAN_AFTER and not background(agent):
             return "idle-in-plan", f"idle for {age // 60} min inside plan {agent['plan']}"
     if (agent.get("context_percent") or 0) >= CONTEXT_HIGH and not agent.get("autoclear"):
         return "context-high", f"context at {agent['context_percent']}% with no hand-off running"

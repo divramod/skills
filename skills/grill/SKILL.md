@@ -1,6 +1,6 @@
 ---
 name: grill
-description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds of questions, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in its one home (plan, intent doc or ADR) so nothing is asked twice; `/grill q` asks a single round for one step. Use when the user says grill (me) / stress-test / poke holes, or when /plan offers it before implementing a plan. `/grill h` shows help.
+description: Interview the user relentlessly about a plan, design, decision or idea until every branch of its design tree is resolved and nothing is silently assumed — in rounds of questions, each round asking every question whose prerequisites are settled, each with a recommended answer; facts are looked up, never asked; every decision is recorded in its one home (plan, intent doc or ADR) so nothing is asked twice; an autogrill also sizes every step (Model, Effort, Window, Size; a step over 35% of its window is split); `/grill q` asks a single round for one step. Use when the user says grill (me) / stress-test / poke holes, or when /plan offers it before implementing a plan. `/grill h` shows help.
 ---
 
 # grill
@@ -48,6 +48,7 @@ Each round asks the whole frontier and nothing else:
   consequence of each, **your recommended option first, labelled "(Recommended)"**. Use multi-select only when
   choices combine.
 - A question that depends on another question still open in this round belongs to a later round.
+- A round that changes a plan's steps also sizes the rows it changed, as [Auto](#auto) point 4 does.
 
 After each round, recompute the frontier: answers settle branches and unblock new questions; an answer that changes
 an earlier one reopens the affected branch next round, and you say so.
@@ -76,8 +77,16 @@ One autogrill round: the grill without the user. The plan skill runs one on ever
    and its decision record. Ask nothing.
 3. Record each decision in its one home as in **Record**, marked `(autogrill <n>)`, and adjust the plan's steps
    and done-when checks it changes.
-4. Stamp the round: `python3 <plan-skill-dir>/scripts/plan.py grilled --auto` (`Grilled: <date> (autogrill ×n)`).
-5. Report the round's decisions in a few lines; the caller (the plan skill's offer) asks what next. When a
+4. **Size every step.** Give every open row of the plan's step table its Model, Effort, Window and Size by the plan
+   skill's rubric, [Model, effort and window per step](../plan/SKILL.md#model-effort-and-window-per-step) (linked,
+   never copied here). Size is the step's subagent's estimated peak context, its start (about 85k) included, so
+   estimate it from the step's files and checks, not from the template. A row over 35% of its Window (70k of 200k,
+   350k of 1m) is split along its files or checks into rows that fit, each with its own done-when and values;
+   renumber only rows not yet done, never a done one, and fix the `Needs` of a parallel plan's later rows. A Size `?` (from
+   `plan.py migrate`) or the template's default values get a real estimate. Then run `python3 <plan-skill-dir>/scripts/plan.py check`:
+   rule `plan-steps-sized` must pass after the round.
+5. Stamp the round: `python3 <plan-skill-dir>/scripts/plan.py grilled --auto` (`Grilled: <date> (autogrill ×n)`).
+6. Report the round's decisions in a few lines; the caller (the plan skill's offer) asks what next. When a
    branch can only be settled by the user (taste, how something should look), decide it provisionally, say so,
    and recommend a manual grill.
 
@@ -98,6 +107,9 @@ others instead of repeating it:
 - a term the user defines or sharpens (what a word means here): an entry of the repository's root `GLOSSARY.md`
   (`**Term**:`, one or two sentences, an optional `_Avoid_:` line), or of `~/.claude/GLOSSARY.md` when the user
   means it the same way in every repository.
+
+A decision that adds, splits or changes a step row also sets that row's Model, Effort, Window and Size ([Auto](#auto)
+point 4).
 
 Mark superseded decisions instead of deleting them. Don't commit; the user or `/handoff` does.
 

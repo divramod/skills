@@ -43,6 +43,21 @@ has each file's form. Wherever this skill says `HANDOFF.md`, a record plan's ses
 subservant" says: never the plan's next step, never `/mtm`, never an edit of `plan.md`; `CURRENT_PLAN` keeps naming
 the lead's plan. When the step's report is pushed and the lead told, the work is done: say so and stop.
 
+0. **Restore the coordinator's values first** (plan 0015's D10: after a clear the plan wins). Before anything else,
+   and never after a `plan.py run --sync` (that would write the cleared session's values over the plan's):
+   ```bash
+   python3 $S/drift.py    # {action: ok|switch|sync, command, run, live, drift, why}
+   ```
+   It compares the current plan's `run: <model> <effort> <window>` with the live session (the plan skill's
+   `session.py`) and decides:
+   - `ok` (no plan, a legacy plan, a subservant's slot, no `run`, no difference, only the window differs): go on.
+   - `switch` (the model or the effort differs): run its `command` (`hal2-cli-agents switch --model <run's model>
+     --effort <run's effort> --prompt "/handoff c" --detach --json`) and end the turn with one line ("restarting at
+     <model> <effort>, continuing with /handoff c"). hal2 restarts the session in its pane with those flags for this
+     session only (the user's defaults stay) and types `/handoff c` again. The switch refused (no hal2, not in a
+     pane): go on and name it under the handoff's **Watch out**.
+   - `sync` (it still differs after a switch for this same handoff, its `at`): run its `command` (`plan.py run
+     --sync`; the session's values win, no second switch) and say so in the first report (step 5).
 1. Read the handoff (`python3 $S/where.py` names it; a record plan: then `plan.md`, `decisions.md` and what the
    plan's Context links) and every file its **Read first** and **Plan** sections link to. When **Plan** links a plan
    with steps left and `plans/CURRENT_PLAN` is missing or names something else (another machine, a fresh
@@ -185,6 +200,18 @@ An open entry has no `**A:**` line. Check it: `python3 $S/questions.py --check` 
   `done/total` and the next step from its JSON. Make sure the step table itself is up to date first.
 - Test and build state: state only what you ran in this session. Otherwise write "not run".
 
+### 3b. Persist the coordinator's values
+
+Before a clear the live session wins (plan 0015's D10): a record plan with a `run` key gets the session's model,
+effort and window written into it, so `/handoff c` (Continue step 0) restores them after the clear:
+
+```bash
+python3 <plan-skill-dir>/scripts/plan.py run --sync    # {run, before, live, drift}; writes plan.md when they differ
+```
+
+Skip it for a legacy plan, work without a plan and a subservant's slot (`plans/LEAD`: plan.py refuses it there, the
+plan is the lead's). When `before` and `run` differ, plan.md goes into step 5's commit.
+
 ### 4. Write the handoff
 
 **A record plan** (`where.py`: form `record`): `python3 $S/where.py --stamp` writes a missing
@@ -310,8 +337,8 @@ python3 $S/decisions.py --check    # exit 1: one problem per line (no section, n
 bash $S/commit-handoff.sh "docs: record decisions" [plans/<plan>/plan.md plans/<plan>/decisions.md plans/<plan>/questions.md plans/<plan>/handoff.md .adr/<new>.md ...]
 ```
 
-It commits exactly the docs you changed in steps 1, 2 and 4 (the questions file too, when it changed; a record
-plan's `handoff.md` is one of them, and a decision record goes with its regenerated index: the `adr` skill),
+It commits exactly the docs you changed in steps 1, 2, 3b and 4 (the questions file too, when it changed; a record
+plan's `handoff.md` is one of them, its `plan.md` when step 3b changed `run`, and a decision record goes with its regenerated index: the `adr` skill),
 leaving everything else staged or unstaged as it was, and
 prints the new commit. The root `HANDOFF.md` is never committed; its ignore line is anchored (`/HANDOFF.md`, an
 unanchored one is rewritten in the same commit), so a plan's `handoff.md` is never ignored with it: when the repo does not ignore it yet, the script adds it to
@@ -337,7 +364,9 @@ then lets hal2 clear this Claude Code session and type `/handoff c` into the fre
    waiting reserve** (`hal2-cli-git worktree merge-to-main|reserve`, the merge queue policy: a started landing is
    never aborted): it goes on across the clear, the handoff's **Next** names it (the command, the slot, the ticket's
    state) and its end wakes the fresh session.
-2. Start it and end your turn right after with one line ("clearing, continuing with /handoff c"):
+2. Start it and end your turn right after with one line ("clearing, continuing with /handoff c"). Take the command
+   from `python3 $S/drift.py --clear`: with a plan's `run` it passes `--effort <run's effort>` (plan 0016's D8:
+   hal2 types its `[autoclear] effort` after `/clear` otherwise), without one it is
    ```bash
    hal2-cli-agents clear-and-continue --detach --json    # pane from $TMUX_PANE or $HAL2_TERMINAL, session from $CLAUDE_CODE_SESSION_ID
    ```

@@ -1,8 +1,10 @@
 """What one fix-loc tick does, decided from plain inputs (no IO), so every outcome is testable.
 
-The state (`state.json`): `servant` (the running unit: unit, slot, pane, worktree, plan, model, spawned_ms,
-before), `history` (landed units with code lines before/after), `blocked` ({unit: until_ms}), `attempts`
-({unit: landed plans that left it over the limit}), `started_ms` (the loop's start, for the cron re-arm).
+The state (`state.json`): `servant` (the running unit: unit, slot, pane, worktree, plan, model and effort of its
+coordinator session, step_model of its plan's rows, spawned_ms, before), `settings` (the loop's coordinator_model,
+coordinator_effort and step_model, kept across ticks), `history` (landed units with code lines before/after),
+`blocked` ({unit: until_ms}), `attempts` ({unit: landed plans that left it over the limit}), `started_ms` (the
+loop's start, for the cron re-arm).
 """
 
 import re

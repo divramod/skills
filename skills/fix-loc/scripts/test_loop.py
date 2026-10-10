@@ -19,9 +19,17 @@ echo "$(basename "$0") $*" >> "$FAKE_DIR/calls.log"
 case "$1 $2" in
   "list --json") cat "$FAKE_DIR/agents.json" ;;
   "worktree queue") cat "$FAKE_DIR/queue.json" ;;
-  spawn*) cat "$FAKE_DIR/spawn.json" ;;
 esac
 """
+FAKE_CREATE = """import os, sys
+# create-worktree-session's create.py: logs its call, answers spawn.json.
+with open(os.path.join(os.environ["FAKE_DIR"], "calls.log"), "a") as log:
+    log.write("create.py " + " ".join(sys.argv[1:]) + "\\n")
+print(open(os.path.join(os.environ["FAKE_DIR"], "spawn.json")).read())
+"""
+COORDINATOR = ("You are the plan's coordinator: you never do a step yourself; each step runs in one subagent at its "
+               "row's Model and Effort, sized under 35% of its Window; you check its done-when, commit it and keep "
+               "`run` current.")
 BIG = "code/typescript/apps/big"
 
 
@@ -37,6 +45,9 @@ class Loop(unittest.TestCase):
             path = self.fake / name
             path.write_text(FAKE)
             path.chmod(path.stat().st_mode | stat.S_IEXEC)
+        (self.fake / "create.py").write_text(FAKE_CREATE)
+        self.create = loop.CREATE
+        loop.CREATE = self.fake / "create.py"
         self.env = {k: os.environ.get(k) for k in ("PATH", "FAKE_DIR", "FIX_LOC_ROOT")}
         os.environ.update(PATH=f"{self.fake}:{os.environ['PATH']}", FAKE_DIR=str(self.fake),
                           FIX_LOC_ROOT=str(base / "state"))
@@ -45,6 +56,7 @@ class Loop(unittest.TestCase):
                     spawn={"project": str(self.repo), "slot": "01", "pane": "t:abc", "worktree": str(self.worktree)})
 
     def tearDown(self):
+        loop.CREATE = self.create
         for key, value in self.env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -78,8 +90,12 @@ class Loop(unittest.TestCase):
         result = loop.run_tick(self.repo, dry_run=True)
         self.assertEqual(result["action"], "next")
         self.assertEqual(result["files"], [f"{BIG}/src/a.ts"])
-        self.assertEqual(result["command"][:5], ["hal2-cli-agents", "spawn", str(self.repo), "--model", "claude-sonnet-5-5"])
+        self.assertEqual(result["command"][1:], [str(self.fake / "create.py"), "--repo", str(self.repo), "--from", "30",
+                                                 "--model", "claude-sonnet-5-5", "--effort", "medium", "--exact",
+                                                 "--prompt", "<prompt>"])
         self.assertIn(f"`{BIG}/src/a.ts` (40)", result["prompt"])
+        self.assertIn(COORDINATOR, result["prompt"])
+        self.assertIn("by default sonnet medium 1m", result["prompt"])
         self.assertIn("at most 10 code lines", result["prompt"])
         self.assertNotIn("{", result["prompt"])
         self.assertFalse(loop.state_path(self.repo).exists())
@@ -89,7 +105,24 @@ class Loop(unittest.TestCase):
         self.spawn(1_000)
         servant = loop.load(self.repo)["servant"]
         self.assertEqual((servant["slot"], servant["pane"], servant["before"]), ("01", "t:abc", {f"{BIG}/src/a.ts": 40}))
-        self.assertTrue(any("--prompt" in c for c in self.calls()))
+        self.assertEqual((servant["model"], servant["effort"], servant["step_model"]),
+                         ("claude-sonnet-5-5", "medium", "sonnet"))
+        self.assertTrue(any(c.startswith("create.py --repo") and "--from 30" in c for c in self.calls()))
+
+    def test_coordinator_and_step_values_are_kept_in_the_state(self):
+        result = loop.run_tick(self.repo, model="claude-opus-5-5", effort="high", step_model="opus", dry_run=True)
+        self.assertIn("--effort", result["command"])
+        self.assertEqual(result["command"][result["command"].index("--model") + 1], "claude-opus-5-5")
+        self.assertIn("by default opus medium 1m", result["prompt"])
+        loop.run_tick(self.repo, model="claude-opus-5-5", effort="high", step_model="opus", now=1_000)
+        self.assertEqual(loop.load(self.repo)["settings"], {"coordinator_model": "claude-opus-5-5",
+                                                            "coordinator_effort": "high", "step_model": "opus"})
+        state = loop.load(self.repo)
+        state["servant"] = None
+        loop.save(self.repo, state)
+        later = loop.run_tick(self.repo, dry_run=True)  # no flags: the stored values
+        self.assertEqual(later["command"][later["command"].index("--effort") + 1], "high")
+        self.assertEqual(loop.status(self.repo)["settings"]["step_model"], "opus")
 
     def test_wait_while_the_servant_works(self):
         self.spawn(1_000)
