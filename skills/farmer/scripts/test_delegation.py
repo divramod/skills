@@ -26,14 +26,21 @@ class Ledger(unittest.TestCase):
         self.calls = []
 
         self.free = []
+        self.live = {"model": "claude-opus-5-5", "effort": "medium"}  # what session.py reads in a reused session
 
         def call(argv, cwd):
             self.calls.append(argv)
             if argv[:2] == delegation.FREE:
                 return 0, json.dumps({"worktrees": self.free})
+            if argv[:2] == delegation.SESSION:
+                return 0, json.dumps({**self.live, "window": "1m"})
+            if argv[:2] == delegation.SWITCH:
+                return 0, json.dumps({"ok": True})
             return 0, json.dumps({"slot": "18"})
 
-        for p in (mock.patch.object(mtm_scan, "DATA", self.tmp), mock.patch.object(delegation, "call", call)):
+        agent = lambda pane: {"pane_id": pane, "session_id": "s" + pane.strip("%")}
+        for p in (mock.patch.object(mtm_scan, "DATA", self.tmp), mock.patch.object(delegation, "call", call),
+                  mock.patch.object(delegation.deliver, "agent", agent)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -43,7 +50,8 @@ class Delegation(Ledger):
         r = delegation.delegate(flaky(), MAIN, 5, True, NOW)
         self.assertEqual(r["how"], "new")
         self.assertEqual(r["calls"][0], delegation.FREE + ["--repo", MAIN])
-        self.assertEqual(r["calls"][1][:7], delegation.CREATE + ["--repo", MAIN, "--from", "30", "--prompt"])
+        self.assertEqual(r["calls"][1][:11], delegation.CREATE + ["--repo", MAIN, "--from", "30", "--model", "opus",
+                                                                  "--effort", "medium", "--prompt"])
         self.assertIn('/plan new "disable the load-flaky test t"', r["calls"][1][-1])
         self.assertEqual([c for c in self.calls if c[:2] == delegation.CREATE], [])
         self.assertFalse((self.tmp / "hal2" / "delegations.jsonl").exists())
@@ -70,6 +78,31 @@ class Delegation(Ledger):
         self.assertNotIn("{", text)
         prompt = self.calls[-1][-1]
         self.assertLess(prompt.index(str(role)), prompt.index(r["brief"]))
+
+    def test_the_servant_is_told_it_is_its_plans_coordinator(self):
+        """Skills plan 0016 (D7): the sentence verbatim in the prompt and in the role file's task."""
+        r = delegation.delegate(flaky(), MAIN, 5, False, NOW)
+        sentence = ("You are the plan's coordinator: you never do a step yourself; each step runs in one subagent at "
+                    "its row's Model and Effort, sized under 35% of its Window; you check its done-when, commit it "
+                    "and keep `run` current.")
+        self.assertEqual(delegation.COORDINATOR, sentence)
+        self.assertIn(sentence, self.calls[-1][-1])
+        self.assertIn(sentence, Path(r["role"]).read_text())
+        reference = (Path(delegation.__file__).parents[1] / "reference.md").read_text()
+        self.assertIn(sentence, " ".join(line.strip().lstrip("> ") for line in reference.splitlines()))
+
+    def test_a_new_servant_starts_at_the_role_settings_model_and_effort_and_the_ledger_keeps_them(self):
+        values = delegation.servant_values({"servant_model": "claude-opus-5-5", "servant_effort": "high"})
+        r = delegation.delegate(flaky(), MAIN, 5, False, NOW, values)
+        create = [c for c in self.calls if c[:2] == delegation.CREATE][0]
+        self.assertEqual(create[create.index("--model") + 1], "claude-opus-5-5")
+        self.assertEqual(create[create.index("--effort") + 1], "high")
+        self.assertEqual((r["model"], r["effort"]), ("claude-opus-5-5", "high"))
+        self.assertEqual({k: delegation.ledger(MAIN)["flaky:t"][k] for k in ("model", "effort")},
+                         {"model": "claude-opus-5-5", "effort": "high"})
+        log = [json.loads(x) for x in (self.tmp / "hal2" / "log.jsonl").read_text().splitlines()]
+        self.assertIn("at claude-opus-5-5 high", log[-1]["note"])
+        self.assertEqual(delegation.servant_values({}), {"model": "opus", "effort": "medium"})
 
     def test_at_the_limit_it_waits_and_starts_once_a_servant_has_landed(self):
         delegation.delegate(flaky(), MAIN, 1, False, NOW)
@@ -111,7 +144,7 @@ class Delegation(Ledger):
 
 
 class ServantSlots(Ledger):
-    """Skills plan 0013: the farmer's servants work only in slots 30-99, like a parallel plan's subservants."""
+    """Skills plan 0013: the farmer's servants work only in slots 30-99, the user's helper slots."""
 
     def test_a_free_session_is_reused_only_in_a_slot_from_30(self):
         self.free = [{"slot": "05", "panes": ["%5"]}, {"slot": "main", "panes": ["%1"]},
@@ -133,9 +166,31 @@ class ServantSlots(Ledger):
         self.assertEqual(len(create), 1)
         self.assertEqual(create[0][2:6], ["--repo", MAIN, "--from", "30"])
 
-    def test_follow_up_never_touches_a_subservant(self):
-        """A lead's subservant in slot 31 is not in the farmer's ledger: neither recorded nor stopped, even when its
-        slot looks landed (its branch is never on main by design)."""
+    def test_a_reused_session_at_other_values_is_switched_never_typed_into(self):
+        """Skills plan 0016: a free session at sonnet or another effort restarts at the servant's values."""
+        self.free = [{"slot": "31", "panes": ["%31"]}]
+        for live in ({"model": "claude-sonnet-5-5", "effort": "medium"}, {"model": "opus[1m]", "effort": "max"},
+                     {"model": "", "effort": ""}):
+            self.live, self.calls[:] = live, []
+            key = f"flaky:{live['model']}{live['effort']}"
+            with mock.patch.object(delegation.deliver, "send", return_value=None) as send:
+                r = delegation.delegate(dict(flaky(), key=key), MAIN, 5, False, NOW)
+            send.assert_not_called()
+            self.assertEqual((r["slot"], r["how"]), ("31", "switch"), live)
+            switch = [c for c in self.calls if c[:2] == delegation.SWITCH][0]
+            self.assertEqual(switch[2:7], ["%31", "--model", "opus", "--effort", "medium"])
+            self.assertIn("--detach", switch)
+            self.assertIn(delegation.COORDINATOR, switch[switch.index("--prompt") + 1])
+
+    def test_model_families_match_aliases_and_ids(self):
+        self.assertTrue(delegation.same_model("claude-opus-5-5", "opus"))
+        self.assertTrue(delegation.same_model("opus[1m]", "opus"))
+        self.assertFalse(delegation.same_model("claude-sonnet-5-5", "opus"))
+        self.assertFalse(delegation.same_model("claude-opus-4-6", "claude-opus-5-5"))
+
+    def test_follow_up_never_touches_a_session_it_did_not_start(self):
+        """A session in slot 31 that is not in the farmer's ledger (a user's, or a former subservant) is neither
+        recorded nor stopped, even when its slot looks landed."""
         delegation.delegate(flaky(), MAIN, 5, False, NOW)
         slots = {"18": {"plan": "0120-fix-t", "ahead": 2}, "31": {"plan": "", "ahead": 0}}
         self.assertEqual(delegation.follow_up(MAIN, slots, 5, False, NOW + dt.timedelta(hours=2)), [])

@@ -143,8 +143,9 @@ The user gave the farmer this authority on 2026-10-03 (hal2 INTENT.md). The farm
 - tell sessions to merge their work together, to pause their work or to stop it, so that others get through;
 - pause the merge queue and reorder it;
 - **start servant sessions and give them plans**, autogrilled, run and landed, **without asking the user**
-  ([Delegate](reference.md#delegate-a-fix)), only in slots 30-99; stop the sessions it started once their work has
-  landed (never a parallel plan's subservant: its lead stops it);
+  ([Delegate](reference.md#delegate-a-fix)): each runs its plan as the plan's coordinator (every step in a subagent),
+  started at ROLE.md's `servant_model` and `servant_effort`, only in slots 30-99, the user's helper slots; stop the
+  sessions it started once their work has landed (only those: never a session it did not start);
 - have a test that fails only under load disabled (recorded, with a shot to bring it back);
 - review code, okay what a session waits for, and answer questions that the repository's decisions answer;
 - **relay the user's go** for an outward-facing or paid step (a production deploy, a paid server, an account): a

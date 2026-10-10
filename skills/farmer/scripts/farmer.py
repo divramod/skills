@@ -235,7 +235,7 @@ def run_delegate(args) -> int:
     a = tick.act("farmer", "brief", "delegate", key=f"brief:{delegation.slug(args.title)}", text=args.title,
                  brief={"brief_file": str(Path(args.brief).resolve())})
     result = delegation.delegate(a, main_dir, delegation.parse_limit(settings.get("servant_limit")), args.dry_run,
-                                 datetime.datetime.now())
+                                 datetime.datetime.now(), delegation.servant_values(settings))
     print(json.dumps(result, indent=1) if args.json else
           f"{result['state']}: {result.get('slot') or '-'}" + "".join(f"\n  {' '.join(map(str, c))}"
                                                                      for c in result.get("calls", [])))

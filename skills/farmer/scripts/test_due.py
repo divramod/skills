@@ -63,7 +63,8 @@ class Role(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(items, {"duty:mtm": "*/15 * * * *", "duty:ci": "0 * * * *",
                                  "task:n8n stays up": "*/15 * * * *", "task:Disabled tests come back": "7 9 * * *"})
-        self.assertEqual(settings, {"servant_limit": 5, "notify": "every-round"})
+        self.assertEqual(settings, {"servant_limit": 5, "notify": "every-round", "servant_model": "opus",
+                                    "servant_effort": "medium"})
 
     def test_nothing_implicit_missing_settings_and_crons_are_problems(self):
         _, _, problems = due.schedule("---\nduties:\n  boss: \"x\"\n---\n\n## Tasks\n\n### t\n\n- **Check**: a\n")
@@ -79,6 +80,17 @@ class Role(unittest.TestCase):
         problems = due.schedule(ROLE.replace("servant_limit: 5", "servant_limit: lots"))[2]
         self.assertIn("`servant_limit:` is `auto` or a number", problems)
         self.assertEqual(due.schedule("")[0], {})
+
+    def test_the_servants_model_and_effort_default_to_opus_medium_or_are_named(self):
+        # Skills plan 0016 (D15): every servant starts at an explicit model and effort.
+        named = ROLE.replace("servant_limit: 5", "servant_limit: 5\nservant_model: claude-opus-5-5\nservant_effort: high")
+        _, settings, problems = due.schedule(named)
+        self.assertEqual((settings["servant_model"], settings["servant_effort"], problems),
+                         ("claude-opus-5-5", "high", []))
+        bad = ROLE.replace("servant_limit: 5", "servant_limit: 5\nservant_model: Opus 5\nservant_effort: huge")
+        text = "\n".join(due.schedule(bad)[2])
+        self.assertIn("`servant_model:` is a model alias", text)
+        self.assertIn("`servant_effort:` is one of low, medium, high, xhigh, max", text)
 
 
 if __name__ == "__main__":

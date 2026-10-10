@@ -32,6 +32,16 @@ class Classify(unittest.TestCase):
         self.assertIsNone(lead.classify(fresh, "", time.time()))
         self.assertEqual(lead.classify(agent(state="blocked"), "", time.time())[0], "blocked")
 
+    def test_a_coordinator_waiting_on_its_subagents_is_not_idle_in_plan(self):
+        # Skills plan 0016 (D14): idle while background subagents run is a plan's normal state.
+        tasks = [{"id": "a1", "type": "subagent", "description": "Plan 0094 row 6: n8n"}]
+        self.assertIsNone(lead.classify(agent(plan="0094 n8n", background_tasks=tasks), "Step 6 runs.", time.time()))
+        ended = [dict(tasks[0], status="completed")]
+        self.assertEqual(lead.classify(agent(plan="0094 n8n", background_tasks=ended), "", time.time())[0],
+                         "idle-in-plan")
+        asks = agent(plan="0094 n8n", background_tasks=tasks)
+        self.assertEqual(lead.classify(asks, "Which option do you want?", time.time())[0], "asks")
+
     def test_a_working_session_needs_help_only_near_its_context_limit(self):
         self.assertIsNone(lead.classify(agent(state="working"), "Should I?", time.time()))
         self.assertEqual(lead.classify(agent(state="working", context_percent=91), "", time.time())[0],
