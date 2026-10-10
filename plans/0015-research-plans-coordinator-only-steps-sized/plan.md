@@ -38,13 +38,13 @@ is the coordinator's. F = `research/0004-plans-coordinator-only-steps-sized/find
 
 | # | Step | Done when | Model | Effort | Window | Status |
 |---|---|---|---|---|---|---|
-| 1 | The plan skill: SKILL.md, plan.py, parallel.py, context.py, templates, tests: what changes for coordinator-only runs and sized steps | `test -s F/plan.md` | opus | high | 200k | running |
-| 2 | handoff and grill: persisting and restoring the coordinator's model, effort and window; how the autogrill sizes steps | `test -s F/handoff-grill.md` | opus | high | 200k | running |
-| 3 | The skills that start sessions or write plans: farmer, create-worktree-session, sanity-watch, fix-loc, shoot, mtm, research | `test -s F/session-skills.md` | opus | high | 200k | running |
-| 4 | Every other skill: a line each, what (if anything) changes | `test -s F/other-skills.md` | sonnet | medium | 200k | done |
-| 5 | hal2 (read only): where the effort is lost across handoff, clear and continue; the window the guard assumes | `test -s F/hal2.md` | opus | high | 200k | running |
-| 6 | Claude Code facts: the Agent tool's model and effort, a subagent's window, /clear, /effort, --effort, effortLevel | `test -s F/claude-code.md` | sonnet | high | 200k | running |
-| 7 | Write research.md from the findings and hal2-changes.md beside this plan; send hal2-changes.md to the hal2 farmer | `research.py check` passes and `test -s plans/0015-*/hal2-changes.md` | opus | high | 200k | |
+| 1 | The plan skill: SKILL.md, plan.py, parallel.py, context.py, templates, tests: what changes for coordinator-only runs and sized steps | `test -s F/plan.md` | opus | high | 1m | done |
+| 2 | handoff and grill: persisting and restoring the coordinator's model, effort and window; how the autogrill sizes steps | `test -s F/handoff-grill.md` | opus | high | 1m | done |
+| 3 | The skills that start sessions or write plans: farmer, create-worktree-session, sanity-watch, fix-loc, shoot, mtm, research | `test -s F/session-skills.md` | opus | high | 1m | done |
+| 4 | Every other skill: a line each, what (if anything) changes | `test -s F/other-skills.md` | sonnet | medium | 1m | done |
+| 5 | hal2 (read only): where the effort is lost across handoff, clear and continue; the window the guard assumes | `test -s F/hal2.md` | opus | high | 1m | done |
+| 6 | Claude Code facts: the Agent tool's model and effort, a subagent's window, /clear, /effort, --effort, effortLevel | `test -s F/claude-code.md` | sonnet | high | 1m | done |
+| 7 | Write research.md from the findings and hal2-changes.md beside this plan; send hal2-changes.md to the hal2 farmer | `research.py check` passes and `test -s plans/0015-*/hal2-changes.md` | opus | high | 1m | running |
 
 ## Pre-authorized
 
