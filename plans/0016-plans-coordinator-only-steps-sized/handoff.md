@@ -3,11 +3,11 @@ type: Handoff
 schema: 1
 plan: 16
 title: Handoff of plan 0016
-description: Where plan 0016 stands, research done (plan 0015), step 1 runs in a subagent, steps 2-10 to go.
+description: Where plan 0016 stands, steps 1-2 done and committed, step 3 is next, the coordinator hands off at 34%.
 status: open
 updated: 2026-10-10
 branch: "30"
-at: "e58518f"
+at: "8c69a94"
 ---
 
 # Handoff of plan 0016
@@ -18,15 +18,20 @@ sent to the farmer); this implementation plan lands both (`landing: auto`).
 
 ## Done
 
-- Plan created, autogrilled (D1-D9), committed.
-- Step 1 (session.py, context.py) was running in a subagent at this handoff: check `git status` for its edits and
-  its step file's Notes; when they are complete, verify its done-when and commit it, else rerun the step.
+- Plan created, autogrilled (D1-D9), committed; the hal2 brief sent to farmer-hal2-ac.
+- Step 1 (`07406b6`): `session.py` reads the live model, effort and window; context.py uses it (5.x = 1m), `drift`.
+- Step 2 (`8c69a94`): Window and Size columns, `run: <model> <effort> <window>`, the `plan-steps-sized` check
+  (`sizing.py`), `plan.py run --sync|--check` and `migrate`; 110 tests green.
+- The coordinator handed off at 33.9% (hal2's guard trips near 292k tokens and would type `/effort medium`).
 
 ## Next
 
-1. Steps 2-6 in order, then 7, 8 and 9 as parallel subagents ([D3](decisions.md)), then 10.
-2. The plan's end: `/mtm` (the mtm skill from the main checkout), which lands plans 0015 and 0016.
-3. Tell farmer-hal2-ac by SendMessage when the landing is done (plan, commits, what hal2 still has to do).
+1. Step 3: write the `## Task` of [steps/3.md](steps/3.md) (research 0004 Findings "The plan skill", findings/plan.md
+   items 4-5: `plan.py prompt <n>` prints the Agent call; parallel.py loses slot assignment, LEAD writing, brief,
+   report, reports and watch; the LEAD refusal stays), then its subagent with [step-prompt.md](step-prompt.md).
+2. Steps 4-6 in order, then 7, 8 and 9 as parallel subagents ([D3](decisions.md)), then 10; each: done-when,
+   review, commit, table, `plan.py run --sync`, `context.py`.
+3. The plan's end: `/mtm` (lands plans 0015 and 0016), then tell farmer-hal2-ac by SendMessage what landed.
 
 Done when: `plan.py current` shows 10/10 and `land` ready, then the landing.
 
@@ -40,6 +45,8 @@ Done when: `plan.py current` shows 10/10 and `land` ready, then the landing.
 - A clear-and-continue passes `--effort max` (the coordinator's `run`): `hal2-cli-agents clear-and-continue
   --effort max --detach --json` ([D8](decisions.md)); hal2 would type `/effort medium` otherwise.
 - Never chain a commit after `plan.py check | tail`: the pipe hides the check's failure.
+- Step 1's subagent printed `ANTHROPIC_API_KEY` into its own local transcript while listing the env (told the user;
+  nothing in the repo): a step prompt never lists the whole environment.
 - `research.py check` reports old problems in research docs 0001-0003: not this plan's, never fixed in passing.
 
 ## Start with
