@@ -4,11 +4,12 @@ schema: 1
 id: 15
 title: "Plans coordinator only steps sized"
 description: "Findings per skill and for hal2's autoclear: what must change so a plan's session only coordinates, steps carry Model, Effort and Window under 35%, and the coordinator's values persist."
-status: open
+status: done
 landing: manual
 run: claude-opus-5-5 max
 created: 2026-10-10
 grilled: 2026-10-10 (autogrill ×1)
+finished: 2026-10-10
 ---
 
 # Plan 0015: Plans coordinator only steps sized
@@ -22,7 +23,7 @@ Find, for every skill of this repository and for hal2's autoclear, what must cha
 - The brief: hal2 farmer's `roles/farmer/briefs/2026-10-10-plans-coordinator-only-steps-sized.md`; the user's words
   are [D1](decisions.md).
 - The research doc: [research/0004-plans-coordinator-only-steps-sized](../../research/0004-plans-coordinator-only-steps-sized/research.md),
-  each step's findings in its `findings/` folder; hal2's part: `hal2-changes.md` beside this plan (step 7).
+  each step's findings in its `findings/` folder; hal2's part: [hal2-changes.md](hal2-changes.md).
 - The code: [plan skill](../../skills/plan/SKILL.md) (`plan.py`, `parallel.py`, `context.py`, templates),
   [handoff](../../skills/handoff/SKILL.md), [grill](../../skills/grill/SKILL.md); hal2's `hal2-agents` autoclear.
 - The ledgers: [decisions.md](decisions.md), [questions.md](questions.md); the state: [handoff.md](handoff.md).
@@ -44,7 +45,7 @@ is the coordinator's. F = `research/0004-plans-coordinator-only-steps-sized/find
 | 4 | Every other skill: a line each, what (if anything) changes | `test -s F/other-skills.md` | sonnet | medium | 1m | done |
 | 5 | hal2 (read only): where the effort is lost across handoff, clear and continue; the window the guard assumes | `test -s F/hal2.md` | opus | high | 1m | done |
 | 6 | Claude Code facts: the Agent tool's model and effort, a subagent's window, /clear, /effort, --effort, effortLevel | `test -s F/claude-code.md` | sonnet | high | 1m | done |
-| 7 | Write research.md from the findings and hal2-changes.md beside this plan; send hal2-changes.md to the hal2 farmer | `research.py check` passes and `test -s plans/0015-*/hal2-changes.md` | opus | high | 1m | running |
+| 7 | Write research.md from the findings and hal2-changes.md beside this plan; send hal2-changes.md to the hal2 farmer | `research.py check` passes and `test -s plans/0015-*/hal2-changes.md` | opus | high | 1m | done |
 
 ## Pre-authorized
 
