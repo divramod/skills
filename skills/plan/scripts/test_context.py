@@ -31,8 +31,18 @@ class ContextTest(unittest.TestCase):
         path.write_text("\n".join(lines) + "\n")
         return path
 
+    def fake_ps(self, *rows: str) -> None:
+        """A `ps` whose table is `rows` below the calling script ($PPID inside ps is context.py's own pid)."""
+        bin_dir = self.home / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        lines = "".join(f"echo '{row}'\n" for row in rows)
+        (bin_dir / "ps").write_text(f"#!/bin/sh\necho \"$PPID 900 python3 context.py\"\n{lines}")
+        (bin_dir / "ps").chmod(0o755)
+
     def run_context(self, *args, env=None) -> dict:
-        full_env = {"HOME": str(self.home), "PATH": os.environ.get("PATH", ""),
+        if not (self.home / "bin" / "ps").exists():
+            self.fake_ps()  # no claude above: the real session running these tests must not count
+        full_env = {"HOME": str(self.home), "PATH": f"{self.home / 'bin'}:{os.environ.get('PATH', '')}",
                     "HAL2_CLI_AGENTS": str(self.home / "no-hal2-cli-agents")}
         full_env.update(env or {})
         out = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True,
@@ -67,6 +77,40 @@ class ContextTest(unittest.TestCase):
         self.assertEqual(self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})["window"], 1_000_000)
         env = {"CLAUDE_CODE_SESSION_ID": "s1", "CLAUDE_CONTEXT_WINDOW": "500000"}
         self.assertEqual(self.run_context(env=env)["raw_percent"], 20.0)
+
+    def test_window_from_the_running_claude_process_model(self):
+        # hal2 slot 43: started with `--model opus[1m]` while settings.json said `opus`, it read 49.8% at 10.6% of 1M.
+        self.transcript(assistant(0, cache_read=106_000))
+        (self.home / ".claude" / "settings.json").write_text(json.dumps({"model": "opus"}))
+        self.fake_ps("900 800 /bin/zsh -c python3 context.py",
+                     "800 700 claude --remote-control hal2-43 --model opus[1m] --dangerously-skip-permissions",
+                     "700 1 hal2-cli-git worktree run 43 --agent claude --model sonnet")
+        result = self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})
+        self.assertEqual(result["window"], 1_000_000)
+        self.assertEqual(result["model_source"], "the session process's --model")
+        self.assertEqual(result["raw_percent"], 10.6)
+        self.assertFalse(result["stop"])
+
+    def test_a_claude_process_without_model_falls_back_to_the_setting(self):
+        self.transcript(assistant(0, cache_read=106_000))
+        (self.home / ".claude" / "settings.json").write_text(json.dumps({"model": "opus"}))
+        self.fake_ps("900 800 claude --continue", "800 1 claude --model=opus[1m]")
+        result = self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})
+        self.assertEqual(result["window"], 200_000)
+        env = {"CLAUDE_CODE_SESSION_ID": "s1", "ANTHROPIC_MODEL": "claude-opus-5-5[1m]"}
+        self.assertEqual(self.run_context(env=env)["window"], 1_000_000)
+
+    def test_a_model_switch_in_the_transcript_wins(self):
+        switch = lambda name: json.dumps({"type": "user", "message": {"role": "user", "content":
+            f"<local-command-stdout>Set model to `{name}` and saved as your default for new sessions"
+            "</local-command-stdout>"}})
+        self.fake_ps("900 1 claude --model sonnet")
+        self.transcript(switch("Sonnet 5.5"), assistant(0, cache_read=100_000), switch("Opus 5.5 (1M context)"))
+        result = self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})
+        self.assertEqual(result["window"], 1_000_000)
+        self.assertEqual(result["model_source"], "/model in the transcript")
+        self.transcript(switch("Opus 5.5 (1M context)"), switch("Sonnet 5.5"), assistant(0, cache_read=100_000))
+        self.assertEqual(self.run_context(env={"CLAUDE_CODE_SESSION_ID": "s1"})["window"], 200_000)
 
     def test_more_used_than_the_default_window_means_the_large_one(self):
         self.transcript(assistant(0, cache_read=300_000))
