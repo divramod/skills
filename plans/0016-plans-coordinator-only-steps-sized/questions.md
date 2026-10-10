@@ -4,7 +4,7 @@ schema: 1
 plan: 16
 title: Questions and answers of plan 0016
 description: Every question asked while plan 0016 ran, the agent's and the user's, each with its answer.
-status: open
+status: closed
 ---
 
 # Questions and answers

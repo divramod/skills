@@ -4,11 +4,12 @@ schema: 1
 id: 16
 title: "Plans coordinator only steps sized"
 description: "A plan's session only coordinates: steps run in subagents at checked Model, Effort, Window and Size; the coordinator's values persist in run across clears."
-status: open
+status: done
 landing: auto
 run: claude-opus-5-5 max 1m
 created: 2026-10-10
 grilled: 2026-10-10 (autogrill ×1)
+finished: 2026-10-10
 ---
 
 # Plan 0016: Plans coordinator only steps sized
@@ -45,7 +46,7 @@ R = research 0004's Findings.
 | 7 | farmer, create-worktree-session: coordinator sentence, `--model`/`--effort` in servant prompts and orphan restarts; lead_scan skips sessions with background tasks; create.py drops `--lead`, `--base` | the farmer's and create-worktree-session's unittests pass | opus | high | 1m | 250k | done |
 | 8 | fix-loc, sanity-watch, shoot: the coordinator sentence and explicit `--model`/`--effort` (fix-loc stays Sonnet); sanity-watch's idle classes skip sessions with background tasks; tests | each skill's unittest passes | opus | high | 1m | 220k | done |
 | 9 | The rest: fix-autoclear (effort from `run`, the hal2 change), research (rows carry the columns, deep mode as a Workflow step), README rows of plan, handoff, pause, continue, list-free-worktrees | `python3 -m unittest discover -s scripts` passes; `plan.py check` passes | sonnet | medium | 1m | 150k | done |
-| 10 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | sonnet | medium | 1m | 100k | next |
+| 10 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | sonnet | medium | 1m | 100k | done |
 
 ## Pre-authorized
 
