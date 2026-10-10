@@ -4,7 +4,7 @@ schema: 1
 plan: 17
 title: Handoff of plan 0017
 description: Where plan 0017 stands, the plan was created and nothing is done yet.
-status: open
+status: closed
 updated: 2026-10-10
 branch: "30"
 at: "ef70bf2"

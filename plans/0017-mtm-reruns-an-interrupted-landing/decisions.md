@@ -4,7 +4,7 @@ schema: 1
 plan: 17
 title: Decisions of plan 0017
 description: Every decision taken while plan 0017 was planned and run, with who decided and their words.
-status: open
+status: closed
 ---
 
 # Decisions of plan 0017
