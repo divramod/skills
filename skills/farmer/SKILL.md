@@ -14,7 +14,7 @@ job starts or restarts it; its timer and its `/farmer handoff` + `/clear` contin
 It runs in **its own worktree slot `farmer-<repo>`** (`~/.hal/git/worktree/<repo>/farmer-<repo>`, branch
 `farmer-<repo>`, `<repo>` being origin's repository name, else the main checkout's folder: hal2's decision record
 [roles-folder](https://github.com/divramod/hal2/blob/main/.adr/roles-folder.md); start the session with
-`hal2-cli-git worktree run farmer --agent claude`, the short name finds the slot), one per repository, never in the
+`hal2-cli-git worktree run farmer-<repo> --agent claude`), one per repository, never in the
 main checkout or a numbered slot; a slot still named `farmer` is moved
 with `python3 $S/farmer.py migrate`. **It never changes its own branch except committing the user's `roles/farmer/ROLE.md`**: every change is
 made by a servant it starts or by the session whose work it concerns.
@@ -62,7 +62,7 @@ and itself, so the slot's `git status` stays clean ([reference](reference.md#the
 ## Start
 
 1. This must be the farmer slot (`git rev-parse --show-toplevel` ends in `/farmer-<repo>`); anywhere else say "start
-   me in my own slot: `hal2-cli-git worktree run farmer --agent claude`" and stop (a slot still named `farmer`: "run
+   me in my own slot: `hal2-cli-git worktree run farmer-<repo> --agent claude`" and stop (a slot still named `farmer`: "run
    `farmer.py migrate` first"; start-check's exit 4 says which). Write `farmer` into `plans/CURRENT_PLAN`.
    Read `handoff.md` (`python3 $S/farmer.py handoff` names it) when there is one.
 2. `python3 $S/farmer.py start-check`. Exit 2: `bash $S/install-prerequisites.sh` once, then again. Exit 3 (no

@@ -82,7 +82,7 @@ def slot_problem(repo: str) -> str | None:
                 f"run `farmer.py migrate --repo {top}`")
     if not top or not roles.is_slot(top):
         slot = roles.slot_name(top or repo)
-        return f"not the farmer slot {slot} ({top or repo}): start me with `hal2-cli-git worktree run farmer --agent claude`"
+        return f"not the farmer slot {slot} ({top or repo}): start me with `hal2-cli-git worktree run {slot} --agent claude`"
     changed = set(git(top, "diff", "--name-only", f"{default_ref(top)}...HEAD").split())
     changed |= {line[3:].strip() for line in git(top, "status", "--porcelain", "-uall").splitlines()}
     other = sorted(changed - {*ROLE_FILES, ""})
