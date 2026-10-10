@@ -8,7 +8,8 @@ description: Watch every agent session (Claude Code, Codex, OpenCode in tmux pan
 A watcher running in its own Claude session over one project's agent sessions. Each round costs one script run
 when nothing is wrong; judgment only goes into real incidents. The design, the failure classes F1–F13 and the
 reasons behind each rule are in hal2's
-[research 0015](https://github.com/divramod/hal2/blob/main/research/0015-agent-sanity-watcher/research.md).
+[research 0015](https://github.com/divramod/hal2/blob/main/research/0015-agent-sanity-watcher/research.md); F14 came
+with skills plan 0016, whose plan sessions are coordinators that rest while their steps run in subagents.
 
 - `S=<skill-dir>/scripts`, `W="python3 $S/scan.py"`.
 - State (handled incidents, resume counters, heartbeat, `log.jsonl`, incident briefs) lives in `~/skills/sanity-watch/`.
@@ -42,8 +43,14 @@ project, never inside a session that does other work.
 ## 1. Scan
 
 `$W scan --json` (default: the last 24 hours, incidents not handled yet). It writes the heartbeat. Each incident
-has the fields `id`, `class` (F1–F13), `name`, `session`, `pane`, `slot`, `checkout`, `plan`, `state`, `action`,
-`reason` and `evidence` (chronicle line, API error, transcript path, the plan's next step, the hook record).
+has the fields `id`, `class` (F1–F14), `name`, `session`, `pane`, `slot`, `checkout`, `plan`, `state`, `action`,
+`reason` and `evidence` (chronicle line, API error, transcript path, the plan's next step, the hook record, the
+dead subagents).
+
+A session resting while a background task of its own lives (`background_tasks` of `hal2-cli-agents list --json`: a
+shell, a monitor, a subagent whose transcript moved in the last 20 minutes) waits and is never reported: a plan's
+coordinator rests while its step's subagent works. A working session in an `Agent` call counts its subagents'
+transcripts as moving.
 
 No incidents: print one line (`sanity-watch <time>: <n> agents, all fine`) and end the turn. Keep it that short
 so the session stays small over days.
@@ -60,7 +67,7 @@ Take the incident's `action`, check it against the evidence, do it, and then rec
 |---|---|
 | `resume` (F1–F3) | [Resume](#resume) with the class's prompt |
 | `restore` (F8) | `hal2-cli-agents terminal restore <id> --json`, then resume once the agent is up |
-| `judge` (F6, F7, F12, F13) | [Judge](#judge), then resume, count or escalate |
+| `judge` (F6, F7, F12, F13, F14) | [Judge](#judge), then resume, count or escalate |
 | `wait` (F4) | Nothing while Claude Code's own auto-continue can still fire. Once the printed reset time is 10 minutes past and the session is still `failed`: resume |
 | `escalate` (F5, F9, F10, spent budget) | `PushNotification`: `sanity-watch: <repo> <slot> <class name>: <reason>`. Never answer a dialog, never top up anything |
 | `handover` (F11) | Leave it to fix-autoclear: notify `sanity-watch: <slot> autoclear failed, run /fix-autoclear` |
@@ -81,8 +88,9 @@ Read these right before sending. When any of them fails, skip the incident and r
 Send one prompt that names the stop, so the agent checks before it redoes work. A newline is Enter:
 
 - F1–F3: `hal2-cli-agents send <pane> $'Your last response was cut off (<the API error text>). Check git status and the result of your last tool call, then continue where you stopped.\n'`
-- F6: `... $'You ended your turn while plan <slug> still has step <n> (<step>) to do. Continue the plan to its end; if you stopped on purpose, say why in one line.\n'`
+- F6: `... $'You ended your turn while plan <slug> still has step <n> (<step>) to do. Continue the plan to its end as its coordinator: run step <n> in a subagent at its row\'s Model and Effort; if you stopped on purpose, say why in one line.\n'`
 - F7 (after an Escape, see Judge): `... $'Your turn hung and was interrupted. Check git status and the last tool result, then continue.\n'`
+- F14: `... $'Your subagent <description> ended without a report (its transcript is quiet for <n> min). As the plan\'s coordinator, check what it left (git status, its step file\'s Notes), then run that step again in a new subagent or go on with the next.\n'`
 
 Then:
 
@@ -110,6 +118,11 @@ Then:
     escalates it if it hangs again.
 - **F12, unknown.** Read the transcript tail around the stop. Resume only when you can name a transient cause;
   otherwise escalate.
+- **F14, subagent dead under an idle parent.** The session rests and every background subagent it waits on has a
+  transcript quiet for 20 minutes or more (`evidence.subagents`). Read the tail of each one
+  (`~/.claude/projects/*/<session>/subagents/agent-<id>.jsonl`): it ends in a `tool_use` whose command still runs
+  (`ps` shows it, e.g. a long build or test): `count`. Otherwise it is dead (the parent was never woken): resume
+  with the F14 prompt, at most once per subagent.
 - **F13, continue blocked.** A clear-and-continue job has waited over 3 minutes on text in the agent's input box
   that hal2 did not type (hal2 plan 0139: its own text is emptied by the job). `hal2-cli-agents capture <pane>`:
   never type into, empty or send that text. Escalate with what the box holds (its first words), so the user sends or
@@ -145,12 +158,15 @@ them.
    - the idea from research 0015 that fits;
    - where in hal2 the fix belongs;
    - **the code path that failed or failed to react, which must get more logs**.
-2. **Spawn** from the project's main checkout path (`project` in the scan):
+2. **Start** it with the project's main checkout path (`project` in the scan), as the plan's coordinator at the
+   user's defaults (opus, medium effort; skills plan 0015's D15):
    ```bash
-   hal2-cli-agents spawn <project> --json --prompt "<the prompt below>"
+   python3 <skill-dir>/../create-worktree-session/scripts/create.py --repo <project> --from 30 \
+     --model opus --effort medium --exact --prompt "<the prompt below>"
    ```
-   It starts Claude in the lowest worktree slot without a live agent (a terminal host). Record the pane, slot and
-   brief under the case's **Fix plan**, set it to `running (<slot>)`, and `$W record <id> spawned --note <slot>`.
+   It starts Claude in the first slot from 30 with no session and no work (a terminal host) and prints its slot and
+   pane. Record the pane, slot and brief under the case's **Fix plan**, set it to `running (<slot>)`, and
+   `$W record <id> spawned --note <slot>`.
 3. **The prompt**, one paragraph:
 
    > You are a fix agent started by sanity-watch; the user will not answer questions, so never ask any. Run
@@ -164,10 +180,15 @@ them.
    > - the plan's `uat.md` (`plan.py uat`) with a check that provokes the incident again, when a person can, and
    >   expects the session not to stop.
    >
-   > Autogrill the plan twice: two full /grill passes in which you decide every branch yourself by INTENT.md, the
-   > ADRs and the rule "the more professional, battle-tested option", with no question and no confirmation, every
-   > decision recorded in its home. Then run `plan.py grilled` and run the plan with /plan n to its end; it lands
-   > itself (Landing: auto). When you are blocked, push a notification naming the plan and stop.
+   > Every row names its Model, Effort, Window and Size (the plan skill's rubric): the regression test and the fix
+   > at opus high 1m, the logs and the uat at sonnet medium 1m, each Size under 35% of its Window; `plan.py check`
+   > passes. Autogrill the plan twice: two full /grill passes in which you decide every branch yourself by
+   > INTENT.md, the ADRs and the rule "the more professional, battle-tested option", with no question and no
+   > confirmation, every decision recorded in its home. Then run `plan.py grilled` and run the plan with /plan n to
+   > its end; it lands itself (Landing: auto). You are the plan's coordinator: you never do a step yourself; each
+   > step runs in one subagent at its row's Model and Effort, sized under 35% of its Window; you check its
+   > done-when, commit it and keep `run` current. When you are blocked, push a notification naming the plan and
+   > stop.
 
 4. **Later rounds.** The spawned agent's sessions are watched like any other. When its plan has landed (its
    checkout's plan is gone from `CURRENT_PLAN` and the landing shows in `hal2-cli-git worktree queue` history or

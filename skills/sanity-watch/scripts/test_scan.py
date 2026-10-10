@@ -79,9 +79,10 @@ class FindIncidents(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def find(self, agents, events=(), tails=None, plan=None):
+    def find(self, agents, events=(), tails=None, plan=None, moved=None):
         return scan.find_incidents(PROJECT, agents, list(events), [], self.state, NOW,
-                                   tails=lambda s: (tails or {}).get(s, tail()), plan_of=lambda c: plan)
+                                   tails=lambda s: (tails or {}).get(s, tail()), plan_of=lambda c: plan,
+                                   moved=lambda s, t: (moved or {}).get(t))
 
     def test_connection_lost_is_resumed(self):
         [found] = self.find([agent()], [failed_event()],
@@ -125,6 +126,51 @@ class FindIncidents(unittest.TestCase):
                                    plan={**plan, "land": "ready"}), [])
         busy = agent(state="done", since=NOW - 15 * MIN, autoclear={"state": "waiting"})
         self.assertEqual(self.find([busy], plan=plan), [])
+
+    def test_a_coordinator_waiting_on_its_background_work_is_left_alone(self):
+        plan = {"slug": "0016-x", "land": "wait", "next": {"number": "8", "step": "s"}}
+        resting = dict(state="done", since=NOW - 30 * MIN)
+        sub = {"id": "a1", "type": "subagent", "description": "Plan 0016 row 8: s"}
+        shell = {"id": "b1", "type": "shell", "description": "watch"}
+        self.assertEqual(self.find([agent(**resting, background_tasks=[sub])], plan=plan,
+                                   moved={"a1": NOW - 2 * MIN}), [])
+        self.assertEqual(self.find([agent(**resting, background_tasks=[shell])], plan=plan), [])
+        self.assertEqual(self.find([agent(**resting, background_tasks=[sub])], plan=plan), [])  # no transcript yet
+        # one live task is enough, even beside a dead subagent
+        dead = {"id": "a2", "type": "subagent", "description": "Plan 0016 row 7: s"}
+        self.assertEqual(self.find([agent(**resting, background_tasks=[sub, dead])], plan=plan,
+                                   moved={"a1": NOW - 2 * MIN, "a2": NOW - 50 * MIN}), [])
+
+    def test_a_dead_subagent_under_an_idle_parent_is_judged(self):
+        dead = {"id": "a2", "type": "subagent", "description": "Plan 0016 row 7: s"}
+        [found] = self.find([agent(state="sleeping", since=NOW - 30 * MIN, background_tasks=[dead])],
+                            moved={"a2": NOW - 25 * MIN})
+        self.assertEqual((found["class"], found["action"], found["name"]),
+                         ("F14", "judge", "subagent dead under an idle parent"))
+        self.assertEqual((found["evidence"]["subagents"][0]["id"], found["evidence"]["subagents"][0]["quiet_minutes"]),
+                         ("a2", 25))
+        self.assertEqual(self.find([agent(state="sleeping", since=NOW - 5 * MIN, background_tasks=[dead])],
+                                   moved={"a2": NOW - 25 * MIN}), [])
+
+    def test_an_agent_call_whose_subagent_moves_is_no_hang(self):
+        (scan.RECORDS / "s1.json").write_text(json.dumps({"event": "PreToolUse", "detail": "Agent",
+                                                         "ts": NOW - 90 * MIN}))
+        self.assertEqual(self.find([agent(state="working")], moved={None: NOW - 5 * MIN}), [])
+        [found] = self.find([agent(state="working")], moved={None: NOW - 70 * MIN})
+        self.assertEqual((found["class"], found["evidence"]["quiet_minutes"]), ("F7", 70))
+
+    def test_subagent_moved_reads_the_subagent_transcripts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old, scan.PROJECTS = scan.PROJECTS, Path(tmp)
+            try:
+                folder = Path(tmp, "-p", "s1", "subagents")
+                folder.mkdir(parents=True)
+                (folder / "agent-a1.jsonl").write_text("{}\n")
+                self.assertIsNotNone(scan.subagent_moved("s1", "a1"))
+                self.assertIsNotNone(scan.subagent_moved("s1"))
+                self.assertIsNone(scan.subagent_moved("s1", "a9"))
+            finally:
+                scan.PROJECTS = old
 
     def test_hang_and_long_tool_call(self):
         (scan.RECORDS / "s1.json").write_text(json.dumps({"event": "PostToolUse", "ts": NOW - 25 * MIN}))

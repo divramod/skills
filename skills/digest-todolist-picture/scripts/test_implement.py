@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+COORDINATOR = ("You are the plan's coordinator: you never do a step yourself; each step runs in one subagent at its "
+               "row's Model and Effort, sized under 35% of its Window; you check its done-when, commit it and keep "
+               "`run` current.")
 
 FAKE = r'''#!/usr/bin/env python3
 import json, os, sys
@@ -24,8 +27,8 @@ elif args[:2] == ["shots", "mark-sent"]:
     print("{}")
 elif args[:1] == ["list"]:
     print(json.dumps([{"pane_id": "%7", "slot": "03", "kind": "claude", "state": "working", "title": "t",
-                       "project": repo}, {"pane_id": "%9", "slot": "01", "kind": "claude", "state": "idle",
-                       "project": "/elsewhere"}]))
+                       "project": repo, "session_id": "s7"}, {"pane_id": "%9", "slot": "01", "kind": "claude",
+                       "state": "idle", "project": "/elsewhere"}]))
 elif args[:2] == ["terminal", "list"]:
     print("[]")
 elif args[:2] == ["worktree", "list"]:
@@ -70,6 +73,13 @@ class TestImplement(unittest.TestCase):
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
 
+    def transcript(self, model="claude-opus-5-5", effort="medium"):
+        """Session s7's transcript: one main-chain turn at `model` and `effort`."""
+        folder = self.home / ".claude" / "projects" / "-app"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "s7.jsonl").write_text(json.dumps({"type": "assistant", "requestedModel": model, "effort": effort,
+                                                     "message": {"content": []}}) + "\n")
+
     def test_new_worktree_gets_the_shot_prompt_then_the_shot_is_marked(self):
         out = self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4")
         self.assertEqual((out["mode"], out["slot"], out["remote_control"]), ("new", "02", "app-02"))
@@ -78,14 +88,45 @@ class TestImplement(unittest.TestCase):
         self.assertIn("# shot 4 tabs: sort button (app)\nA button that sorts tabs.", prompt)
         self.assertIn('This is shot 4 of the feature "app" in repo me/app.', prompt)
         self.assertIn("titled `app 4 tabs: sort button`", prompt)
+        self.assertIn("then run it as its coordinator. " + COORDINATOR, prompt)
+        self.assertEqual(prompt.count(COORDINATOR), 1)
+        self.assertEqual(spawn[spawn.index("--model") + 1:spawn.index("--model") + 4], ["opus", "--effort", "medium"])
         self.assertEqual(Path(out["bullet"]).read_text().strip(), prompt)
         mark = self.calls()[-1]
         self.assertEqual(mark[1:4] + mark[mark.index("--worktree"):mark.index("--worktree") + 2],
                          ["shots", "mark-sent", "app", "--worktree", "02"])
 
-    def test_existing_session_gets_the_bullet_typed_in(self):
+    def test_new_session_takes_the_given_model_and_effort(self):
+        self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4", "--model", "sonnet",
+                     "--effort", "high")
+        spawn = next(c for c in self.calls() if c[1:3] == ["worktree", "run"])
+        self.assertEqual(spawn[spawn.index("--model") + 1:spawn.index("--model") + 4], ["sonnet", "--effort", "high"])
+        self.assertIn("--effort is one of", self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app",
+                                                         "--number", "4", "--effort", "huge", ok=False))
+
+    def test_a_template_without_the_sentence_gets_it(self):
+        folder = self.repo / ".hal/util/shooter/config/nvim"
+        folder.mkdir(parents=True)
+        (folder / "shot-template-single.md").write_text("# shot {{shot_title}}\n{{shot_content}}\n")
+        self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4")
+        spawn = next(c for c in self.calls() if c[1:3] == ["worktree", "run"])
+        self.assertTrue(spawn[spawn.index("--prompt") + 1].endswith("\n\n" + COORDINATOR))
+
+    def test_existing_session_at_other_values_is_switched_with_the_shot(self):
+        self.transcript(effort="max")
         out = self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4", "--pane", "%7")
-        self.assertEqual((out["mode"], out["slot"], out["busy"]), ("existing", "03", True))
+        self.assertEqual((out["mode"], out["switched"], out["was"]), ("existing", True,
+                                                                      {"model": "claude-opus-5-5", "effort": "max"}))
+        [switch] = [c[2:] for c in self.calls() if c[1] == "switch"]
+        self.assertEqual(switch[:5], ["%7", "--model", "opus", "--effort", "medium"])
+        self.assertIn(COORDINATOR, switch[switch.index("--prompt") + 1])
+        self.assertFalse([c for c in self.calls() if c[1] == "send"])
+        self.assertIn("03", self.calls()[-1])
+
+    def test_existing_session_gets_the_bullet_typed_in(self):
+        self.transcript()
+        out = self.run_imp("send", "--repo", str(self.repo), "--shotfile", "app", "--number", "4", "--pane", "%7")
+        self.assertEqual((out["mode"], out["slot"], out["busy"], out["switched"]), ("existing", "03", True, False))
         sends = [c[2:] for c in self.calls() if c[1] == "send"]
         self.assertEqual(sends, [["%7", "C-u", "--key"], ["%7", "@" + out["bullet"]], ["%7", "enter", "--key"],
                                  ["%7", "enter", "--key"]])

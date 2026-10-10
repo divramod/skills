@@ -3,17 +3,21 @@
 
   scan.py scan [--project <dir>] [--hours 24] [--all] [--json]
       the incidents since the last scan (--all: also the handled ones): stopped sessions
-      classified F1-F13 (research 0015 in hal2; F13: plan 0139) with evidence and an action
-      (resume|restore|judge|wait|escalate|handover|count); writes the heartbeat
+      classified F1-F14 (research 0015 in hal2; F13: plan 0139; F14: skills plan 0016) with
+      evidence and an action (resume|restore|judge|wait|escalate|handover|count); writes the heartbeat
   scan.py record <incident-id> <action> [--session <id>] [--note <text>]
       mark an incident handled: appended to log.jsonl; a `resume` counts against the
       session's resume budget (2 per 6 h)
   scan.py status [--json]
       heartbeat age, handled incidents, resumes of the last 6 h, open cases
 
-Reads hal2's state (hal2-cli-agents list --json, the day chronicle, the hook records,
-terminal orphans), Claude Code's transcripts and the plan skill's plan.py; writes only
-its own state under ~/skills/sanity-watch/. Exit 0 on success, 2 when a tool is missing.
+Reads hal2's state (hal2-cli-agents list --json with each session's `background_tasks`, the
+day chronicle, the hook records, terminal orphans), Claude Code's transcripts (a subagent's:
+<session>/subagents/agent-<id>.jsonl) and the plan skill's plan.py; writes only its own state
+under ~/skills/sanity-watch/. A session that rests while a background task of its own lives (a
+shell, a monitor, a subagent whose transcript moved in the last 20 min) waits, it has not
+stopped (a plan's coordinator waiting on its step's subagent); one whose subagents are all dead
+is F14. Exit 0 on success, 2 when a tool is missing.
 """
 
 import argparse
@@ -43,20 +47,23 @@ HANG_AFTER = 20 * MINUTE
 HANG_AFTER_IN_TOOL = 60 * MINUTE
 BLOCKED_TOO_LONG = 30 * MINUTE
 CONTINUE_BLOCKED_AFTER = 3 * MINUTE  # hal2's draft_alert
+SUBAGENT_DEAD_AFTER = 20 * MINUTE  # a background subagent whose transcript is this quiet is dead
+RESTING = ("done", "sleeping", "idle")
+AGENT_TOOLS = ("Agent", "Task")  # the tool that runs a subagent (Task: its older name)
 AUTOCLEAR_BUSY = {"interrupting", "waiting", "requesting", "clearing", "continuing"}
 
 # What the watcher does per class (research 0015, "Failure taxonomy").
 ACTIONS = {
     "F1": "resume", "F2": "resume", "F3": "resume", "F4": "wait", "F5": "escalate",
     "F6": "judge", "F7": "judge", "F8": "restore", "F9": "escalate", "F10": "escalate",
-    "F11": "handover", "F12": "judge", "F13": "judge",
+    "F11": "handover", "F12": "judge", "F13": "judge", "F14": "judge",
 }
 NAMES = {
     "F1": "transient API error", "F2": "network down", "F3": "Mac slept mid-response",
     "F4": "rate or usage limit", "F5": "billing or auth", "F6": "turn ended early in a plan",
     "F7": "hang", "F8": "process gone", "F9": "waiting for the user too long",
     "F10": "tool failure loop", "F11": "autoclear failure", "F12": "unknown stop",
-    "F13": "continue blocked",
+    "F13": "continue blocked", "F14": "subagent dead under an idle parent",
 }
 
 
@@ -151,6 +158,30 @@ def read_tail(session: str, lines: int = 400) -> dict:
     return result
 
 
+def subagent_moved(session: str, task: str | None = None) -> int | None:
+    """When the transcript of the session's subagent `task` (any subagent's when None) last changed, in ms;
+    None when there is none."""
+    name = f"agent-{task}.jsonl" if task else "agent-*.jsonl"
+    times = [p.stat().st_mtime for p in PROJECTS.glob(f"*/{session}/subagents/{name}") if p.is_file()]
+    return int(max(times) * 1000) if times else None
+
+
+def background(agent: dict, at: int, moved=subagent_moved) -> tuple[list[dict], list[dict]]:
+    """The session's background tasks split into live and dead ones. hal2 lists a shell or monitor while it
+    runs; a subagent stays listed after it died, so it counts as dead once its transcript has been quiet
+    `SUBAGENT_DEAD_AFTER` (a subagent without a transcript counts as live)."""
+    live, dead = [], []
+    for task in agent.get("background_tasks") or []:
+        if not isinstance(task, dict):
+            continue
+        last = moved(agent.get("session_id") or "", task.get("id")) if task.get("type") == "subagent" else None
+        if last is not None and at - last >= SUBAGENT_DEAD_AFTER:
+            dead.append({**task, "quiet_minutes": (at - last) // MINUTE})
+        else:
+            live.append(task)
+    return live, dead
+
+
 def run_json(*argv, default=None):
     try:
         out = subprocess.run(argv, capture_output=True, text=True, timeout=60)
@@ -231,8 +262,8 @@ def incident(cls: str, session: str, at: int, agent: dict | None, evidence: dict
 
 
 def find_incidents(project: str, agents: list[dict], events: list[dict], orphans: list[dict], state: dict,
-                   at: int, tails=read_tail, plan_of=None) -> list[dict]:
-    """Every incident of `project`. Pure apart from `tails` and `plan_of` (injected for tests)."""
+                   at: int, tails=read_tail, plan_of=None, moved=subagent_moved) -> list[dict]:
+    """Every incident of `project`. Pure apart from `tails`, `plan_of` and `moved` (injected for tests)."""
     plan_of = plan_of or current_plan
     mine = [a for a in agents if a.get("project") == project]
     by_session = {a.get("session_id"): a for a in agents if a.get("session_id")}
@@ -280,8 +311,17 @@ def find_incidents(project: str, agents: list[dict], events: list[dict], orphans
                     "autoclear": job, "waiting_on": job["waiting_on"], "waiting_minutes": (at - blocked) // MINUTE}))
             continue
         state_ = agent.get("state") or ""
+        live, dead = background(agent, at, moved) if state_ in RESTING else ([], [])
+        if live:
+            continue  # it waits on its own background work, e.g. a coordinator on its step's subagent (D14)
+        # F14: resting while every background subagent it waits on is dead: nothing will wake it.
+        if dead and at - since >= EARLY_END_AFTER:
+            tail = tails(session)
+            found.append(incident("F14", session, since, agent, {
+                "subagents": dead, "last_assistant": tail.get("last_assistant"),
+                "transcript": tail.get("transcript")}))
         # F6: the turn ended while the checkout's plan still has a step to run before its landing.
-        if state_ in ("done", "sleeping", "idle") and at - since >= EARLY_END_AFTER and agent.get("checkout"):
+        elif state_ in RESTING and at - since >= EARLY_END_AFTER and agent.get("checkout"):
             plan = plan_of(agent["checkout"])
             if plan and plan.get("next") and plan.get("land") == "wait":
                 tail = tails(session)
@@ -293,8 +333,11 @@ def find_incidents(project: str, agents: list[dict], events: list[dict], orphans
         # F7: working, but the hook record has not moved for too long.
         elif state_ == "working" and agent.get("source") == "hook":
             record = record_of(session)
-            quiet = at - (record.get("ts") or at)
+            last = record.get("ts") or at
             in_tool = record.get("event") == "PreToolUse"
+            if in_tool and record.get("detail") in AGENT_TOOLS:
+                last = max(last, moved(session, None) or 0)  # a subagent at work: its transcript moves
+            quiet = at - last
             if quiet >= (HANG_AFTER_IN_TOOL if in_tool else HANG_AFTER):
                 found.append(incident("F7", session, record.get("ts") or since, agent, {
                     "record": record, "quiet_minutes": quiet // MINUTE}))
