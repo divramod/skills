@@ -3,6 +3,28 @@
 Newest first. One case per root cause; a recurrence adds a line under its case. The **signature** is what
 `evidence.py show` prints that identifies the case.
 
+## 2026-10-10 · a `SubagentStop` record ended the turn early: `/clear` queued, `clear-unconfirmed` (hal2 wt 03)
+
+- **Signature**: job `failed` `clear-unconfirmed` at 11:17; its log shows the turn taken as over although the session
+  still worked (a `SubagentStop` hook record, state `done`, 0.3 s before the request, written over the main
+  session's record); the typed `/clear` was queued by Claude Code (queued-input lines above the spinner), no `SessionStart`.
+  Shot 19 (hal2 wt 02) had the same trigger; its failure, the narrow-pane read, is another cause and stays open.
+- **Cause**: `state.rs` mapped Claude's `SubagentStop` to `done` on the main session's record.
+- **Fix**: hal2 plan 0231 step 8, `0bea84fab`: no record for `SubagentStop`; `autoclear/stale.rs` `ends_turn()` also
+  needs no running subagent on the screen (`scrape::claude_subagents`, the `◯` rows under `⏺ main`);
+  `Refusal::Queued` (`scrape::claude_queued_shown`) when a clear is already queued. Tests `incident_03_tests::*`
+  (fixture `claude-idle-subagents-running.txt`, inferred). Accepted: a dead turn whose screen lists a running
+  background subagent waits until it ends.
+
+## 2026-10-10 · a stale `working` record from before the request blocked the wait forever (hal2 wt 43)
+
+- **Signature**: job `waiting` for good (or `failed` "the job never ended"); the screen reads idle while the session's
+  record says `working` since a time before the request.
+- **Cause**: the wait trusted the record; a record older than the request was never cross-checked with the screen.
+- **Fix**: hal2 plan 0231 step 6, `ae2dc25c4`, `autoclear/stale.rs`: log `the record says working since <time>,
+  before the request, but the screen reads idle: taking the turn as over`. Fixture
+  `claude-idle-stale-record-subagent.txt`; tests `incident_43_tests::*`.
+
 ## 2026-10-10 · a mod's pane held the keyboard: `/clear` typed, the box stayed empty (skills wt 30, hal2 wt 43)
 
 - **Signature**: job `failed` `typing-mismatch: typed "/clear", the box showed Some("")`, repeated each attempt until

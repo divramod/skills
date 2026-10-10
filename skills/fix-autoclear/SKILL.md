@@ -147,11 +147,17 @@ clear). Keep this true: `$E selfcheck`.
    read back, Enter; confirmed by a `SessionStart` record, source `clear`) → `continuing` (the effort level, see
    below; then the kind's prompt, `DEFAULT_PROMPT` `/handoff c`, typed, read back, sent) → `continued`. The job
    needs no open plan (the refusal no-open-plan is gone since plan 0181; `--without-plan` does nothing).
-   **Typing gets the keyboard back** (`code/rust/libs/hal2-agents/src/autoclear/keyboard.rs`, plan 0231): when a typed
-   `/clear` or prompt reads back as nothing (`Some("")`) and the turn is over (clearing, continuing, the hand-off
-   request after an ended turn), the job presses one Escape (a mod's pane or band may hold the keyboard), `ensure_insert`,
-   and types once more; log `nothing showed: the prompt may not have the keyboard (a mod's pane?), pressing Escape`,
-   `after Escape the box reads ...`. Never on the busy path (Escape interrupts a working turn).
+   **Typing goes through the shared guard** (`code/rust/libs/hal2-agents/src/prompt_guard.rs` + `prompt_guard/typing.rs`,
+   plan 0231 step 7; replaces the job's own `autoclear/keyboard.rs`): `PromptGuard::prepare()` (marker, INSERT),
+   `type_text()`, `insert()`, `empty()`, `prompt_guard::turn()`; refusals `Refusal {Pane, Gone, NoBox, Draft,
+   NotInsert, KeyboardHeld, NotShown, Queued}`. It greps the screen for the mod's marker `[pane has the keyboard`
+   (`scrape::keyboard_held`; the title line of the mod pane, 0.5.0) and, after a turn's end, presses one Escape;
+   mid-turn it refuses `KeyboardHeld`. A typed text reading back as nothing after an ended turn gets one Escape,
+   `ensure_insert` and a second try (log `nothing showed: the prompt may not have the keyboard ...`). Never on the
+   busy path (Escape interrupts a working turn). `libs/hal2-agents/src/guarded.rs` (step 9) puts every other path
+   through it (the CLI send and send-command verbs, node agents.send, shooter and hal2-tell): a refusal is exit 3 `not sent:
+   <reason>`, a draft in the box `not-empty`. Raw on purpose: `--key`, node `keys`/`answer`. Trap: never press `q`
+   (it lands in the prompt); only Escape. A `SubagentStop` writes no record (step 8), `stale.rs` decides a stale record.
    **The busy path** (`code/rust/libs/hal2-agents/src/autoclear/busy.rs`, `queued.rs` and `queued_clear.rs` beside
    it, the queue read by `code/rust/libs/hal2-agents/src/scrape/queued.rs`; plan 0181): a session that is never
    idle (a farmer under a stream of messages). While the job waits for the turn's end it looks every 5 s; once it
@@ -233,7 +239,7 @@ input path into `<state>/agents/<id>.log` beside the host (`grep 'hal2-pty host'
 (`claude_screen`, the input box).
 
 **Traps**: a Claude Code mod's pane or band (`s: subagents [-]` under an empty box) holding the keyboard: keys reach the host
-and Claude's TTY (0 unread bytes) but never the box; one Escape gives it back (the job does since plan 0231); an old `~/.cargo/bin/hal2-cli-agents` (the hooks run it: check its build time against the fix); a
+and Claude's TTY (0 unread bytes) but never the box; one Escape gives it back (the shared guard does since plan 0231); an old `~/.cargo/bin/hal2-cli-agents` (the hooks run it: check its build time against the fix); a
 Claude Code update that changes the screen (box, `-- INSERT --`, the history box's `─── History n/m ───` rule, the
 stop lines); an old `hal2-api` (the reports and early retries run in it: `hal2-api install` after installing);
 `* Waiting for API response · will retry` is Claude still working, not a failure; a short pane (hal2 never sizes it:
