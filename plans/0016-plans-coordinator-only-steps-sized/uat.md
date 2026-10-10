@@ -83,7 +83,7 @@ Priority: p2
 Tags: regression
 
 Preconditions:
-- hal2's change in `plans/0016-plans-coordinator-only-steps-sized/hal2-changes.md` has landed in hal2 (until then
+- hal2's change in `plans/0015-research-plans-coordinator-only-steps-sized/hal2-changes.md` has landed in hal2 (until then
   this check is expected to fail and stays open).
 
 Steps:
