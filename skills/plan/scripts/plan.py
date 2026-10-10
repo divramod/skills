@@ -12,7 +12,8 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
 `format` says which).
 
   plan.py new "<title>" [--goal "<goal>"] [--research] [--no-current] [--fetch]
-                                                           create the next plan from the template; its number
+                                                           create the next plan from the template (`run`: the
+                                                           session's live values, else the template's); its number
                                                            is unique across all worktrees and branches
                                                            (plan_number.py; --fetch sees other clones too);
                                                            --research: a research plan, slug <NNNN>-research-<topic>;
@@ -45,7 +46,21 @@ front matter is legacy: its `Landing:`, `Grilled:`, `Finished:` and `Autogenerat
                                                            problem per line; legacy plans pass; named folders: only
                                                            those (an example folder laid out like a repository:
                                                            `--folder` of the tree holding its plans/); without the
-                                                           checker one line `records unchecked: ...`, exit 0
+                                                           checker one line `records unchecked: ...`, exit 0;
+                                                           then the sizing (sizing.py, rule plan-steps-sized): a
+                                                           record plan with an open row needs `run: <model>
+                                                           <effort> <window>` and in each open row a Model, Effort,
+                                                           Window and a Size at most 35% of Window (done rows and
+                                                           legacy plans pass; `current` lists them in `problems`)
+  plan.py run --sync|--check|[--model m] [--effort e] [--window w] [--plan <slug>]
+                                                           the coordinator's `run`: --sync writes the session's live
+                                                           values (session.py), --check prints {run, live, drift}
+                                                           (context.drift) and writes nothing, the flags set words
+  plan.py migrate [--plan <slug>]                          a record plan's table gets Model, Effort, Window and Size
+                                                           where missing; open rows' empty Model and Effort from the
+                                                           old `run`, Window from the model, Size `?` (the check
+                                                           names it until estimated); `run` the live values; never
+                                                           a legacy plan or a done row's values
   plan.py scaffold [--plan <slug>]                         write the ledgers and the handoff a plan in the record
                                                            format lacks (never overwrites one)
   plan.py -g ...                                           the same on the global plans folder (hal2's
@@ -93,10 +108,13 @@ import time
 from pathlib import Path
 
 import checker
+import context
 import envelope
 import folder
 import parallel
 import plan_number
+import session
+import sizing
 
 PLANS = Path("plans")
 POINTER = "CURRENT_PLAN"
@@ -246,35 +264,62 @@ def steps_table(lines: list[str]) -> tuple[int, dict[str, int]]:
     raise PlanError("no step table with columns '#', 'Step' and 'Status'")
 
 
-def run_default(text: str) -> tuple[str, str]:
-    """The plan's default model and effort: a record's `run` key, a legacy plan's `Run: <model> <effort>` line
-    (`-` for none); empty strings without it."""
-    words = [w.strip("`") for w in header_value(text, "Run").split()] + ["", ""]
-    return tuple("" if w == "-" else w for w in words[:2])
+def run_default(text: str) -> tuple[str, str, str]:
+    """The plan's `run` as model, effort and window: a record's `run` key (the coordinator's), a legacy plan's
+    `Run: <model> <effort>` line (`-` for none); empty strings for what it does not name."""
+    words = [w.strip("`") for w in header_value(text, "Run").split()] + ["", "", ""]
+    return tuple("" if w == "-" else w for w in words[:3])
 
 
-def read_steps(text: str) -> list[dict]:
-    lines = text.splitlines()
-    run_model, run_effort = run_default(text)
-    try:
-        header, cols = steps_table(lines)
-    except PlanError:
-        return []
-    steps, width = [], max(cols.values()) + 1
-    for row, line in enumerate(lines[header + 2:], 1):
-        if not line.lstrip().startswith("|"):
+def template_run() -> list[str]:
+    """The template's `run` words: what `new`, `run --sync` and `migrate` write for a value the session does not
+    name."""
+    found = re.search(r"^run: (.+)$", TEMPLATE.read_text(), re.M)
+    return (found.group(1).split() if found else []) + [""] * 3
+
+
+def or_template(words) -> list[str]:
+    return [w or t for w, t in zip(list(words) + ["", "", ""], template_run())][:3]
+
+
+def table_rows(lines: list[str]) -> tuple[int, dict[str, int], list[tuple[int, list[str]]]]:
+    """The step table's header line, its column positions and its rows as (line index, cells)."""
+    header, cols = steps_table(lines)
+    rows, width = [], max(cols.values()) + 1
+    for row, i in enumerate(range(header + 2, len(lines)), 1):
+        if not lines[i].lstrip().startswith("|"):
             break
-        cells = split_row(line)
+        cells = split_row(lines[i])
         if len(cells) < width:
             raise PlanError(f"row {row} of the step table has {len(cells)} cells, its header {width}: write a `|` "
                             "inside a cell as `\\|`")
+        rows.append((i, cells))
+    return header, cols, rows
+
+
+def read_steps(text: str) -> list[dict]:
+    """The step rows. A record plan's rows name their own Model, Effort and Window (`run` is the coordinator's); a
+    legacy plan's empty cells take its `Run:` line."""
+    lines = text.splitlines()
+    run = ("", "", "") if folder.is_record(text) else run_default(text)
+    try:
+        header, cols, rows = table_rows(lines)
+    except PlanError as error:
+        if str(error).startswith("no step table"):
+            return []
+        raise
+    steps = []
+    for _, cells in rows:
+        cell = lambda name: cells[cols[name]] if name in cols else ""
         step = {
             "number": cells[cols["#"]],
             "step": cells[cols["step"]],
-            "done_when": cells[cols["done when"]] if "done when" in cols else "",
+            "done_when": cell("done when"),
             "status": cells[cols["status"]],
-            "model": (cells[cols["model"]] if "model" in cols else "") or run_model,
-            "effort": (cells[cols["effort"]] if "effort" in cols else "") or run_effort,
+            "model": cell("model") or run[0],
+            "effort": cell("effort") or run[1],
+            "window": cell("window") or run[2],
+            "size": cell("size"),
         }
         if parallel.is_parallel(cols):
             parallel.enrich(step, cells, cols)
@@ -316,6 +361,30 @@ def problems_of(steps: list[dict]) -> list[str]:
     return problems
 
 
+def run_line(lines: list[str]) -> int | None:
+    """The index of the front matter's `run:` line, or None."""
+    if not lines or lines[0] != "---":
+        return None
+    for i, line in enumerate(lines[1:], 1):
+        if line == "---":
+            return None
+        if line.startswith("run:"):
+            return i
+    return None
+
+
+def steps_problems(text: str, label: str) -> list[str]:
+    """The `plan-steps-sized` lines of a record plan with an open row (sizing.py); a legacy plan has none."""
+    if not folder.is_record(text):
+        return []
+    lines = text.splitlines()
+    try:
+        header, cols, rows = table_rows(lines)
+    except PlanError:
+        return []
+    return sizing.problems(label, header_value(text, "Run"), run_line(lines), header, cols, rows)
+
+
 def describe(root: Path, path: Path) -> dict:
     text = path.read_text()
     steps = read_steps(text)
@@ -353,7 +422,8 @@ def describe(root: Path, path: Path) -> dict:
         "next": (before_landing or open_steps or [None])[0],
         "landing": landing,
         "land": land,
-        "problems": problems_of(steps) + (parallel.problems(steps) if extra.get("parallel") else []),
+        "problems": problems_of(steps) + (parallel.problems(steps) if extra.get("parallel") else [])
+                    + steps_problems(text, os.path.relpath(path, root)),
         "steps": steps,
         **extra,
     }
@@ -407,6 +477,7 @@ def new_plan(root: Path, title: str, goal: str, make_current: bool, fetch: bool 
     if parallel_plan:
         text = parallel_table(text)
     path.write_text(text)
+    set_header(path, "Run", " ".join(sizing.run_words(session.live(), template_run())))
     folder.scaffold(path, values)
     if autogenerated:
         set_header(path, "Autogenerated", f"{autogenerated}, {dt.date.today().isoformat()}")
@@ -611,6 +682,16 @@ def main(argv: list[str]) -> int:
                          help="plan folders to check (default: every plan's, and the plan numbers)")
     p_scaffold = sub.add_parser("scaffold")
     p_scaffold.add_argument("--plan")
+    p_run = sub.add_parser("run", help="the coordinator's `run: <model> <effort> <window>`")
+    p_run.add_argument("--plan")
+    mode = p_run.add_mutually_exclusive_group()
+    mode.add_argument("--sync", action="store_true", help="write the session's live values (session.py) into run")
+    mode.add_argument("--check", action="store_true", help="compare run with the live values: {run, live, drift}")
+    p_run.add_argument("--model")
+    p_run.add_argument("--effort", choices=sizing.EFFORTS)
+    p_run.add_argument("--window", choices=list(sizing.WINDOWS))
+    p_migrate = sub.add_parser("migrate", help="give a record plan the columns Model, Effort, Window and Size")
+    p_migrate.add_argument("--plan")
     p_ready = sub.add_parser("ready", help="a parallel plan's steps that can start now")
     p_ready.add_argument("--plan")
     p_ready.add_argument("--limit", type=int)
@@ -656,6 +737,10 @@ def main(argv: list[str]) -> int:
             path = resolve(root, args.plan)
             set_current(root, path)
             result = describe(root, path)
+        elif args.command == "run":
+            result = run_values(resolve(root, args.plan) if args.plan else current_path(root), args)
+        elif args.command == "migrate":
+            result = migrate(root, resolve(root, args.plan) if args.plan else current_path(root))
         elif args.command in PARALLEL_COMMANDS:
             path = resolve(root, args.plan) if args.plan else current_path(root)
             return run_parallel(root, path, args)
@@ -684,10 +769,62 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+def run_values(path: Path, args) -> dict:
+    """`plan.py run`: --check compares `run` with the session's live values, --sync writes them into it, --model,
+    --effort and --window set those words (the others kept); a legacy plan's line is `Run:`."""
+    before = header_value(path.read_text(), "Run")
+    live = session.live()
+    explicit = {k: v for k, v in (("model", args.model), ("effort", args.effort), ("window", args.window)) if v}
+    if args.check and explicit:
+        raise PlanError("run --check compares only: set values without it")
+    if args.sync and explicit:
+        raise PlanError("run --sync takes the live values: name values without it")
+    if not (args.check or args.sync or explicit):
+        raise PlanError("run needs --sync, --check or --model/--effort/--window")
+    if args.model and not sizing.RUN_MODEL.match(session.model_id(args.model)):
+        raise PlanError(f"--model '{args.model}' is none of {', '.join(sizing.MODELS)} nor a full id")
+    words = (list(run_default(path.read_text())) + ["", "", ""])[:3]
+    if args.sync:
+        words = sizing.run_words(live, or_template(words))
+    elif explicit:
+        for k, name in enumerate(("model", "effort", "window")):
+            if name in explicit:
+                words[k] = session.model_id(explicit[name]) if name == "model" else explicit[name]
+    run = " ".join(w or "-" for w in words).strip()
+    if not args.check and run != before:
+        set_header(path, "Run", run)
+    after = header_value(path.read_text(), "Run")
+    return {"plan": slug_of(path), "run": after, "before": before, "live": live, "drift": context.drift(live, after)}
+
+
+def migrate(root: Path, path: Path) -> dict:
+    """`plan.py migrate`: a record plan's step table gets the columns Model, Effort, Window and Size where missing,
+    its open rows the values (sizing.migrate_row), its `run` the session's live values. A legacy plan is never
+    touched."""
+    text = path.read_text()
+    if not folder.is_record(text):
+        return {"plan": slug_of(path), "migrated": False, "why": "a legacy plan: never migrated"}
+    old_run = list(run_default(text))
+    lines = text.splitlines(keepends=True)
+    header, cols, rows = table_rows([l.rstrip("\n") for l in lines])
+    new_header = sizing.migrate_header(split_row(lines[header]))
+    new_cols = {name.lower(): i for i, name in enumerate(new_header)}
+    lines[header] = join_row(new_header) + "\n"
+    lines[header + 1] = join_row(sizing.migrate_row(split_row(lines[header + 1]), cols, new_cols, old_run, True)) + "\n"
+    for i, cells in rows:
+        lines[i] = join_row(sizing.migrate_row(cells, cols, new_cols, old_run, False)) + "\n"
+    path.write_text("".join(lines))
+    set_header(path, "Run", " ".join(sizing.run_words(session.live(), or_template(old_run))))
+    result = describe(root, path)
+    result["migrated"] = True
+    return result
+
+
 def run_check(root: Path, folders: list[Path]) -> int:
     """The plan-folder check: the plan numbers, then hal2's records checker (checker.py) over the plan folders, or
-    over the named ones only. A plan.md without front matter is legacy and passes; without the checker the records
-    are unchecked (one line, no failure)."""
+    over the named ones only, then the sizing of the open steps of every record plan (`plan-steps-sized`,
+    sizing.py). A plan.md without front matter is legacy and passes; without the checker the records are unchecked
+    (one line, no failure), the sizing still is."""
     code = 0
     if folders:
         missing = [str(f) for f in folders if not (f / MAIN).is_file()]
@@ -695,15 +832,18 @@ def run_check(root: Path, folders: list[Path]) -> int:
             raise PlanError(f"no plan folder (a folder holding {MAIN}): {', '.join(missing)}")
     else:
         code = plan_number.main(["--root", str(root), "check"])
+    plans = [f.resolve() / MAIN for f in folders] if folders else plan_files(root)
+    sized = [line for p in plans for line in steps_problems(p.read_text(), os.path.relpath(p.resolve(), root.resolve()))]
     try:
         found = check_records(root, [f.resolve() for f in folders])
     except checker.CheckerError as error:
         print(error, file=sys.stderr)
         return error.code
     if found is None:
-        print(checker.NOT_INSTALLED)
-        return code
+        print("\n".join([checker.NOT_INSTALLED, *sized]))
+        return 1 if sized else code
     count, problems = found
+    problems += sized
     print("\n".join(problems) if problems else f"ok: {count} records")
     return 1 if problems else code
 
@@ -733,7 +873,7 @@ def check_records(root: Path, folders: list[Path]) -> tuple[int, list[str]] | No
 
 
 # What a subservant (a slot with plans/LEAD) may not do: plan.md is the lead's (hal2 shows the newest copy).
-SUBSERVANT_REFUSES = ("new", "status", "assign", "grilled", "landing", "uat", "brief", "scaffold")
+SUBSERVANT_REFUSES = ("new", "status", "assign", "grilled", "landing", "uat", "brief", "scaffold", "run", "migrate")
 PARALLEL_COMMANDS = ("ready", "assign", "brief", "report", "reports", "watch")
 
 

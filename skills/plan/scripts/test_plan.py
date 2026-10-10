@@ -88,7 +88,7 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(info["next"]["done_when"], "")
         self.assertEqual(info["grilled"], "")
 
-    def test_each_step_names_its_model_and_effort_or_takes_the_run_default(self):
+    def test_a_legacy_step_takes_the_run_default_a_record_step_names_its_own(self):
         self.write_plan(text="# Plan 0002: x\n\nRun: sonnet medium\n\n## Steps\n\n"
                              "| # | Step | Done when | Model | Effort | Status |\n|---|---|---|---|---|---|\n"
                              "| 1 | a | t | opus | high | next |\n| 2 | b | t | | xhigh | |\n")
@@ -100,13 +100,12 @@ class PlanTest(unittest.TestCase):
         self.assertEqual((info["next"]["model"], info["next"]["effort"]), ("opus", "high"))
         self.write_plan()
         self.assertEqual(self.plan("current")["next"]["model"], "", "a legacy table runs on the session's own")
-
-    def test_new_writes_the_run_default_and_the_columns(self):
-        info = self.plan("new", "deploy the hub")
-        text = (self.root / info["path"]).read_text()
-
-        self.assertIn("run: sonnet medium", text)
-        self.assertEqual((info["next"]["model"], info["next"]["effort"]), ("sonnet", "medium"))
+        # A record plan's `run` is the coordinator's: a row's empty cell stays empty (the check names it).
+        self.write_plan(text="---\ntype: Plan\nrun: opus max 1m\n---\n\n# Plan 0002: x\n\n"
+                             "| # | Step | Done when | Model | Effort | Window | Size | Status |\n"
+                             "|---|---|---|---|---|---|---|---|\n| 1 | a | t | | high | 1m | 90k | next |\n")
+        step = self.plan("current")["next"]
+        self.assertEqual((step["model"], step["effort"], step["window"], step["size"]), ("", "high", "1m", "90k"))
 
     def test_status_updates_one_cell(self):
         self.write_plan()

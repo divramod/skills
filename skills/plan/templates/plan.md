@@ -6,7 +6,7 @@ title: {quoted_title}
 description: {description}
 status: open
 landing: {landing}
-run: sonnet medium
+run: opus medium 1m
 created: {date}
 ---
 
@@ -26,13 +26,14 @@ created: {date}
 Each step is detailed in `steps/<n>.md`, written when it becomes next (`plan.py status <n> next`); keep one line
 per step here. Short and concise: this file at most 150 lines, a cell at most 200 characters, links over repeats. The plan lands once, after all its steps
 (`landing: auto`: the plan skill runs `/mtm` then); steps checked only after the landing come last, their done-when
-starting "after the landing: ...". `Model` and `Effort` are the session's for the step (empty: `run` above);
-the run switches the session before a step whose values differ (the skill's "Model and effort per step").
+starting "after the landing: ...". Each step runs in one subagent: `Model` (haiku, sonnet, opus, fable), `Effort`
+and `Window` (200k, 1m; 1m for the 5.x models) are its own, `Size` its estimated peak context, at most 35% of Window
+(`plan.py check`); `run` above is the coordinator's model, effort and window, the session that never does a step.
 
-| # | Step | Done when | Model | Effort | Status |
-|---|---|---|---|---|---|
-| 1 | <step> | <a check anyone can run> | | | next |
-| 2 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | sonnet | medium | |
+| # | Step | Done when | Model | Effort | Window | Size | Status |
+|---|---|---|---|---|---|---|---|
+| 1 | <step> | <a check anyone can run> | opus | medium | 1m | 150k | next |
+| 2 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | sonnet | medium | 1m | 100k | |
 
 ## Pre-authorized
 

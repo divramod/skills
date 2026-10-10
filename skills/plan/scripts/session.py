@@ -20,7 +20,7 @@ script reads its parent session's values.
 
 Prints JSON: {"model", "effort", "window" (`200k`, `1m`), "window_tokens", "used", "transcript",
 "sources": {"model", "effort", "window"}}. A value nothing names is "" with the source "default". Exits 0 unless the
-arguments are wrong. context.py and plan.py import it (`scan`, `values`).
+arguments are wrong. context.py and plan.py import it (`scan`, `values`, `live`).
 """
 import argparse
 import functools
@@ -251,20 +251,25 @@ def session_transcript(args: argparse.Namespace, home: Path) -> Path | None:
     return find_transcript(session, home / ".claude" / "projects") if session else None
 
 
+def live(transcript: str = "", session: str = "") -> dict:
+    """The running session's values (`values`) with `transcript`: what this script prints; plan.py's `run`."""
+    home = Path(os.environ.get("HOME", str(Path.home())))
+    path = session_transcript(argparse.Namespace(transcript=transcript, session=session), home)
+    try:
+        found = scan(path) if path else None
+    except OSError:
+        found = None
+    result = values(found, home)
+    result["transcript"] = str(path) if found is not None else None
+    return result
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--transcript", help="transcript file to read instead of finding it")
     parser.add_argument("--session", help="Claude Code session id (default: $CLAUDE_CODE_SESSION_ID)")
     args = parser.parse_args(argv)
-    home = Path(os.environ.get("HOME", str(Path.home())))
-    transcript = session_transcript(args, home)
-    try:
-        found = scan(transcript) if transcript else None
-    except OSError:
-        found = None
-    result = values(found, home)
-    result["transcript"] = str(transcript) if found is not None else None
-    print(json.dumps(result))
+    print(json.dumps(live(args.transcript or "", args.session or "")))
     return 0
 
 
