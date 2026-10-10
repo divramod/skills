@@ -369,8 +369,8 @@ or `plans/LEAD` is deleted (plan 0015's D12).
 
 The last step of an auto plan is done (`land: ready`). This is the only time the plan skill starts a landing, and
 only for the plan the user started (also in a session continued with `/handoff c`); never before its last step,
-never for another worktree or session, never again after a landing ended with exit 5 (stopped, cancelled,
-interrupted) by the user (one your own shell tool's time limit ended is rerun: the mtm skill's steps 1 and 4).
+never for another worktree or session, never again after a landing ended with exit 5 `stopped` or `cancelled` by the user (one your own shell tool's
+time limit ended, or exit 5 `interrupted`, its process gone and not the user, is rerun at once: the mtm skill's steps 1 and 4).
 
 1. Check you can land: a worktree on its own branch (in the main checkout or on the default branch there is nothing
    to land: say so and stop), `problems` empty (else move the after-landing steps to the end, commit, check again).
