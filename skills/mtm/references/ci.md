@@ -57,7 +57,8 @@ SKILL.md step 6 as milestone mode says.
 | 6 | `waiting`, `testing`, `shipping` | the slice passed: in the queue (`ahead`), while the candidate is tested (`candidate`, `run`) or while a run ships (`runs`; with `commit`: this landing has landed and waits for its run's `ship / ...` jobs before it releases the queue: strictly one land run at a time). The place and the candidate are kept: **rerun the same command at once**, as often as it takes, without reserve or `land-runs.sh` before it |
 | 4 | `gate_failed` | the candidate is red; the queue stays held for this worktree (`released: false`): [fix it](#red) and run again at once, the rerun adopts the hold at the head of the queue. Never release it yourself while you can fix: it is released when the branch lands. An older hal2-cli-git answers `released: true`: rerun at once all the same (it queues again) |
 | 3 | `conflict` | merging the default branch in conflicts (`files`): resolve as the [mfm](../../mfm/SKILL.md) skill's **Conflicts** says, commit, rerun (the queue stays held for this worktree meanwhile: go straight on) |
-| 5 | `stopped`, `cancelled`, `interrupted` | the user ended it: report and stop, never rerun on your own (your own shell's time limit is no user stop: rerun) |
+| 5 | `stopped`, `cancelled` | the user ended it: report and stop, never rerun on your own (your own shell's time limit is no user stop: rerun) |
+| 5 | `interrupted` | its process went away, not the user: rerun at once; it adopts the same landing and its run (never cancel the run) |
 | 1 | `error` | uncommitted changes: SKILL.md step 2. Anything else: report the `message`; the queue may be held for this worktree, so ask the user (fix, or `hal2-cli-git worktree release`) |
 
 **Watch the run every 5 minutes while it is tested** (the user, 2026-10-06). Once the candidate's run is known (exit
