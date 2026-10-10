@@ -44,7 +44,7 @@ Any of these is the user's consent to commit in this worktree, land on the defau
 your own otherwise: not mid-plan, not for a `manual` plan (every research plan is one: its research lands with the
 implementation plan that follows it), not for another worktree or session, not because another
 session (other than the merge-to-main boss) says a fix has landed, never again after it ended with exit 5 (unless your own shell tool's time limit
-caused that exit, not the user: steps 1 and 4); never ask another session to run it. Once
+caused that exit, not the user: steps 1 and 4; or exit 5 `interrupted`, its process went away, not the user: rerun at once); never ask another session to run it. Once
 started, finish it: fix and rerun until it lands.
 
 **A plan's landing asks nothing it can decide.** The user may be away, and while the queue is reserved every other
@@ -123,7 +123,8 @@ continued session, which carries on from that exit code; a rerun of the same `re
 |---|---|---|
 | 0 | `status: reserved` | go to 2. `kept: true`: the worktree already held the queue (its `hold` says why: an earlier failed or interrupted landing, or a reservation); that is fine, go on |
 | 6 | `status: waiting` | the slice passed, the ticket is parked at its place: rerun the same command at once (no limit on the reruns; report `ahead` when it changed) |
-| 5 | `stopped`, `cancelled`, `interrupted` | the user ended the wait (e.g. cancelled it in hal2-macos or with `worktree stop`, `by` says who): report it and stop, never rerun on your own. Exception: your own shell tool's time limit ended it (its notice says the command hit its timeout, not the user): rerun it as for exit 6 (the place may be lost; a longer landing ahead is no reason to stop) |
+| 5 | `stopped`, `cancelled` | the user ended the wait (e.g. cancelled it in hal2-macos or with `worktree stop`, `by` says who): report it and stop, never rerun on your own. Exception: your own shell tool's time limit ended it (its notice says the command hit its timeout, not the user): rerun it as for exit 6 (the place may be lost; a longer landing ahead is no reason to stop) |
+| 5 | `interrupted` | its process went away, not the user: rerun the same command at once; it takes its parked ticket's place back |
 | 1 | `error` | report the `message` and stop |
 
 **Holding the reservation.** Every other worktree's landing waits while this one holds: go straight through steps
@@ -192,7 +193,8 @@ The default branch cannot move now, so what you merge in here is what the landin
    the tool's own limit ends it anyway (its notice says the command hit its timeout, not the user), it ended
    `stopped` before it merged into the default branch (the queue released) or `interrupted` (the queue held for
    this worktree): rerun it at once (reserve first again when the queue was released); that is not the user's stop
-   of exit 5. To end a landing (the user asks you to), run
+   of exit 5. An `interrupted` landing (its shell or process went away, e.g. a tmux crash, not the user) is rerun at
+   once too: merge-to-main adopts the same landing (same place, candidate and run; `adopted` in its JSON). To end a landing (the user asks you to), run
    `hal2-cli-git worktree stop`; never kill its shell or background task (that leaves it holding the queue as
    `interrupted`).
 2. Act on the exit code; after every fix go back to 1:
@@ -202,7 +204,8 @@ The default branch cannot move now, so what you merge in here is what the landin
 | 0 | `ok` | landed, the queue stays reserved for this worktree (`reserved: true`): go straight to [finish the plan](#5-finish-the-plan-and-land-it). Allowed failures (`allowed_failure: true` in `tasks`, listed in `warnings`) landed: report them as warnings; never fix-and-rerun for them, never ask to release the queue for them |
 | 3 | `conflict` | rare after step 3 (a push to the default branch from outside the queue); merging the default branch in conflicts: resolve as in the [mfm](../mfm/SKILL.md) skill's **Conflicts**, commit, rerun |
 | 4 | `task_failed`, `hook_failed`, `delivery_failed` | the queue stays held by this worktree (`held` in the JSON; say so when you report progress). Fix as in the [mfm](../mfm/SKILL.md) skill's **Failing hook**, commit in this worktree, rerun. After `task_failed` and `hook_failed` the default branch is unchanged: a failed `main-pre-commit` (a `version` task) was undone, so fix its cause here too. `task_failed` names the `phase`, `row` and `kind` (the verb: the task is the row's own `<row>/.hal/hooks/<verb>.sh` or an inherited `code/<lang>/.hal/hooks/{apps,libs}/<verb>.sh`; tasks it cancelled or skipped need no fix of their own), `hook_failed` the `script`, `delivery_failed` the `failures` (the landing is on the default branch and pushed; with `released: true` the queue is not held for it (only the deliveries failed): an environmental failure is retried with `hal2-cli-git worktree deliver`, a code fix goes through a new commit and its own landing, which delivers again; with `released: false` the main checkout's setup failed and the queue stays held: fix, commit, and the rerun delivers again) |
-| 5 | `stopped`, `cancelled`, `interrupted` | the user ended the landing: stopped (Stop button, `worktree stop`, SIGTERM), cancelled while waiting (`by` says who and where, e.g. `the user in hal2-macos`), or interrupted (its shell went away). The default branch is unchanged. Report it and stop: never rerun on your own |
+| 5 | `stopped`, `cancelled` | the user ended the landing: stopped (Stop button, `worktree stop`), or cancelled while waiting (`by` says who and where, e.g. `the user in hal2-macos`). The default branch is unchanged. Report it and stop: never rerun on your own |
+| 5 | `interrupted` | its shell or process went away, not the user: rerun merge-to-main at once; it adopts the same landing (same place in the queue, same candidate, its run kept) |
 | 1 | `error` | uncommitted changes: back to [step 2](#2-commit-and-push-everything). Anything else (main checkout dirty or not on the default branch, default branch diverged from origin): the queue may be held (`held`); never touch the main checkout yourself, ask the user as below |
 
 **When to ask.** A failure's `held` object counts identical failures in a row (`attempts`, the same failing

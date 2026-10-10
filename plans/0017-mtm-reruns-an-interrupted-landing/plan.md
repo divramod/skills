@@ -40,8 +40,8 @@ and `Window` (200k, 1m; 1m for the 5.x models) are its own, `Size` its estimated
 
 | # | Step | Done when | Model | Effort | Window | Size | Status |
 |---|---|---|---|---|---|---|---|
-| 1 | mtm: exit 5 `interrupted` reruns at once (merge-to-main adopts the landing, reserve its ticket); `stopped`, `cancelled` stay report-and-stop: SKILL.md intro, both tables, prose; ci.md | `grep -cE '^. 5 . .interrupted' <file>` prints 2 for skills/mtm/SKILL.md, 1 for its references/ci.md; `hal2-cli-records check` passes | sonnet | high | 1m | 100k | next |
-| 2 | The plan skill's "Land the plan" reruns an `interrupted` landing; `skills/mtm/scripts/test_exit_five.bats` pins the split in the three docs | `bats skills/mtm/scripts` passes; the new test fails on the docs of `ef70bf2` | sonnet | medium | 1m | 110k | |
+| 1 | mtm: exit 5 `interrupted` reruns at once (merge-to-main adopts the landing, reserve its ticket); `stopped`, `cancelled` stay report-and-stop: SKILL.md intro, both tables, prose; ci.md | `grep -cE '^. 5 . .interrupted' <file>` prints 2 for skills/mtm/SKILL.md, 1 for its references/ci.md; `hal2-cli-records check` passes | sonnet | high | 1m | 100k | done |
+| 2 | The plan skill's "Land the plan" reruns an `interrupted` landing; `skills/mtm/scripts/test_exit_five.bats` pins the split in the three docs | `bats skills/mtm/scripts` passes; the new test fails on the docs of `ef70bf2` | sonnet | medium | 1m | 110k | next |
 | 3 | Write the UATs: `uat.md` beside this file (`plan.py uat`), only the checks a human must do on the default branch after the landing | `plan.py current` shows `uat` with its checks | sonnet | medium | 1m | 95k | |
 
 ## Pre-authorized
