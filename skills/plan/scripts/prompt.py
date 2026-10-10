@@ -14,7 +14,7 @@ import sizing
 TITLE_WORDS = 6
 TASK = re.compile(r"^## Task[ \t]*\n(.*?)(?=^## |\Z)", re.M | re.S)
 PLACEHOLDER = re.compile(r"^<what to change\b.*>$", re.S)
-DONE_WHEN = re.compile(r"^Done when:.*$", re.M)
+DONE_WHEN = re.compile(r"^(Done when|Size):.*$", re.M)
 
 
 class PromptError(Exception):
@@ -44,7 +44,8 @@ def alias(model: str) -> str:
 
 
 def task_written(step_file: Path) -> bool:
-    """The step file has a `## Task` with text of its own (not the template's `<what to change ...>`)."""
+    """The step file has a `## Task` with text of its own (not the template's `<what to change ...>`; its `Size:` and
+    `Done when:` lines do not count)."""
     if not step_file.is_file():
         return False
     found = TASK.search(step_file.read_text())

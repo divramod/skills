@@ -491,6 +491,13 @@ def set_status(path: Path, step: str, status: str) -> None:
     set_cells(path, step, {"status": status})
 
 
+def size_line(row: dict) -> str:
+    """The step file's `Size: <size> of <window>` line (the row's estimated peak context and its window), empty when
+    the row names neither (a legacy row)."""
+    size, window = (row.get("size") or "").strip(), (row.get("window") or "").strip()
+    return f"Size: {size or '?'} of {window or '?'}\n" if size or window else ""
+
+
 def scaffold_step(path: Path, step: str) -> Path | None:
     """Write `steps/<step>.md` from templates/step.md when the step becomes next (hal2's record
     plans-short-and-concise): never over an existing file, never for a flat plan (no folder). The written file,
@@ -506,7 +513,7 @@ def scaffold_step(path: Path, step: str) -> Path | None:
     target.write_text(STEP_TEMPLATE.read_text().format(
         number=step, title=row["step"] or f"step {step}",
         task="<what to change: the files and packages, the approach, what the step must not touch>",
-        done_when=row["done_when"] or "the step table's check"))
+        size_line=size_line(row), done_when=row["done_when"] or "the step table's check"))
     return target
 
 

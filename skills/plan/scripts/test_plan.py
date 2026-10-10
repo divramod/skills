@@ -130,6 +130,7 @@ class PlanTest(unittest.TestCase):
         self.assertTrue(text.startswith("# Step 3: shooter `x`\n"))
         self.assertIn("\n## Task\n", text)
         self.assertIn("plans-short-and-concise", text)
+        self.assertNotIn("Size:", text)  # a legacy row names no Size or Window
         step.write_text("# Step 3: mine\n\n## Task\n\nkept\n")
         info = self.plan("status", "3", "next")
         self.assertNotIn("step_file", info)

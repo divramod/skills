@@ -68,3 +68,8 @@ status: open
 
 **D:** A step's subagent edits but never commits, pushes or lands; it writes its step file's `## Approach` first and `## Notes` at its end, and its final reply is at most 15 lines: the files changed, the done-when's result, follow-ups. `plan.py prompt` prints this prompt.
 **Why:** The coordinator verifies and commits each step; short reports keep its context small.
+
+## D10 · 2026-10-10 · agent · in-force
+
+**D:** The sizing rubric (research 0004 findings/plan.md "Step-size rubric") has one home, the plan skill's "Model, effort and window per step" beside the model and effort rubric; grill's Auto links it (step 6).
+**Why:** The model and effort rubric already lives there and plan.py's `plan-steps-sized` enforces the 35%; one home, no copy to drift.

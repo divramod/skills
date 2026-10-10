@@ -7,4 +7,4 @@ code instead of repeating them. Status and who stay in plan.md's step table; the
 
 {task}
 
-Done when: {done_when}
+{size_line}Done when: {done_when}

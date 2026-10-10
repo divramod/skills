@@ -145,6 +145,18 @@ class PromptTest(unittest.TestCase):
         self.assertIn("no written `## Task`", self.refused("1"))
         self.assertIn("no step '9'", self.refused("9"))
 
+    def test_a_scaffolded_step_file_names_its_size_and_is_refused_until_written(self):
+        self.record.write_text(RECORD.replace("| 120k | next |", "| 120k | |"))
+        out = subprocess.run([sys.executable, str(SCRIPT), "--root", str(self.root), "status", "1", "next"],
+                             capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        step = self.root / json.loads(out.stdout)["step_file"]
+
+        self.assertIn("\n\nSize: 120k of 1m\nDone when: `python3 -m unittest` passes\n", step.read_text())
+        self.assertIn("`plan.py status 1 next` scaffolds", self.refused("1"))
+        step.write_text(step.read_text().replace("<what to change", "Change foo.py.\n<what to change"))
+        self.assertEqual(self.call("1")["model"], "sonnet")
+
     def test_a_record_row_failing_the_sizing_is_refused(self):
         self.task(self.record, "1")
         self.record.write_text(RECORD.replace("| sonnet | high | 1m | 120k |", "| sonnet | high | 200k | 120k |"))
