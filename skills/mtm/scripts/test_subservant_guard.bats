@@ -21,7 +21,9 @@ teardown() { rm -rf "$tmp"; }
   run bash "$here/subservant-guard.sh" "$tmp/wt/sub"
   [ "$status" -eq 1 ]
   [[ "$output" == *"subservant of slot 02 (plan 0005-big-plan step 3"* ]]
-  [[ "$output" == *"plan.py report 3"* ]]
+  [[ "$output" == *"stale plans/LEAD of the lead in slot 02"* ]]
+  [[ "$output" == *"delete plans/LEAD"* ]]
+  [[ "$output" != *"plan.py report"* ]]
 }
 
 @test "the current directory is the default" {

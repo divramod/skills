@@ -1,4 +1,4 @@
-"""plan.py on a parallel plan (skills plan 0013): Needs, Touches, Who, ready, assign, brief, report, reports, watch."""
+"""plan.py on a parallel plan (skills plan 0013, plan 0016): Needs, Touches, Who, ready, assign, the LEAD refusal."""
 import json
 import os
 import subprocess
@@ -64,7 +64,7 @@ class ParallelTest(unittest.TestCase):
         return path
 
     def run_plan(self, *args, root=None, cwd=None, env=None) -> subprocess.CompletedProcess:
-        env = {**os.environ, "FARMER_DIR": str(self.base / "farmer"), **(env or {})}
+        env = {**os.environ, **(env or {})}
         return subprocess.run([sys.executable, str(SCRIPT), "--root", str(root or self.root), *args],
                               capture_output=True, text=True, cwd=cwd or self.base, env=env)
 
@@ -196,99 +196,27 @@ class ParallelTest(unittest.TestCase):
 
         self.assertEqual((info["steps"][3]["who"], info["steps"][3]["status"]), ("subagent", "running"))
 
-    def test_assign_checks_who_and_slots_30_up(self):
-        self.assertIn("subservants work only in slots 30-99", self.refused("assign", "3", "slot", "12"))
-        self.assertIn("none of lead, subagent, user, slot NN", self.refused("assign", "3", "bob"))
-
-        info = self.plan("assign", "3", "Slot", "33")
-
-        self.assertEqual(self.row("3"), "| 3 | client | 1 | ts:client | slot 33 | npm test | running |")
-        self.assertNotIn("marker", info)  # no worktree 33 exists
-        self.assertEqual(self.numbers(info["running"]), ["2", "3"])
-
     def add_slot(self, slot: str) -> Path:
         if not git(self.root, "log", "--oneline", "-1", check=False):
             git(self.root, "commit", "-q", "--allow-empty", "-m", "init")
         git(self.root, "worktree", "add", "-q", "-b", slot, str(self.base / slot))
         return self.base / slot
 
-    def test_assign_to_an_existing_slot_writes_its_marker(self):
-        slot = self.add_slot("32")
-
-        info = self.plan("assign", "3", "slot", "32")
-
-        self.assertEqual(Path(info["marker"]).resolve(), (slot / "plans" / "LEAD").resolve())
-        self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 3\n")
-        self.assertEqual((slot / "plans" / "CURRENT_PLAN").read_text(), SLUG + "\n")
-        self.assertEqual(git(slot, "status", "--porcelain"), "")  # both ignored through info/exclude
-        self.plan("status", "3", "done")
-        self.plan("assign", "5", "slot", "32")  # a reused slot: the exclude is written once
-        self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 5\n")
-        exclude = Path(git(self.root, "rev-parse", "--git-common-dir").strip())
-        self.assertEqual((self.root / exclude / "info" / "exclude").read_text().count("plans/LEAD"), 1)
-
-    def test_assign_refuses_a_slot_another_step_holds_unless_forced(self):
-        self.assertIn("slot 31 still holds step 2 (running)", self.refused("assign", "3", "slot", "31"))
-        self.path.write_text(PARALLEL.replace("| slot 31 | cargo test | running |",
-                                              "| slot 31 | cargo test | blocked on the proto |"))
-        self.assertIn("slot 31 still holds step 2 (blocked on the proto)", self.refused("assign", "3", "slot", "31"))
-
-        info = self.plan("assign", "3", "slot", "31", "--force")
-
-        self.assertEqual(info["steps"][2]["who"], "slot 31")
-
-    def test_assign_refuses_a_slot_whose_marker_names_other_work(self):
-        slot = self.add_slot("32")
-        (slot / "plans").mkdir()
+    def test_assign_takes_lead_subagent_user_and_refuses_a_slot(self):
         before = self.path.read_text()
-        for marker, why in ((f"03 {SLUG} 3", f"slot 32 is a subservant of slot 03 (plan {SLUG} step 3)"),
-                            ("02 0007-other 1", "slot 32 is a subservant of slot 02 (plan 0007-other step 1)"),
-                            (f"02 {SLUG} 4", "slot 32's plans/LEAD names step 4, which is not done"),
-                            ("02", "slot 32's plans/LEAD is malformed")):
-            (slot / "plans" / "LEAD").write_text(marker + "\n")
-            self.assertIn(why, self.refused("assign", "3", "slot", "32"), marker)
+        for who in (("slot", "33"), ("Slot", "12"), ("slot33",)):
+            error = self.refused("assign", "3", *who)
+            self.assertIn("run the step as a subagent", error, who)
+            self.assertIn("plan.py prompt <step>", error, who)
+        self.assertIn("none of lead, subagent, user", self.refused("assign", "3", "bob"))
         self.assertEqual(self.path.read_text(), before)
 
-        (slot / "plans" / "LEAD").write_text(f"02 {SLUG} 1\n")  # its step 1 is done: the slot is reused
-        self.plan("assign", "3", "slot", "32")
-        self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 3\n")
-        self.plan("assign", "5", "slot", "32", "--force")  # step 3 still runs there: only forced
-        self.assertEqual((slot / "plans" / "LEAD").read_text(), f"02 {SLUG} 5\n")
+        info = self.plan("assign", "3", "Subagent")
 
-    def test_assign_accepts_the_marker_create_py_wrote_for_the_step(self):
-        slot = self.add_slot("32")
-        (slot / "plans").mkdir()
-        (slot / "plans" / "LEAD").write_text(f"02 {SLUG} 3\n")
-
-        self.assertEqual(self.plan("assign", "3", "slot", "32")["steps"][2]["status"], "running")
-
-    def write_ledger(self, folder: Path, *entries: dict) -> None:
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / "delegations.jsonl").write_text("".join(json.dumps(e) + "\n" for e in entries))
-
-    def test_assign_refuses_a_farmer_servants_slot(self):
-        ledger = self.base / "farmer" / "02"  # FARMER_DIR/<main checkout>
-        self.write_ledger(ledger, {"at": "t", "key": "brief:fix-ci", "state": "running", "slot": "33"},
-                          {"at": "t", "key": "brief:old", "state": "running", "slot": "34"},
-                          {"at": "t", "key": "brief:old", "state": "landed", "slot": "34"})
-
-        self.assertIn("slot 33 runs the farmer's servant 'brief:fix-ci'", self.refused("assign", "3", "slot", "33"))
-        self.assertEqual(self.plan("assign", "3", "slot", "34")["steps"][2]["who"], "slot 34")  # it has landed
-        self.plan("assign", "5", "slot", "33", "--force")
-
-    def test_assign_reads_the_farmer_slots_ledger_and_survives_a_broken_one(self):
-        home = self.base / "home"
-        ledger = home / ".hal/git/worktree/02/farmer-02/roles/farmer"
-        self.write_ledger(ledger, {"at": "t", "key": "brief:fix", "state": "running", "slot": "33"})
-        env = {"FARMER_DIR": "", "HOME": str(home)}
-
-        result = self.run_plan("assign", "3", "slot", "33", env=env)
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("runs the farmer's servant 'brief:fix'", result.stderr)
-        (ledger / "delegations.jsonl").write_text("{not json\n")
-        self.assertEqual(self.run_plan("assign", "3", "slot", "33", env=env).returncode, 0)
-        self.assertEqual(self.run_plan("assign", "5", "slot", "35", env={"FARMER_DIR": "",
-                                       "HOME": str(self.base / "nobody")}).returncode, 0)  # no farmer at all
+        self.assertEqual(self.row("3"), "| 3 | client | 1 | ts:client | subagent | npm test | running |")
+        self.assertNotIn("marker", info)
+        self.assertEqual(self.numbers(info["running"]), ["2", "3"])
+        self.assertEqual(info["steps"][1]["who"], "slot 31")  # an older row's slot is still read
 
     # Touches
 
@@ -323,7 +251,7 @@ class ParallelTest(unittest.TestCase):
         (slot / "sub").mkdir()
         before = self.path.read_text()
 
-        for args in (("status", "3", "done"), ("assign", "3", "lead"), ("brief", "3")):
+        for args in (("status", "3", "done"), ("assign", "3", "lead")):
             self.assertIn("is a subservant of slot 02", self.refused(*args, cwd=slot / "sub"), args)
         self.assertEqual(self.path.read_text(), before)
         self.assertEqual(self.plan("current")["slug"], SLUG)  # reading works
@@ -334,85 +262,42 @@ class ParallelTest(unittest.TestCase):
         (self.plans / "LEAD").write_text(f"02 {SLUG} 3\n")
 
         for args in (("new", "x"), ("status", "3", "done"), ("assign", "3", "lead"), ("grilled",),
-                     ("landing", "manual"), ("uat",), ("brief", "3")):
+                     ("landing", "manual"), ("uat",), ("scaffold",), ("run", "--effort", "max"), ("migrate",)):
             self.assertIn("is a subservant of slot 02", self.refused(*args), args)
         self.assertEqual(self.path.read_text(), before)
         self.assertEqual(self.plan("current")["lead"], {"slot": "02", "plan": SLUG, "step": "3"})
-        report = self.plan("report", "3")
-        self.assertEqual(report["report"], f"plans/{SLUG}/reports/3.md")
-        text = (self.root / report["report"]).read_text()
-        self.assertIn(f"# Report: step 3 of plan {SLUG}", text)
-        self.assertIn("Slot 02 for the lead in slot 02", text)
         self.assertEqual(self.numbers(self.ready()["ready"]), ["3", "5", "6"])
+
+    def test_the_refusal_names_the_stale_marker_and_the_way_out(self):
+        (self.plans / "LEAD").write_text(f"07 {SLUG} 3\n")
+
+        error = self.refused("status", "3", "done")
+
+        self.assertIn(f"subservant of slot 07 (plan {SLUG} step 3)", error)
+        self.assertIn("stale plans/LEAD of the lead in slot 07", error)
+        self.assertIn("never lands", error)
+        self.assertIn("delete plans/LEAD", error)
+        self.assertNotIn("plan.py report", error)
+
+    def test_removed_commands_are_gone(self):
+        for command in ("brief", "report", "reports", "watch"):
+            result = self.run_plan(command, "3")
+            self.assertEqual(result.returncode, 2, command)
+            self.assertIn("invalid choice", result.stderr)
 
     def test_a_broken_marker_is_a_clean_error(self):
         (self.plans / "LEAD").write_text("02\n")
 
         self.assertIn("must hold `<lead-slot> <plan> <step>`", self.refused("current"))
 
-    # brief and report
+    # the step file
 
-    def test_status_next_leaves_a_parallel_plans_step_to_its_brief(self):
+    def test_status_next_scaffolds_a_parallel_plans_step_file(self):
         info = self.plan("status", "3", "next")
 
-        self.assertNotIn("step_file", info)
-        self.assertFalse((self.root / "plans" / SLUG / "steps" / "3.md").exists())
+        self.assertEqual(info["step_file"], f"plans/{SLUG}/steps/3.md")
+        self.assertIn("# Step 3: client", (self.root / info["step_file"]).read_text())
 
-    def test_brief_scaffolds_once_and_prints_the_prompt(self):
-        info = self.plan("brief", "3")
-
-        brief = self.root / info["brief"]
-        self.assertEqual(info["brief"], f"plans/{SLUG}/steps/3.md")
-        text = brief.read_text()
-        self.assertIn("# Step 3: client", text)
-        self.assertIn(f"Step 3 of plan {SLUG}, written by the lead", text)
-        self.assertIn("- Needs: 1 (done; their work is on origin/02)", text)
-        self.assertIn("- Touches: ts:client", text)
-        self.assertIn("npm test", text)
-        self.assertIn("subservant of plan 0005-big-plan, step 3 only, for the lead in slot 02", info["prompt"])
-        self.assertIn(f"plans/{SLUG}/steps/3.md", info["prompt"])
-        self.assertIn("never land", info["prompt"])
-        self.assertIn("each message ending `(plan 0005 step 3)`", text)
-        self.assertIn("(plan 0005 step 3)", info["prompt"])
-
-        brief.write_text("edited by the lead")
-        self.plan("brief", "3")
-        self.assertEqual(brief.read_text(), "edited by the lead")
-
-    def test_brief_and_report_refuse_an_unknown_step(self):
-        self.assertIn("no step '42'", self.refused("brief", "42"))
-        self.assertIn("no step '42'", self.refused("report", "42"))
-
-    # reports and watch
-
-    def test_reports_and_watch_find_a_report_pushed_to_the_slot_branch(self):
-        origin = self.base / "origin.git"
-        git(self.base, "init", "-q", "--bare", str(origin))
-        git(self.root, "commit", "-q", "--allow-empty", "-m", "init")
-        git(self.root, "remote", "add", "origin", str(origin))
-        git(self.root, "worktree", "add", "-q", "-b", "31", str(self.base / "31"))
-        self.assertEqual(self.plan("reports")["arrived"], [])
-
-        slot = self.base / "31"
-        report = slot / "plans" / SLUG / "reports" / "2.md"
-        report.parent.mkdir(parents=True)
-        report.write_text("# Report\n")
-        git(slot, "add", "plans")
-        git(slot, "commit", "-q", "-m", "report (plan 0005 step 2)")
-        git(slot, "push", "-q", "origin", "31")
-
-        arrived = self.plan("reports")["arrived"]
-        sha = git(slot, "rev-parse", "--short", "HEAD").strip()
-        self.assertEqual(arrived, [{"number": "2", "step": "server a | b", "slot": "31", "sha": sha,
-                                    "report": f"plans/{SLUG}/reports/2.md"}])
-        watch = self.run_plan("watch", "--interval", "0", "--rounds", "2")
-        self.assertEqual(watch.returncode, 0, watch.stderr)
-        self.assertEqual(watch.stdout, f"report step 2 from slot 31 at {sha}: plans/{SLUG}/reports/2.md\n")
-
-    def test_reports_skip_steps_that_are_not_running_subservants(self):
-        self.plan("status", "2", "done")
-
-        self.assertEqual(self.plan("reports", "--no-fetch")["arrived"], [])
 
 
 if __name__ == "__main__":

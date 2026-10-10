@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Refuse a landing in a parallel plan's subservant slot (skills plan 0013): the
-# worktree holds plans/LEAD (`<lead-slot> <plan> <step>`).
+# Refuse a landing in a former subservant slot (skills plan 0013; subservant
+# sessions are gone since plan 0016, the guard stays while a slot holds one, plan
+# 0015 D12): the worktree holds plans/LEAD (`<lead-slot> <plan> <step>`).
 # Usage: subservant-guard.sh [<dir>|<slot>]   (default: the current directory)
 #   <dir>  any directory inside the worktree to check;
 #   <slot> a worktree's name when no such directory exists here (31, main, a named
@@ -38,5 +39,5 @@ marker="$root/plans/LEAD"
 [ -f "$marker" ] || exit 0
 read -r lead plan step _ < "$marker" || true
 echo "mtm: this slot is a subservant of slot ${lead:-?} (plan ${plan:-?} step ${step:-?}, plans/LEAD): it never lands." >&2
-echo "Push your branch and report to the lead (plan.py report ${step:-<step>}); the lead in slot ${lead:-?} merges it." >&2
+echo "It holds a stale plans/LEAD of the lead in slot ${lead:-?}: the lead takes the work over, or delete plans/LEAD." >&2
 exit 1
